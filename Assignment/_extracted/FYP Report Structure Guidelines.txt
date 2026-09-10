@@ -1,0 +1,189 @@
+FYP Report Structure Guidelines 
+ 
+Chapter 1: Introduction 
+ 
+1.1 Background and Context 
+• 
+Overview of the field of the project 
+• 
+Brief history leading to the current state of the topic 
+• 
+Explanation of why the topic is important and relevant 
+1.2 Problem Statement  
+• 
+Identification of the specific problem the project aims to address 
+• 
+Explanation of why this problem/question is significant 
+1.3 Objectives of the Project 
+• 
+Clear and specific objectives outlining what the project aims to achieve. (3 objectives. Eg, to 
+develop……, to implement xxxxx in the development of……., to deploy…..) 
+• 
+Explanation of how achieving these objectives will contribute to the field 
+1.4 Scope and Limitations 
+• 
+Definition of the boundaries and scope of the project 
+• 
+Discussion of any limitations or constraints that may affect the project's execution or findings 
+1.5 Significance of Project 
+• 
+Explanation of the importance and relevance of the project 
+• 
+Discussion of potential benefits or implications of the project's outcomes 
+1.6 Organisation of Report / Report Structure 
+• 
+Brief summary of the chapters and sections included in the report 
+• 
+Explanation of how the report is organized to address the project objectives 
+1.7 Summary/Conclusion 
+• 
+Brief summary of the chapter 
+ 
+ 
+
+Chapter 2: Literature Review 
+ 
+ Introduction to Literature Review 
+• 
+Explanation of the purpose and importance of the literature review (general) 
+• 
+Overview of the structure and organization of the literature review section 
+2.1 Review of Relevant Theories and Concepts (or Relevant Features and Functions)) 
+• 
+Discussion of key theories and concepts relevant to the project 
+• 
+Explanation of how these theories and concepts inform the research approach 
+2.2 Study of Similar Existing Systems 
+• 
+Review of existing systems, products, or solutions that are similar to the one proposed in the 
+project. (at least 3 similar existing systems) 
+• 
+Comparison of features, functionalities, strengths, and weaknesses of these systems 
+• 
+Analysis of user feedback, adoption rates, and success stories of similar systems  
+2.3 Identification of Gaps in the Literature 
+• 
+Analysis of the existing literature to identify gaps, contradictions, or areas needing further 
+exploration 
+• 
+Explanation of how the project aims to address these gaps 
+2.4 Summary of Key Findings 
+• 
+Synthesis of the main findings from the literature review 
+• 
+Discussion of how these findings inform the project's research objectives and approach 
+2.5 Summary/Conclusion 
+• 
+Brief summary of the chapter 2 
+ 
+ 
+
+Chapter 3: Methodology and Requirements Analysis 
+ 
+3.1 Project Methodology 
+• 
+Explanation of the methodology used for the development process (e.g., Agile, Waterfall, 
+Iterative, etc.) 
+• 
+Justification for selecting the chosen methodology based on project requirements and 
+constraints 
+3.2 Requirements Gathering 
+• 
+Techniques used to elicit and document system requirements (e.g., interviews, surveys, 
+brainstorming sessions, etc.) 
+• 
+Documentation of functional and non-functional requirements 
+3.3 Requirements Analysis 
+• 
+Analysis and prioritization of requirements 
+• 
+Identification of dependencies and conflicts among requirements 
+ 
+ 
+Chapter 4: System Design 
+ 
+4.1 Architecture Design 
+• 
+High-level overview of the system architecture, including components and their interactions 
+• 
+Description of architectural patterns or styles used in the design 
+4.2 Database Design 
+• 
+Design of the database schema, including tables, relationships, and constraints 
+• 
+Discussion of database management system (DBMS) selection and justification 
+4.3 User Interface Design (Prototype Design for FYP1, Real design for FYP2) 
+• 
+Design of the user interface (UI) elements, including wireframes, mockups, and prototypes 
+• 
+Consideration of user experience (UX) principles and accessibility requirements 
+4.4 Detailed Design 
+• 
+Detailed description of system components, modules, and APIs 
+• 
+Design rationale explaining design decisions and trade-offs 
+ 
+ 
+
+FOR FYP 2 Later 
+Chapter 5: Implementation and Testing 
+ 
+5.1 Development Environment Setup 
+• 
+Description of the development tools, technologies, and frameworks used 
+• 
+Configuration management practices and version control systems employed 
+5.2 Coding and Implementation 
+• 
+Details of the coding process, coding standards, and best practices followed 
+• 
+Overview of coding conventions and guidelines adhered to 
+5.3 Testing Strategy 
+• 
+Overview of the testing approach (e.g., unit testing, integration testing, system testing, etc.) 
+• 
+Description of test cases, test scenarios, and testing methodologies 
+5.4 System Testing and Validation 
+• 
+Execution of test cases and validation against requirements 
+• 
+Discussion of testing outcomes, issues encountered, and resolutions 
+ 
+ 
+Chapter 6: System Deployment 
+ 
+6.1 Deployment Plan 
+• 
+Explanation of the deployment strategy, including deployment environment and considerations 
+• 
+Description of deployment tools and techniques used 
+6.2 User Training and Support 
+• 
+Plans for training end-users and providing ongoing support after system deployment 
+• 
+Considerations for user documentation and help resources 
+6.3 Rollout Strategy 
+• 
+Discussion of the rollout plan, including phased deployment or full deployment strategies 
+• 
+Risk mitigation strategies for deployment issues 
+ 
+ 
+
+Chapter 7: Discussions and Conclusion 
+ 
+7.1 Discussion of Results 
+• 
+Interpretation and analysis of the project outcomes 
+• 
+Comparison of actual results with initial objectives and requirements 
+7.2 Lessons Learned 
+• 
+Reflection on the challenges, successes, and lessons learned during the development process 
+• 
+Recommendations for future projects or improvements 
+7.3 Conclusion 
+• 
+Summary of key findings and contributions of the project 
+• 
+Final thoughts on the project's significance and impact 

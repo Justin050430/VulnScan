@@ -1,0 +1,188 @@
+<mxfile host="app.diagrams.net" agent="5.0" version="24.0.0">
+  <diagram id="fig4-9-auth-seq" name="Fig4.9 User Authentication Sequence Diagram">
+    <mxGraphModel dx="1200" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="960" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="optFrame" value="opt [Google Sign-In]" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;verticalAlign=top;align=left;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="480" width="1240" height="340" as="geometry" />
+        </mxCell>
+        <mxCell id="h0" value="User" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="30" y="40" width="180" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="l0" value="" style="lifeline;" vertex="1" parent="1">
+          <mxGeometry x="120" y="100" width="1" height="800" as="geometry" />
+        </mxCell>
+        <mxCell id="h1" value="Web UI (Presentation)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="220" y="40" width="180" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="l1" value="" style="lifeline;" vertex="1" parent="1">
+          <mxGeometry x="310" y="100" width="1" height="800" as="geometry" />
+        </mxCell>
+        <mxCell id="h2" value="API (Flask)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="40" width="180" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="l2" value="" style="lifeline;" vertex="1" parent="1">
+          <mxGeometry x="520" y="100" width="1" height="800" as="geometry" />
+        </mxCell>
+        <mxCell id="h3" value="Auth Service (Business Logic)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="650" y="40" width="180" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="l3" value="" style="lifeline;" vertex="1" parent="1">
+          <mxGeometry x="740" y="100" width="1" height="800" as="geometry" />
+        </mxCell>
+        <mxCell id="h4" value="Database (SQL Server)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="860" y="40" width="180" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="l4" value="" style="lifeline;" vertex="1" parent="1">
+          <mxGeometry x="950" y="100" width="1" height="800" as="geometry" />
+        </mxCell>
+        <mxCell id="h5" value="Google OAuth" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontColor=#000000;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="40" width="180" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="l5" value="" style="lifeline;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="100" width="1" height="800" as="geometry" />
+        </mxCell>
+        <mxCell id="m0" value="1: Email &amp; password (Sign In)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=classic;" edge="1" parent="1" source="l0" target="l1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="120" y="150" />
+              <mxPoint x="310" y="150" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m1" value="2: POST /api/auth/login" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=classic;" edge="1" parent="1" source="l1" target="l2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="190" />
+              <mxPoint x="520" y="190" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m2" value="3: Forward login request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=classic;" edge="1" parent="1" source="l2" target="l3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="230" />
+              <mxPoint x="740" y="230" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m3" value="4: Retrieve user by email" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=classic;" edge="1" parent="1" source="l3" target="l4">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="740" y="270" />
+              <mxPoint x="950" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m4" value="5: User (password hash, role, is_active)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;dashed=1;endArrow=open;" edge="1" parent="1" source="l4" target="l3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="740" y="305" />
+              <mxPoint x="950" y="305" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m5" value="6: Auth result + JWT (or failure)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;dashed=1;endArrow=open;" edge="1" parent="1" source="l3" target="l2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="350" />
+              <mxPoint x="740" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m6" value="7: HTTP 200 + JWT (or 401)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;dashed=1;endArrow=open;" edge="1" parent="1" source="l2" target="l1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="390" />
+              <mxPoint x="520" y="390" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m7" value="8: Dashboard by role (or error)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;dashed=1;endArrow=open;" edge="1" parent="1" source="l1" target="l0">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="120" y="430" />
+              <mxPoint x="310" y="430" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m8" value="Sign in with Google" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=classic;" edge="1" parent="1" source="l0" target="l1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="120" y="500" />
+              <mxPoint x="310" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m9" value="OAuth 2.0 authorisation request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=classic;" edge="1" parent="1" source="l1" target="l5">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="540" />
+              <mxPoint x="1150" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m10" value="Authorisation code" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;dashed=1;endArrow=open;" edge="1" parent="1" source="l5" target="l1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="575" />
+              <mxPoint x="1150" y="575" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m11" value="POST /api/auth/google (code)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=classic;" edge="1" parent="1" source="l1" target="l2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="615" />
+              <mxPoint x="520" y="615" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m12" value="Exchange code / fetch profile" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=classic;" edge="1" parent="1" source="l2" target="l5">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="655" />
+              <mxPoint x="1150" y="655" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m13" value="Verified email" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;dashed=1;endArrow=open;" edge="1" parent="1" source="l5" target="l2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="690" />
+              <mxPoint x="1150" y="690" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m14" value="Match email against user" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=classic;" edge="1" parent="1" source="l2" target="l3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="730" />
+              <mxPoint x="740" y="730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m15" value="Retrieve user by verified email" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=classic;" edge="1" parent="1" source="l3" target="l4">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="740" y="770" />
+              <mxPoint x="950" y="770" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m16" value="User record" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;dashed=1;endArrow=open;" edge="1" parent="1" source="l4" target="l3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="740" y="805" />
+              <mxPoint x="950" y="805" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note" value="JWT generation and response follow the same steps (6-8) after account matching." style="text;html=1;align=left;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="620" y="835" width="700" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

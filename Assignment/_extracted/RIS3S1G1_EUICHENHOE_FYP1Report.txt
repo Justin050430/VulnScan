@@ -1,0 +1,1693 @@
+Password Cracking Detection and Prevention System for Login 
+Page: Anomalous Device Detection and Response 
+By 
+EUI CHEN HOE 
+ 
+FACULTY OF COMPUTING AND 
+INFORMATION TECHNOLOGY 
+TUNKU ABDUL RAHMAN UNIVERSITY OF 
+MANAGEMENT AND TECHNOLOGY 
+KUALA LUMPUR 
+ACADEMIC YEAR 
+2024/25 
+ 
+ 
+
+Password Cracking Detection and Prevention System for Login 
+Page: Anomalous Device Detection and Response 
+By 
+EUI CHEN HOE 
+Supervisor: Dr. Muhammad Naim 
+A project report submitted to the 
+Faculty of Computing and Information Technology 
+in partial fulfilment of the requirement for the 
+Bachelor of Information Technology (Honours) 
+Department of Information Systems and Security 
+Faculty of Computing and Information Technology 
+Tunku Abdul Rahman University of Management and Technology 
+Kuala Lumpur 
+Copyright by Tunku Abdul Rahman University of Management and 
+Technology. 
+All rights reserved. No part of this project documentation may be reproduced, stored 
+in a retrieval system, or transmitted in any form or by any means without prior 
+permission of Tunku Abdul Rahman University of Management and Technology. 
+
+Anomalous Device Detection and Response 
+Declaration 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I 
+iii 
+ 
+Declaration 
+The project submitted herewith is a result of my own efforts in totality and in every aspect of the 
+project works. All information that has been obtained from other sources has been fully 
+acknowledged. I understand that any plagiarism, cheating or collusion or any sorts constitutes a 
+breach of TAR University rules and regulations and would be subjected to disciplinary actions.  
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+euichenhoe 
+__________________________ 
+EUI CHEN HOE 
+Bachelor of Information Technology (Honours) in Information Security 
+ID: 22WMR1370 
+
+Anomalous Device Detection and Response 
+Abstract 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+iv 
+ 
+Abstract 
+The project addresses the critical issue of unauthorized email account access caused by weak or 
+stolen passwords, which contribute to 81% of hacking-related breaches. Often, users are unaware 
+of account takeovers until significant damage has occurred. To tackle this, the proposed solution, 
+"Password Cracking Detection and Prevention System for Login Page with Anomalous Device 
+Detection and Response," is designed to enhance security for both individual and organizational 
+users. The system works by utilizing advanced real-time anomaly detection algorithms to identify 
+suspicious login activities, particularly from unfamiliar devices. When such activities are detected, 
+it immediately alerts users via email, providing actionable options to log out of all active sessions 
+and reset their passwords promptly. 
+The solution is implemented by integrating with existing security measures, leveraging advanced 
+algorithms, and focusing on usability to empower users to take swift action against potential threats. 
+It will be deployed during login attempts, continuously monitoring for unusual patterns to ensure 
+proactive prevention. The outcome is expected to include a substantial reduction in unauthorized 
+access incidents, improved digital hygiene, and enhanced protection for sensitive personal and 
+organizational data. The project ultimately combines technical innovation with user empowerment 
+to create a robust and reliable security framework. 
+ 
+ 
+
+Anomalous Device Detection and Response 
+Acknowledgement 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+v 
+ 
+Acknowledgement 
+I would like to extend my deepest appreciation to my supervisor, Dr. Muhammad Naim Bin 
+Abdullah, for his invaluable guidance and steadfast support throughout this journey of the project. 
+It is his kind consideration in mentoring me, coupled with his patience and encouragement, which 
+gave me the motive and confidence to see through the completion of this effort. His insights and 
+experience were quite instrumental during numerous consultations in shaping the course of 
+direction and success that this project has taken so far. 
+I am indeed very thankful to my lecturers, who have been accessible and always ready to advise or 
+offer words of encouragement any time. My special thanks go to Dr. Naim, who has been a source 
+of inspiration and help.  
+I also would like to recognize the other esteemed persons who offered support and guidance 
+wherever needed. Their efforts have certainly been of great worth toward the completion of this 
+project on time and with success.  
+Finally, my immense appreciation goes to all those who, in one way or another, have supported me 
+during this Final Year Project. Your guidance, encouragement, and assistance have been deeply 
+appreciated and will always be remembered.  
+ 
+
+Anomalous Device Detection and Response 
+Table of Content 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+vi 
+ 
+Table of Content 
+ 
+Declaration ................................................................................................................................... iii 
+Abstract ........................................................................................................................................ iv 
+Acknowledgement ......................................................................................................................... v 
+Table of Content ........................................................................................................................... vi 
+Introduction ................................................................................................................................... 1 
+1.1 Background and Context..................................................................................................... 2 
+1.2 Problem Statement .............................................................................................................. 3 
+1.3 Objectives and Project ........................................................................................................ 4 
+1.3.1 Develop a Real Time Anomaly Detection System .................................................... 4 
+1.3.2 Implement an Automated Notification System.......................................................... 5 
+1.3.3 Deploy User-Initiated Security Mechanisms ............................................................. 5 
+1.4 Scope and Limitations......................................................................................................... 6 
+1.5 Significance of Project ........................................................................................................ 7 
+1.6 Organisation of Report ........................................................................................................ 9 
+1.7 Summary ........................................................................................................................... 10 
+Literature Review ....................................................................................................................... 12 
+2.1 Review of Relevant Theories and Concepts ..................................................................... 13 
+2.1.1 Password Security and User Authentication ............................................................ 13 
+2.1.2 Anomaly Detection Algorithms ............................................................................... 14 
+2.1.3 User Awareness ........................................................................................................ 14 
+2.2 Study of Similar Existing Systems ................................................................................... 15 
+2.2.1 Google...................................................................................................................... 15 
+2.2.2 Microsoft.................................................................................................................. 15 
+2.2.3 Mobile Legends ....................................................................................................... 15 
+2.2.4 Comparison Study ................................................................................................... 16 
+2.3 Identification of Gaps in the Literature ............................................................................. 18 
+2.4 Key Findings ..................................................................................................................... 19 
+2.5 Summary ........................................................................................................................... 20 
+Methodology and Requirements Analysis ................................................................................ 22 
+3.1 Project Methodology ......................................................................................................... 23 
+3.2 Requirements Gathering ................................................................................................... 24 
+3.2.1 Functional Requirements ......................................................................................... 25 
+
+Anomalous Device Detection and Response 
+Table of Content 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+vii 
+ 
+3.2.2 Non-Functional Requirements ................................................................................. 26 
+3.3 Requirements Analysis...................................................................................................... 28 
+3.3.1 Analysis and Prioritization ....................................................................................... 28 
+3.3.2 Identification of Dependencies and Conflicts Among Requirements...................... 29 
+3.3.2.1 Minimize The Dependencies and Conflicts ................................................................ 29 
+System Design.............................................................................................................................. 31 
+System Design ........................................................................................................................ 32 
+4.1 Architecture Design .......................................................................................................... 32 
+4.1.1 Flowchart Diagram .................................................................................................. 33 
+4.1.2 Use Case Diagram ................................................................................................... 35 
+4.1.3 Activity Diagram ..................................................................................................... 37 
+4.1.4 Sequence Diagram ................................................................................................... 39 
+4.2 Database Design................................................................................................................ 41 
+4.2.1 Choice of Database .................................................................................................. 42 
+4.3 User Interface Design ....................................................................................................... 43 
+4.3.1 Wireframe ................................................................................................................ 44 
+4.3.2 Prototype .................................................................................................................. 48 
+4.4 Detailed Design ................................................................................................................. 53 
+References .................................................................................................................................... 56 
+ 
+ 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+1 
+ 
+ 
+ 
+Chapter 1 
+Introduction 
+ 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+2 
+ 
+1.1 Background and Context 
+In a way, cybersecurity has started getting embedded into many modern aspects of living today, 
+which are globalizing online platform communication, work, financial transactions, and even for 
+storing data. It forms perhaps one of the core most issues from cybersecurity, the protection of user 
+credentials. Because login pages usually become those first gateways that essentially lead to 
+sensitive information, the landscape of cybersecurity has grown big with an increase in remote 
+working, e-commerce, and online services. Unarguably, robust security measures will be crucial 
+in avoiding unauthorized access. 
+In the very beginning, computer networking was an emerging field and so was the equal threat to 
+password security. As technology became better and advances were forged, it started proving the 
+old ways of password-based authentication rather ineffective. It was only in the 90s, well into the 
+early 2000s, that strong password policies were enforced along with compliance on password 
+security. But as the threat of the internet grew and more data breaches were disclosed, came the 
+introduction of methods like Two-Factor Authentication (2FA) and Multi-Factor Authentication 
+(MFA) which were invented to counter both password theft and reproduction. 
+Weak and stolen passwords, credential stuffing, and phishing seem to be the most dangerous 
+vectors at this stage. Indeed, it has been determined that 81% of hacking breaches involve weak 
+or compromised passwords. More recently, bad actors have started using machine learning and AI 
+in order to automate and accelerate traditional password-cracking techniques that defenses have 
+become too good at defending against. Such a scenario will require adaptive, relevant solutions 
+that respond in real time whenever unauthorized access attempts are made. 
+Today, the topic has gained even more critical relevance in the context of a rapidly changing digital 
+environment where cyber-attacks are increasingly becoming more frequent and sophisticated. In 
+addition to financial losses and data theft, unauthorized access to an email account or to other 
+sensitive data has a really deep negative impact on the reputation of individuals and organizations. 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+3 
+ 
+Typically, as a consequence of such breaches, identity theft, leakage of confidential information, 
+and often a long recovery phase follow. 
+Moreover, even traditional password protection methods have not enabled one to guard against 
+such threats. Thus, enhancement of security lets anomaly detection and quick-response 
+mechanisms reduce unauthorized access to a greater degree. Such measures could be used to detect 
+suspicious activities at an early stage, for example, initial attempts from unknown devices or 
+locations, giving warnings for users and thus enabling them to take immediate action. The 
+approach productively closes this window of attack opportunity for attackers, builds trust among 
+users, and further supplements better digital hygiene for personal and organizational information. 
+1.2 Problem Statement 
+To put it plainly, this project is more likely to provide solutions to unauthorized access into 
+someone's email accounts using password cracking techniques. However, eyewitness reports 
+suggest that many users still have weak passwords or reuse them. This has prompted the suggestion 
+that international security improvements come with risks to users' account safety: Since most 
+attack cybercriminals are intended to attack this weakness, there are various forms of attacks, for 
+example, brute force attacks, dictionary attacks, and so many more that enable these unauthorized 
+persons to access an individual's account without consent. Subsequently, the attackers can perform 
+unauthorized transaction activities, change settings of the account, and also use the account for 
+other illicit activities. 
+Their network might be broken down into micro-interference. Damage has already been done by 
+the time the user realizes that their account has been hacked. The perpetrators are usually very 
+subtle, so they can go on for very long periods without being discovered. Changes in security 
+settings could involve completely locking out the legitimate user. It is compounded by reusing 
+compromised credentials across a majority of services as this leads to increased damage because 
+malicious actors can operate with a single stolen password to a wide assortment of accounts. 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+4 
+ 
+The importance of this problem is very wide because it refers to quite a large number of individuals 
+and organizations. Most of the time, email addresses are the first port of call for stealing sensitive 
+information, while also the main hub around which the rest of their online lives can be managed. 
+And with such accounts compromised, not only private data can be lost but also financial records 
+and potentially proprietary business information as well as access to critical services. Increasingly 
+complex attacks that cyber-attackers use against passwords can easily be remediated for the 
+adoption of more efficient security practices. 
+The consequences of account takeovers can be quite dire as they include financial loss, identity 
+theft, disclosure of sensitive information, and a full house of description in the daily operation. 
+Account breaches for organizations also come with reputational damage, regulatory fines, and loss 
+of customer trust. Therefore, there is a necessity for advanced security measures which should be 
+implemented as traditional password-only authentication has proven to be inadequate to curb 
+account takeovers. 
+The proposed solution focuses on detecting unauthorized access of users thereby informing them 
+of their anomalous device activity which is an essential step in closing this security gap. The alert 
+notifies users of potentially fraudulent logins from a device that has not previously been used, 
+enabling them to take immediate action such as logging out of all sessions and reset passwords 
+before damage can be done. It has been designed proactively to mitigate risks caused by 
+compromising accounts thus offering enhanced security for users and organizations and reducing 
+the chance of widespread breaches. 
+1.3 Objectives and Project 
+1.3.1 Develop a Real Time Anomaly Detection System 
+The primary objective is to develop an anomaly detection system capable of monitoring login 
+attempts in real-time. This system will leverage advanced algorithms to identify suspicious 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+5 
+ 
+activities, such as logins from unfamiliar devices or locations. By distinguishing legitimate user 
+behavior from potential unauthorized access attempts, the system aims to provide proactive 
+cybersecurity measures. 
+Unlike traditional security methods that rely heavily on static password restrictions or post-incident 
+responses, this approach seeks to minimize the attack window by dynamically adapting to evolving 
+threats. The result will be a real-time security framework that responds to anomalies as they arise, 
+shifting the focus from reactive to adaptive cybersecurity. 
+1.3.2 Implement an Automated Notification System 
+Another key objective is to implement an automated notification system to promptly alert users 
+via email when anomalous login attempts are detected. These alerts will include essential details, 
+such as the unauthorized IP address and device information, enabling users to quickly assess the 
+legitimacy of the login attempt. 
+This notification system enhances user awareness by informing account holders of potential 
+malicious activities in near real-time. By empowering users to make timely and informed decisions, 
+this feature mitigates risks associated with delayed breach detection and strengthens overall 
+account security. 
+1.3.3 Deploy User-Initiated Security Mechanisms 
+The project also focuses on deploying user-initiated security mechanisms that allow users to take 
+immediate action when anomalies are detected. These mechanisms include logging out of all active 
+sessions, and prompting users to reset their passwords. By enabling users to secure their accounts 
+proactively, the system strengthens account protection and minimizes the risk of further 
+unauthorized access. 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+6 
+ 
+This approach promotes a more resilient, user-centric cybersecurity model by encouraging swift 
+and decisive user actions. Beyond individual account security, these mechanisms contribute to 
+broader cybersecurity practices by fostering active user involvement in threat mitigation. 
+1.4 Scope and Limitations 
+The project, "Password Cracking Detection and Prevention System with Anomalous Device 
+Detection and Response", comprises the conception, realization, and testing of the complete 
+security solution that is designed to fortify the protection of an email account against unauthorized 
+access. This project base is on the following areas: 
+1. Anomaly Detection Mechanism: Designing an advanced algorithm that will monitor login 
+patterns and detect suspicious or unfamiliar device logins as they happen. 
+2. Automated User Notification System: Create a complete email alert system to notify users 
+in real-time whenever strange login events occur along with details about the accessing 
+device. 
+3. User-Controlled Response Tools: Implementing the feature to users to log out all active 
+sessions with prompts to change their password proactively in case of unauthorized access. 
+4. Device Tracking and Logging: Develop a system that maintains history records of devices 
+commonly used to access the account so that the detection accuracy of anomalies login 
+could be enhanced. 
+The project would be just on email account safety, majors in detection and user response rather 
+than other mechanisms that strengthen passwords or integrated multi-factor authentication (MFA). 
+Therefore, this project is designed to significantly improve email account security, but there are 
+some inherent limitations and constraints attached to it which may inhibit its implementation or 
+outcome: 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+7 
+ 
+1. User Awareness Dependent: The system relies on users to act to the alerts it gives them. 
+Any user who ignores messages would not recognize the importance of logging out and 
+changing passwords to be susceptible to unauthorized access. 
+2. Scope of Detection: This project mainly concerns anomalous device logins, and it is 
+probable that other sophisticated cyber attacks, such as phishing attacks or malware that 
+evades conventional detection systems, would fall under its purview. 
+3. Resource and Infrastructure Constraints: Real-time detection and notification systems 
+require considerable supporting infrastructure-including server resource and internet 
+bandwidth-to be set up. This can therefore limit its feasibility for applications by 
+organizations that do not have really good IT resources. 
+4. Privacy Concerns: The collection and retention of records about the user devices and the 
+respective IP addresses may cause privacy issues. Those must be made sure that they are 
+kept and managed in the manner prescribed by the data protection rules. Otherwise, that 
+would further add to the complexity of the project. 
+Despite these limitations, the project aims to produce an efficient, effective, and easy use security 
+enhancement tool for users following the applicant's apprehension of taking almost immediate 
+control over one's account security. Design and implementation of this initiative can be done with 
+a view of addressing these constraints while keeping improvements to the minimum in this regard. 
+1.5 Significance of Project 
+The project is quite relevant in today’s digital landscape where personal and professional 
+communications are via email accounts. Statistics indicate that 81% of breaches by hackers are a 
+result of weak or stolen passwords. Thus, it becomes extremely important to ensure the safety 
+measures concerning email accounts. This project is important since it tackles the vulnerability left 
+by most password-based authentication systems with real-time anomaly detection and intervention 
+mechanisms that can be instigated by users themselves. 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+8 
+ 
+What this project does involves taking cybersecurity a step ahead compared to many other existing 
+projects. These days, most cybersecurity methods adopt complicated passwords and, rarely, a Two-
+Factor Authentication (2FA) method. However, this project introduces yet another defense 
+measure: the ability to detect and respond to potential risks before extensive damages occur. 
+Therefore, the system improves on the general security of email accounts, ensuring that real-time 
+alerts are sent upon detection of abnormal login patterns. Thus, it also instills confidence in the 
+users towards protecting their data due to high security. 
+The potential benefits of this project extend to individuals, organizations, and the broader field of 
+cybersecurity: 
+1. User Account Monitoring: Users will have more control over possible malicious login 
+activity through email alerts immediately notifying the user about activity. This will also 
+allow the user to take actions themselves, such as logging out from active sessions and 
+changing passwords to avoid a long-term unauthorized access event. There will be more 
+information protection through the prevention of any actual unauthorized access to 
+sensitive details. 
+2. Reduced Data Breaches: Addition of real-time anomaly detection would also assist in 
+significantly reducing successful password cracking and account taking. This makes it 
+possible for early detection and intervention to stop attackers from pursuing more accounts 
+or using one of those takeovers to get into other services or data infiltrations. 
+3. Encouragement of Proactive Cyber Hygiene: The focus on user awareness and proactive 
+account management induces better digital habits. Users become more aware of their 
+actions on accounts and therefore are encouraged to form a culture of cybersecurity 
+awareness. 
+4. A Scalable Security Framework: This approach is flexible enough to act as a general 
+framework for considering other online account protection systems as well. The principles 
+of anomaly detection, user notification, and user-initiated security responses can apply far 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+9 
+ 
+beyond email accounts-for example to social media accounts, financial services, and 
+corporate applications. 
+1.6 Organisation of Report 
+This report consisted of 7 chapters and the sequence is arranged as follows: 
+1. Chapter 1: Introduction 
+This Chapter provides an overview of the project, including its background, objectives, 
+significance, and scope. It sets the stage for the rest of the report by introducing the topic 
+and outlining the key aspects of the project. 
+2. Chapter 2: Literature Review 
+In this chapter, a comprehensive review of relevant literature and existing research in the 
+field of encryption, data security, and related technologies is presented. The literature 
+review serves to contextualize the project within existing knowledge and identify gaps and 
+areas for further investigation 
+3. Chapter 3: Methodology and Requirements Analysis 
+This chapter outlines the methodology employed in the project, including the research 
+approach, data collection methods, and analysis techniques. It also provides a detailed 
+analysis of the project requirements, including functional and non-functional requirements, 
+to guide the system design and implementation process. 
+4. Chapter 4: System Design 
+In this chapter, the design of the encryption platform is presented in detail. This includes 
+the architectural design, database schema, user interface design, and other technical 
+specifications. The system design chapter serves as a blueprint for the implementation 
+phase of the project. 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+10 
+ 
+5. Chapter 5: Implementation and Testing 
+This chapter focuses on the implementation of the encryption platform and the testing 
+procedures employed to ensure its functionality, reliability, and security. It includes details 
+of the development process, software tools used, and the results of various testing methods 
+employed. 
+6. Chapter 6: System Deployment 
+In this chapter, the process of deploying the encryption platform in a real-world 
+environment is described. This includes considerations for deployment, configuration, and 
+integration with existing systems or infrastructure. The system deployment chapter 
+discusses the practical aspects of making the encryption platform operational. 
+7. Chapter 7: Discussions and Conclusion 
+The final chapter of the report presents a discussion of the project findings, including an 
+analysis of the results, implications for theory and practice, and recommendations for 
+future research. It concludes with a summary of the key findings and contributions of the 
+project, along with reflections on the overall project experience. 
+1.7 Summary 
+This chapter deals with the emerging importance of cybersecurity in user credentials. It highlights 
+that the traditional password-based authentication technique is insufficient to stand against 
+evolving cyber threats. Due to remote working, e-commerce, and other online services, there arises 
+an increasing demand for the implementation of advanced security measures. The proposed project, 
+"Password Cracking Detection and Prevention System with Anomalous Device Detection and 
+Response," focus on detection and mitigation against unauthorized access to email accounts. 
+
+Anomalous Device Detection and Response 
+Chapter 1 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+11 
+ 
+The project has highlighted the vulnerabilities due to weak passwords and the consequences 
+brought about by account breaches, which include financial loss, identity theft, and reputational 
+damages. The project intends to perform real-time anomaly detection that will pick up suspicious 
+login attempts from unfamiliar devices or and alert the user through notifications, thus enabling 
+them will tools for quick response through active sessions logging out and password resetting. 
+The key objectives are to design algorithms for anomaly detection, implement a notification system 
+that provides real-time alerts, and enable security mechanisms initiated by the users. The project 
+is limited to email account security and has various challenges like user awareness, resource 
+availability, and privacy concerns. The project will contribute towards cybersecurity by proactively 
+averting potential breaches. 
+The project is important because it fills in the gaps of traditional security methods and can provide 
+a scalable, user-centered framework that can be expanded into other online accounts. This 
+highlights early detection, user empowerment, and proactive cyber hygiene that will contribute to 
+the greater field of cybersecurity and the reduction of risks of data breaches.  
+ 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+12 
+ 
+ 
+ 
+Chapter 2 
+Literature Review 
+ 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+13 
+ 
+Introduction 
+The literature review is supposed to be a critical review of the existing body of knowledge on the 
+project, ensuring that the proposed solution is informed by a sound foundation of relevant theories, 
+concepts, and existing technologies. This section helps identify best practices, understand strengths 
+and limitations of current systems, and uncover gaps that the proposed project aims to fill. The 
+literature review will be an important part of proving the project's relevance, as well as a theoretical 
+and practical base for its elaboration. 
+ 
+2.1 Review of Relevant Theories and Concepts 
+2.1.1 Password Security and User Authentication 
+Theories and concepts related to password security and user authentication are fundamental in the 
+field of cybersecurity. The password security and user authentication base is very important in the 
+field of cybersecurity (Antonenko, 2022). Password-based authentication systems, being 
+widespread, are naturally prone to various forms of attack vectors (Editor, 2022). Amongst these, 
+techniques include brute force attacks, which test every possible combination systematically for a 
+password, and dictionary attacks, precompiled lists used for efficient breaking of the system 
+(Vigliarolo, 2019). The susceptibility of these systems is often compounded by user practices, such 
+as weak password selection or reuse across platforms (Inc, 2024). Advanced methods include hash 
+cracking, which exploits vulnerabilities in password storage mechanisms, highlighting the 
+importance of robust hashing algorithms and multi-factor authentication as key defenses (Cypress 
+Data Defense, 2020). 
+Understanding these weaknesses highlights the need for effective countermeasures, which this 
+research seeks to address. The project focuses on implementing stronger authentication 
+mechanisms through Multi-Factor Authentication (MFA) and advanced password hashing 
+techniques. These methods not only minimize the risk of unauthorized access but also provide a 
+solid foundation for effective breach identification and response mechanisms. 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+14 
+ 
+2.1.2 Anomaly Detection Algorithms 
+Anomaly detection algorithms are vital for identifying deviations from expected patterns, serving 
+as key components in monitoring and securing systems (Bernard & Stryker, 2023). These 
+algorithms use machine learning and statistical models to detect anomalies that might indicate 
+security breaches or system faults (Coursera Staff, 2024). 
+The research leverages machine learning models, including clustering algorithms, rule-based 
+systems, and supervised learning techniques such as neural networks and support vector machines, 
+to develop adaptable and precise detection mechanisms (Quiroz-Vázquez, 2024). By training 
+models on labeled datasets, these techniques enable the classification of events as normal or 
+anomalous. 
+The research integrates these advanced methods into the system design to ensure resilience against 
+emerging security challenges. By enabling the system to identify threat patterns and respond 
+promptly, these mechanisms enhance the precision and flexibility of intrusion detection systems 
+(Nailman, 2024). 
+2.1.3 User Awareness 
+User awareness is critical to effective cybersecurity strategies. The human factor is normally the 
+weakest link, where a user may compromise security by being either negligent or lack of awareness 
+(Leal, 2022). Research on the psychological and behavioral dimensions of cybersecurity highlights 
+the importance of user engagement and education (Grobler et al., 2021). Research has shown that 
+users are more responsive to alerts and notifications when they are short, contextually relevant, 
+and accompanied by actionable advice (Team, 2022). Proactive measures include regular security 
+training and the promotion of best practices that put users in a better position to recognize and 
+mitigate potential threats (Ralph, 2023). The culture of security awareness will help an 
+organization go a long way in improving its overall security posture. 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+15 
+ 
+The project incorporates these insights to develop a culture of security awareness. By increasing 
+engagement and empowering users to take quick protective actions, such as responding to clear 
+and actionable alerts, the measures reinforce technical safeguards. Ultimately, these strategies help 
+organizations improve their overall security posture while supporting users in recognizing and 
+mitigating threats effectively. 
+2.2 Study of Similar Existing Systems 
+2.2.1 Google 
+A review of existing systems, products, or solutions highlights Google has implemented a multi-
+layer security system that integrates advanced features such as anomaly detection and device 
+activity monitoring (Google Account, 2024). It is great for sending notifications of suspicious 
+activities in real time to users so that they can take immediate action to secure their accounts 
+(Google Cloud, 2024). Moreover, the design by Google is intuitive and hence accessible to a wide 
+variety of users. One advantage is that sometimes it generates false positives, which could be 
+frustrating for users and reduce their confidence in the system (Google Design, 2024). 
+2.2.2 Microsoft 
+Microsoft focus is mostly on enterprise-level security, where the detection of suspicious sign-in 
+attempts and delivery of detailed alerts to the administrator and user are emphasized (softchris, 
+2024). The system is designed to allow organizations to track and analyze potential threats 
+comprehensively through its strong reporting capabilities (kimkischel, 2022). However, 
+Microsoft's approach falls short in allowing users to take direct control over security incidents, 
+relying more on administrative oversight than empowering individual users. (timurengin, 2023). 
+2.2.3 Mobile Legends 
+Within other fields, Mobile Legends offers a security feature that allows users to log out of other 
+devices remotely (Jabel, 2023). This feature is convenient and effective for users in terms of 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+16 
+ 
+managing account access and preventing the misuse of their account, especially game assets. This 
+feature, though crucial for securing gaming accounts, has a narrow scope when compared to more 
+extensive systems such as Google and Microsoft. Security in Mobile Legends is designed to protect 
+in-game, game-specific digital assets, not to provide broader cybersecurity (Mobile Legend, 2024). 
+2.2.4 Comparison Study 
+Features 
+Google 
+Microsoft 
+Mobile Legends Proposed 
+System 
+Target Users 
+General users 
+Enterprise 
+environments 
+Gamers 
+General users 
+Strengths 
+User-friendly 
+design, intuitive 
+notifications, 
+integrates 
+security alerts 
+Advanced 
+anomaly 
+detection, 
+detailed 
+reporting 
+for 
+enterprise user 
+Easy 
+account 
+control 
+with 
+remote logout 
+capability 
+User-friendly 
+interface
+ 
+with 
+anomaly 
+detection, real-
+time 
+alerts, 
+and 
+Multi-Factor 
+Authentication 
+(MFA) 
+Weaknesses 
+Generates false Focused 
+on Lacks advanced User awareness 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+17 
+ 
+ 
+alarms, limited 
+immediate 
+options 
+for 
+reacting to 
+events 
+enterprises, 
+limiting
+ 
+its 
+adaptability
+ 
+for 
+personal account 
+management 
+anomaly 
+detection
+ 
+and 
+real-time alerts 
+dependent, 
+resource 
+and 
+infrastructure 
+constraints 
+Anomaly 
+Detection 
+Basic detection 
+Advanced 
+detection 
+Lack detection 
+Advanced 
+detection 
+Real-Time Alerts 
+Yes 
+Yes 
+No 
+Yes 
+Proactive Security 
+Limited 
+Yes 
+Minimal 
+Yes 
+Table 2.1: Comparison Study 
+A comparison of features, functionalities, strengths, and weaknesses across security systems 
+reveals differing approaches based on target users. Google is strong in user-friendly design and 
+integrates security alerts perfectly. It provides intuitive notifications that are accessible to the 
+average user, which boosts the usability of its security. However, the system it has occasionally 
+generates false alarms, which can frustrate users, while immediate options for the user to react to 
+an event is limited (Thacker, 2018). 
+In particular, Microsoft has excelled with top-notch enterprise-level security-anomaly detection 
+and detailed reporting, thus serving enterprise environments where detailed threat analysis by 
+administrative personnel is a common case (yelevin et al., 2024). However, this does limit the 
+adaptability of Microsoft in personal account management because of its focus on enterprise usage. 
+Mobile Legends has an easy, straightforward approach to account security; it allows users to 
+manage access by remotely logging out of other devices (Jabel, 2023). This feature empowers 
+users to maintain control over their accounts easily. However, advanced anomaly detection and 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+18 
+ 
+proactive real-time alerts are lacking in its security features. Furthermore, its focus is primarily on 
+gaming accounts, which limits its application for broader digital protection (Synn, 2024). 
+An analysis of user feedback, adoption rates, and success stories reveals varied responses to 
+security features across platforms. For instance, Mobile Legends’ feature of logging out remotely 
+has been positively received by users who value the control it provides over their account security 
+(HotdogsHot, 2018). However, feedback often highlights the desire for more comprehensive 
+measures such as real-time notifications for unusual activities or stronger proactive defenses seen 
+in systems like Google's and Microsoft's. 
+2.3 Identification of Gaps in the Literature 
+Previous literature review has identified a few limitations in state-of-the-art security systems. One 
+significant limitation is the lack of a good user-initiated response system. Most of the available 
+systems effectively alert users to potential security threats, but they fail to provide immediate 
+countermeasures, such as being able to log out from all active sessions. Another gap is in regard 
+to balancing accuracy and usability. Current solutions often fail to provide accurate anomaly 
+detection with low false positives, which can destroy user trust and satisfaction. Another limitation 
+of systems is related to the integration of real-time threat detection with proactive user-initiated 
+countermeasures, especially in mobile application environments. These gaps present opportunities 
+for the development of more comprehensive and user-focused security frameworks. 
+In contrast, the proposed project attempts to bridge these gaps by incorporating a unified system 
+that detects unauthorized logins and enables users to act in real time. Such real-time notifications 
+together with user-controlled security responses are combined to provide better protection of 
+accounts. 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+19 
+ 
+2.4 Key Findings 
+The literature review highlighted critical challenges and gaps in existing security systems, 
+particularly in enhancing password security, improving anomaly detection algorithms, and 
+increasing user awareness. Password-based authentication systems are vulnerable to brute force 
+attacks, dictionary-based attacks, hash cracking, and weak password practices by users. 
+Addressing these vulnerabilities necessitates the adoption of strong multi-factor authentication 
+(MFA) and advanced hashing techniques to provide a more secure foundation for user 
+authentication. 
+Anomaly detection algorithms play a pivotal role in identifying security breaches by analyzing 
+patterns and detecting irregularities using machine learning and statistical methods. While 
+supervised learning techniques, such as neural networks, enhance detection accuracy, the trade-off 
+between precision and usability remains an unresolved challenge. Real-time detection capabilities, 
+combined with user-initiated response options, are especially important in mobile applications to 
+empower users to quickly respond to potential threats. 
+User awareness is also a key factor in cybersecurity, as the human element is often considered the 
+weakest link in any security setup. Engaging users through actionable alerts, training features, and 
+user-friendly interfaces can significantly reduce risks and improve overall system security. 
+Comparative analyses of existing systems, such as those from Google, Microsoft, and Mobile 
+Legends, reveal various strengths and weaknesses, while identifying significant gaps in user 
+empowerment and the balance between accuracy and usability. 
+Building on these findings, this project seeks to address the identified gaps by integrating robust 
+MFA mechanisms and enhanced password hashing techniques to strengthen authentication. 
+Advanced anomaly detection algorithms will be developed using machine learning approaches 
+such as clustering, rule-based systems, and supervised learning models to provide optimal threat 
+detection with a minimal false positive rate. This balanced approach aims to enhance accuracy and 
+usability, fostering user trust and improving system effectiveness. 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+20 
+ 
+Empowering users is at the core of the project, addressing existing limitations by incorporating 
+real-time notifications and enabling user-initiated security actions. Features like logging out from 
+all active sessions or temporarily locking accounts provide users with greater control over their 
+security. The project also emphasizes user-centric design, featuring intuitive interfaces, actionable 
+alerts, and security awareness programs to bolster the overall system. 
+By synthesizing insights from the literature, this project adopts a multi-layered security strategy 
+that combines technical innovation with user-centric design. It addresses both technical 
+vulnerabilities and behavioral factors, delivering an effective and comprehensive solution that 
+balances security, usability, and user empowerment. 
+2.5 Summary 
+Chapter 2 discusses some of the current challenges in cybersecurity, such as password security, 
+anomaly detection, and user awareness. This chapter highlights vulnerabilities of password-based 
+systems, such as brute force and dictionary attacks, which are worsened by weak user practices. It 
+emphasizes the need for robust multi-factor authentication and advanced password hashing as key 
+defenses. 
+Anomaly detection algorithms are identified as key to detecting system irregularities and potential 
+breaches. However, there remains the challenge of striking a balance between accuracy in detection 
+and usability because the systems continue to generate false positives, which erode trust by users. 
+The need for real-time detection integrated with user-initiated responses is particularly highlighted 
+for mobile applications. 
+User awareness becomes critical security, where actionable alerts and training programs have 
+turned out to be effective risk mitigants for human error. An analysis of existing systems, such as 
+Google, Microsoft, and Mobile Legends, were analyzed based on various parameters like 
+availability of features, user's empowerment, accuracy, and features related to mobile security to 
+identify gaps. 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+21 
+ 
+The project aims to address these gaps by developing a unified security framework that will include 
+robust authentication mechanisms, advanced anomaly detection algorithms, and real-time user-
+driven countermeasures. 
+ 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+22 
+ 
+ 
+ 
+Chapter 3 
+Methodology and 
+Requirements 
+Analysis 
+ 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+23 
+ 
+3.1 Project Methodology 
+The development methodology to be followed for the proposed Password Cracking Detection and 
+Prevention System is Agile methodology, an iterative approach widely followed that focuses on 
+collaboration, adaptability, and incremental progress. 
+The features of an Agile methodology for project development include a structure that emphasizes 
+efficiency and quick adaptation to changing environments. It adopts iterative development in 
+which the project is segmented into a series of short, convenient cycles, or sprints, with each sprint 
+dedicated to realizing an operational advance of the system. Another feature is collaboration, 
+involving an engaged role by active stakeholders, developers, and testers to produce a system 
+meeting user needs and expectations. Besides, Agile also provides flexibility in incorporating 
+modification based on feedback or a change in requirement to keep the product relevant and 
+effective. Lastly, continuous testing and integration plays a crucial role in ensuring quality since it 
+provides opportunities for testing frequently throughout development, locating issues at the earliest 
+opportunity, and makes sure that a product remains usable. 
+ 
+Figure 3.1 Agile Project Development Diagram (Schnell, 2022) 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+24 
+ 
+The justification for selecting the Agile methodology is rooted in the project’s requirements and 
+constraints, which make it particularly suitable for development. With so many complex 
+components like real-time anomaly detection algorithms through to user-initiated security 
+activities, the iterative testing and refinement central to Agile ensure the optimization of such 
+features in an effective manner. Agile takes a user-centric approach so that feedback is regular, 
+ensuring that critical aspects such as alerting and response mechanisms are intuitive and user-
+friendly. Furthermore, the flexibility of the methodology is crucial in this dynamic cybersecurity 
+environment, whereby new threats and changing user expectations require the embedding of 
+emerging insights and improvements during the development cycle. By emphasizing incremental 
+delivery, Agile also reduces risks: the ability to find and fix issues in areas like detection algorithms 
+and alerting system integrations early on. Additionally, team collaboration promotes effective 
+communication between developers, testers, and stakeholders-which is a necessity in order to 
+implement multi-faceted functionalities for the system. 
+3.2 Requirements Gathering 
+The Password Cracking Detection and Prevention System with Anomalous Device Detection and 
+Response will be a comprehensive security suite that will protect user accounts through the 
+identification and mitigation of unauthorized access attempts in real-time. It takes up a structured 
+approach to requirements gathering, integrating industry standards, regulatory frameworks, and 
+user experience principles in the development of a robust, user-centric system. 
+Regulatory compliance is one of the cornerstones in the design of the system, guaranteeing 
+compliance with international data protection standards such as the General Data Protection 
+Regulation and the California Consumer Privacy Act. The system therefore gives priority to user 
+privacy and acts within the boundaries of the law, thus building confidence in data handling and 
+ensuring responsibility. It reduces legal risks and secures transparency and safety for users when 
+their data is in process. 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+25 
+ 
+To further enhance the security, the system also integrates leading authentication standards such as 
+OAuth, OpenID Connect, and FIDO (Fast Identity Online). These are highly recognized protocols 
+for securing authentication workflows. Their integration strengthens the system by providing 
+seamless compatibility with existing applications while facilitating secure login processes. Real-
+time anomaly-based checks are also implemented to detect suspicious activities on a proactive 
+basis, thus assuring timely identification and response against potential threats. 
+The design follows the best practices of security as outlined by organizations such as OWASP 
+(Open Worldwide Application Security Project). These include strong encryption, secure session 
+management, and protection against common threats such as brute-force attacks and phishing 
+attempts. By following these guidelines, the system reduces vulnerabilities significantly, hence 
+offering a very secure environment for users. 
+Besides that, there is much usability focus. The system focuses on usability, having clear and 
+actionable notifications, intuitive interfaces, and straightforward workflows that minimize user 
+friction. This will enable or encourage proactivity in engaging security with the least possible 
+disturbance of the experience. 
+Finally, the system design is informed by insights from successful implementations by leading 
+organizations such as Google, Microsoft, and Mobile Legends. Key lessons learned include the 
+importance of features like real-time anomaly detection, instant notifications, and user-initiated 
+security actions. These practical and proven strategies ensure that the system is not only effective 
+but also adaptive to changing security challenges. 
+3.2.1 Functional Requirements 
+The system incorporates a range of core functionalities designed to effectively achieve its security 
+objectives. This consists of the core of an anomaly detection system that runs real-time monitoring 
+of login, utilizing key parameters such as device information, geolocation, and user behavior 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+26 
+ 
+patterns. Such sophistication within the approach enables the system to identify and flag suspicious 
+activities in real time to forestall unauthorized access. 
+Complementing the detection mechanism is a strong notification system that promptly alerts users 
+it detects something wrong. The notifications will contain such critical information such as IP 
+addresses, device types, and timestamps, meaning the users will have the necessary information to 
+evaluate whether such activity is legitimate or not. Furthermore, the system enables users to take 
+immediate, concrete steps directly from the notifications such as logging out from all devices or 
+resetting passwords to minimize potential risks as fast as possible. 
+To enhance user control, the system features device management capabilities, thus enabling users 
+to maintain a list of trusted devices. This list can be updated manually to ensure that only the 
+authorized devices retain access to the account. This added layer of security empowers users to 
+actively manage and safeguard their accounts. 
+For administrators, the system provides advanced analytics and reporting tools that show a 
+complete picture of suspicious activities on the platform. These tools facilitate the monitoring and 
+analyzing trends, resolving false positives, and implementing enhanced security measures where 
+necessary. 
+These functionalities create a cohesive and powerful security framework that balances proactive 
+threat detection, user empowerment, and administrative oversight in safeguarding accounts 
+effectively. 
+3.2.2 Non-Functional Requirements 
+The system's non-functional requirements are designed to ensure scalability, reliability, and a user-
+centric experience. The identified requirements also form the basis for standards needed for a high-
+performance, secure, and accessible solution. 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+27 
+ 
+Performance and Responsiveness are critical priorities. The system must be able to detect 
+anomalies within 5 seconds and notify the users, thus providing real-time feedback to reduce the 
+risk of potential incidents. It is designed to handle up to 10,000 concurrent users without any 
+degradation in performance, ensuring smooth operation even at peak usage. 
+Data security is a paramount in the design of the system, highlighting the principles of 
+confidentiality, integrity, and availability. Confidentiality is ensured through the implementation 
+of AES-256 encryption, widely recognized as one of the most secure encryption standards, to 
+safeguard all sensitive information from unauthorized access. Integrity is maintained by employing 
+TLS (Transport Layer Security) protocols to secure data transmission, preventing data tampering 
+or interception during transit. To uphold availability, robust system architecture and failover 
+mechanisms are incorporated to ensure that authorized users have uninterrupted access to their 
+data and services, even in the event of unexpected disruptions. This comprehensive approach 
+ensures the security of the system while fostering trust and reliability for its users. 
+The system is designed for 99.9% uptime to ensure uninterrupted service, meeting high-availability 
+standards. This should help gain and retain the trust of the users as they would experience 
+consistent protection against threats. 
+Usability is another core component of the system, from intuitive user interfaces serving both 
+nono-technical to very technical people, ensuring ease in using and navigating the platform by all 
+users. 
+By further consequence, the system will be highly maintainable because of its modular architecture, 
+combined with following the best principles of clean coding. These design principles will enable 
+for seamless updates, quick resolution of potential issues, and the effortless integration of new 
+features to address emerging security challenges. 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+28 
+ 
+3.3 Requirements Analysis 
+3.3.1 Analysis and Prioritization 
+In the development of a Multi-Factor Authentication (MFA) system for the proposed platform, 
+careful analysis and prioritization of requirements are essential to ensure a balanced integration of 
+security and usability. Each requirement is analyzed based on how it impacts the security 
+framework of the system and the improvement of the user experience. 
+The prioritization begins with the evaluation of the security importance of each feature. For 
+example, the ability to let users log in securely using a combination of passwords and OTP 
+verification is a core requirement that strengthens access control by preventing unauthorized 
+access. Similarly, anomaly detection and alerts on suspicious activities are high-priority features 
+that directly mitigate potential security breaches. Secure password reset mechanisms and session 
+management, including across-device logout, are equally important in the provisions of addressing 
+critical vulnerabilities. 
+Simultaneously, the features are considered regarding their usability impact to keep the system 
+user-friendly. Complex security measures such as frequent OTP verifications may enhance the 
+security but can frustrate the users. To address this, the system emphasizes flexibility through 
+multiple authentication options like recognition of trusted devices and fallback methods to ensure 
+that usability remains intact without compromising security. 
+The prioritization strategy focuses on the implementation of essential security measures first, such 
+as robust anomaly detection, audit logging, and session management. Once these critical security 
+features have been set up, a development team can focus on usability enhancements that include 
+intuitively designed user interfaces for trusted device management, recovery processes, and 
+notifications that are both clear and actionable. In the process, it balances security and usability to 
+provide a safe, seamless user experience on the platform. 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+29 
+ 
+3.3.2 Identification of Dependencies and Conflicts Among Requirements 
+The integration of MFA into the proposed system has dependencies on various authentication 
+factors and functionalities that need to be identified with care for smooth implementation. 
+Password Authentication requires secure storage mechanisms through hashing and salting to 
+prevent vulnerabilities such as brute-force attacks or credential leaks. The implementation of 
+password complexity policy influences user experience, while too restrictive requirements may 
+lead to users getting frustrated and increasing support requests. OTP Verification involves 
+dependencies on third-party services, such as email or SMS gateways, to deliver one-time codes. 
+Robust error-handling mechanisms and fallback options, such as resending OTPs or allowing 
+alternative methods, are necessary to address issues like delivery failures or network outages. 
+Anomaly Detection would hence depend on analysis of login patterns, device metadata, and IP 
+addresses for the detection of suspicious activities. This feature requires integration with analytics 
+tools and databases capable of storing and processing behavioral data. Conflicts arise when false 
+positives will create inconvenience for legitimate users, which requires fine-tuning the detection 
+threshold and providing a feedback mechanism for users. The Management of Trusted Devices is 
+dependent on securely storing device identifiers and maintaining a user-friendly interface for 
+device management. The challenges are going to be in the compatibility of a wide variety of 
+devices and edge cases, such as shared or public devices. Biometric Authentication is an option 
+but relies on compatible hardware, such as fingerprint scanners or facial recognition cameras. 
+Besides that, there are some problems that need to be considered, related to user consent, privacy 
+policies, and device compatibility issues. 
+3.3.2.1 Minimize The Dependencies and Conflicts 
+To minimize these dependencies and conflicts, the system will adopt several strategies: 
+
+Anomalous Device Detection and Response 
+Chapter 3 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+30 
+ 
+1. Compatibility Testing: Detailed assessment will be made at all levels of hardware, software, 
+and third-party integrations to ensure flawless compatibility. 
+2. User Guidance: Provide clear instructions and support resources, such as tutorials and 
+tooltips, to assist users in navigating new authentication features. 
+3. Alternative Methods: Offer fallback options like password-based login for users who face 
+challenges with OTP or biometric authentication. 
+4. Dynamic Threshold Adjustment: Continuously refine anomaly detection algorithms to 
+reduce false positives and enhance the accuracy of alerts. 
+By identifying and addressing dependencies early, the system can effectively integrate MFA 
+features while maintaining a high standard of security and usability, delivering a seamless and 
+secure user experience. 
+ 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+31 
+ 
+ 
+ 
+Chapter 4 
+System Design 
+ 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+32 
+ 
+System Design 
+In this chapter, detailed system design of the proposed system will be illustrated and described 
+using various diagrams such as flowchart diagram, use case diagram, activity diagram, sequence 
+diagram, class diagram, and system layouts. 
+4.1 Architecture Design 
+ 
+Figure 4.1: Concept Flow of The System 
+Figure 4.1 shows the basis concept flow of the proposed system. The red color box is mentioned 
+for my proposed system. First, the users register their account by providing their ID, password, 
+email, and security question. Then an OTP is sent to the user for verification after he/she has 
+registered. The information will be stored securely in a database. During login, users provide their 
+credentials, and the system verifies whether the user is registered or not. If yes, then the user will 
+login successfully. If not, the system will send notification approver to the user email. After the 
+user approves, then the user can login successfully. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+33 
+ 
+4.1.1 Flowchart Diagram 
+ 
+Figure 4.2: Flowchart Diagram 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+34 
+ 
+Figure 4.2 shows the flowchart of the proposed system. The flowchart outlines a secure 
+authentication process designed to detect and respond to unauthorized login attempts effectively. 
+The process begins when a user attempts to log in. The system first checks if the user has a 
+registered account. If the account is not registered, the user is prompted to create one. If the account 
+exists, the system then verifies whether the login is from a registered IP address. If the IP address 
+is recognized, the user is granted access, and login to the system. 
+For unregistered IPs, the system sends a notification to the user about the suspicious login attempt. 
+The user must then decide whether to approve or reject the login. If approved, the login is permitted, 
+and login to the system. If rejected, the user can manually log out the account from the unregistered 
+IP and prompt the user to reset their password as an added security measure. 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+35 
+ 
+4.1.2 Use Case Diagram 
+ 
+Figure 4.3: Use Case Diagram 
+Figure 4.3 shows the use case diagram of the proposed system. The main actor is the User, interacts 
+with the system to perform primary actions such as account registration, and login. During the 
+registration process, the user must complete requirement steps, including entering credentials, 
+answering security questions, and performing OTP (One-Time Password) verification, in order to 
+ensure a multi-factor authentication of the process. For login, the system verifies the credentials 
+of the user while monitoring for suspicious activities. If an account is accessed from an 
+unregistered IP address or device, the system then detects the anomaly and notifies the user, 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+36 
+ 
+whether to approve or reject the login. If rejected, the user can manually log out of the account and 
+prompt the user to reset their password as a preventive measure. 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+37 
+ 
+4.1.3 Activity Diagram 
+ 
+Figure 4.4: Activity Diagram 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+38 
+ 
+Figure 4.4 is the use case diagram of the proposed system. There are several processes in this 
+process flow. First is the login and registration process. The system will be displaying the login 
+page for users to prompt their credentials. If the account is validated, the user will proceed to the 
+authenticating page waiting for authenticate. If not validated or registered, the system will bring 
+the user to the registration page for the registration of a new user account. After registering an 
+account, the registered account will be added to the database. 
+The second process is the account management process. If the login is from a registered IP address, 
+it will let him log in successfully. If not, the system will send out a notification to the user to ask 
+the user to make a decision. If the user decides to approve, then it will log in successfully. Else, 
+the user can manually log out the account from the unregistered IP and reset their password as a 
+preventive measure. The system will update the database of the user password. 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+39 
+ 
+4.1.4 Sequence Diagram 
+ 
+Figure 4.5: Sequence Diagram 
+Figure 4.5 shows the sequence diagram of the proposed system, illustrating the interactions 
+between the User, LoginPageUI, LoginPageCtrl, and the Account system. The process begins with 
+the user initiating a login request by invoking the loginAccount() method on the LoginPageUI, 
+which then triggers the StartUI() function in the LoginPageCtrl to handle the request. The 
+controller validates the user’s credentials by calling the validate account() method on the Account 
+system. If the credentials are invalid, an error message (displayErrorMsg()) is displayed to inform 
+the user. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+40 
+ 
+In cases where the user opts to register a new account, the LoginPageCtrl calls the registerAccount() 
+method, creating a new account instance (New Account: Account) to store user information. For 
+valid accounts, the system further validates the registered IP address through the validate registered 
+IP() method. If the IP address is invalid, a security notification (displayNotification()) is sent to 
+alert the user. Users can also manage their account by logging out using the logoutAccount() 
+function or resetting their password with the resetPassword() method if needed. 
+Finally, if the credentials and IP validation are both successful, the system grants access to the user 
+by executing the loginSystem() method. The diagram effectively represents key scenarios such as 
+login attempts, account registration, password recovery, logout, and security notifications. It 
+highlights the logical flow of operations, conditional checks, and the division of responsibilities 
+between the user interface, controller, and account system. 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+41 
+ 
+4.2 Database Design 
+ 
+Figure 4.6: Class Diagram 
+The class diagram represents the design of a secure account management system that is aimed at 
+enhancing user authentication and preventing unauthorized access. It features five interconnected 
+classes such as Account, Session, Authentication, IPManager, and Notification. Each with specific 
+roles to implement functionalities and maintain system security. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+42 
+ 
+The Account class stores user details, including ID, password, email, security question, and 
+registered IP addresses, with methods for registering an account, logging in, and resetting 
+passwords. The Session class tracks login sessions through attributes like session ID and device 
+IP, with methods to approve or terminate sessions. These classes ensure users can securely manage 
+their accounts and monitor device usage. 
+The Authentication class is central to multi-factor authentication, keeping track of attributes such 
+as OTP codes and current sessions. It provides methods for verification of OTPs, authentication of 
+login attempts, and sending notifications. The IPManager class ensures access by only authorized 
+devices through validating and registering new IP addresses. Meanwhile, the Notification class 
+handles the sending of user alerts via email regarding suspicious login attempts or requests for 
+approval. 
+4.2.1 Choice of Database 
+MySQL will be used for the database management system for this proposed secure login system 
+that shall employ MFA. This is because MySQL offers ease of use, scalability, high performance, 
+and strong security features, hence rendering it an ideal candidate in the implementation of a secure 
+login system using MFA. These attributes have combined well with the requirements of the 
+proposed system for efficient and safe authentication of users. 
+MySQL’s user-friendly interface and intuitive commands simplify the development process, 
+enabling the focus to remain on implementing core MFA features rather than struggling with 
+database complexities. This accessibility makes MySQL suitable for both novice and experienced 
+developers, allowing for faster system deployment and maintenance. 
+The scalability of the proposed system is crucial, especially in cases when the number of users 
+increase or login attempts reach a high level. MySQL provides excellent scalability options, 
+including vertical scaling (hardware upgrades) and horizontal scaling (clustering and sharding). 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+43 
+ 
+This will make the system able to handle increased loads without a loss in performance and provide 
+reliability for user authentication and session management. 
+The next benefit of MySQL is that it gives a great performance. It proposes some very important 
+features that support performance like indexing and caching mechanisms. These support rapid OTP 
+verification, IP validation, and response to users needs at runtime. It prevents most of the delay-
+related latency that impacts the user during their login or response. 
+Security is a significant demand for the proposed MFA system. MySQL provides enhanced security 
+features, including the use of SSL for data encryption, granular access control, and advanced 
+authentication mechanism, which come in handy in securing password information, security 
+questions, and IP addresses. These features ensure that user accounts remain safeguarded against 
+unauthorized access and potential data breaches. 
+Additionally, MySQL enjoys a large and active community that provides support, troubleshooting 
+resources, and best practices for implementation. The comprehensive documentation goes further 
+to detail the guidance on integrating and maintaining secure database systems for smooth operation 
+throughout the system life cycle. 
+In conclusion, MySQL's combination of ease of use, scalability, performance, and security makes 
+it an excellent choice for implementing the proposed secure login system with MFA. Thus, it 
+provides for a reliable authentication and protection of user data using MySQL capabilities while 
+giving a seamless experience, thus increasing trust and confidence in its users. 
+4.3 User Interface Design 
+The UI design serves as the first line of interaction between the user and the application at the front 
+end. The success of any UI design lies in guaranteeing the smoothness and intuitiveness of the user 
+experience. Therefore, it directly impacts users' satisfaction with the developed application. This 
+project concerns designing the UI through the construction of wireframes and prototypes. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+44 
+ 
+4.3.1 Wireframe 
+Wireframes are designed to layout the required content and functionality of the system for an 
+improved user experience in the usage of the system. 
+ 
+Figure 4.7: Layout of Login Page 
+Figure 4.7 shows the layout of the login page. The squiggly lines represent the placeholder text or 
+labels displayed on the page. The two rectangular boxes are input fields where users enter their 
+login credentials. The curvy box represents the button users click to proceed with the login process. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+45 
+ 
+ 
+Figure 4.8: Layout of Registration Page 
+Figure 4.8 shows the layout of the registration page which shares a similar design with the login 
+page. The squiggly lines represent placeholder text or labels. The rectangular boxes are input fields 
+for user information, while the curvy box represents the button to proceed. Additionally, two 
+rectangular boxes at the bottom are designated for users to answer the security questions. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+46 
+ 
+ 
+Figure 4.9: Layout of OTP Verification Page 
+Figure 4.9 shows the layout of the OTP verification page , which shares a similar design with the 
+login and registration pages. This page allows users to enter the OTP for verification. 
+ 
+Figure 4.10: Layout of Authenticating Page 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+47 
+ 
+Figure 4.10 shows the layout of the authenticating page. This page design only squiggly lines, 
+indicating that the login process is in progress. 
+ 
+Figure 4.11: Layout of Approver Page 
+Figure 4.11 shows the layout for the approver page. This page only contains the question and two 
+curvy box which are buttons, asking whether the user is logging in with a new device. 
+ 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+48 
+ 
+Figure 4.12: Layout of Reset Password Page 
+Figure 4.12 shows the layout for the reset password page. This page consists of two rectangle boxes 
+which are the input field and one curvy box represents a button for the user to reset their password. 
+4.3.2 Prototype 
+Prototype design is used to test the practicability of the wireframe design. Below is the display of 
+prototype design for each page based on the wireframe. 
+ 
+Figure 4.13: Prototype Design of Login Page 
+Figure 4.13 shows the prototype design of the login page. The interface focuses on crucial elements, 
+including fields for email and password to ensure a minimal and distraction-free layout. Key user 
+experience (UX) principles such as simplicity, consistency, and clear call-to-action buttons (e.g., 
+“Login” and “Register”) guide users effortlessly through the process. Accessibility features are 
+considered by ensuring readable fonts, adequate color contrast, and compatibility with screen 
+readers for visually impaired users. Additionally, keyboard navigation is also supported to 
+accommodate users with limited mobility. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+49 
+ 
+ 
+Figure 4.14: Prototype Design of Registration Page 
+Figure 4.14 shows the prototype design of the registration page. The design is clear and intuitive, 
+starting with important fields such as ID, password, and email, followed by security questions to 
+enhance account protection. Mandatory fields are marked with an asterisk (*) to guide users, 
+minimizing confusion and ensuring that critical information is provided. Dropdown menus for 
+security questions simplify user input, making the process more convenient. Accessibility 
+considerations are incorporated to make the page usable by a diverse audience. Each input field is 
+labeled clearly to support screen readers so that visually challenged users can fill out the forms 
+effectively. The form also supports keyboard navigation, which is important for users with mobility 
+impairments. Additionally, the text size and contrast are ideal to enable viewers with poor vision 
+to navigate the form successfully. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+50 
+ 
+ 
+Figure 4.15: Prototype Design of OTP Verification Page 
+Figure 4.15 shows the prototype design of the OTP verification page. In this page, the OTP 
+verification is effectively applying user experience principles through simplicity and intuition. The 
+clear instructions, "Enter the OTP sent to example@gmail.com," tells the user what they are being 
+asked to do, while the "Resend" option tries to solve some problems related to delayed or missing 
+OTP delivery. The "Verify" button is large and clear, so users can easily identify what they need to 
+do to complete the process. Accessibility considerations include short and direct language, a clean 
+layout, and adequate space for input fields to accommodate all types of users. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+51 
+ 
+ 
+Figure 4.16: Prototype Design of Authenticating Page 
+Figure 4.16 shows the prototype design of the authenticating page. This page effectively adheres 
+to UX principles by providing clear feedback to the user during the login process. The message 
+"Authenticating... Waiting for approver" tells the users what is happening, and the instruction to 
+check their email for a notification explains what happens next. The "Resend" option is convenient 
+if there are some delays or the notification has not been seen. Accessibility is considered by using 
+simple and direct language so that users can easily follow the process. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+52 
+ 
+ 
+Figure 4.17: Prototype Design of Approver Page 
+Figure 4.17 shows the prototype design for the approver page. The user after receiving the 
+notification, will provide a link to bring the user to this page. The simple and clear interface ensures 
+ease of use, providing a straightforward question with two highly distinguishable options: "Yes, 
+it's me" and "No, it's not me." This reduces cognitive load, allowing users to make quick decisions 
+without confusion. The large and well-labeled buttons are accessible for users with motor 
+impairments because they are easy to click both on desktop and mobile devices. Additionally, the 
+high contrast between the text and button backgrounds is readable for users with visual 
+impairments, aligning with accessibility standards like WCAG. It designates an immediate 
+response option so that through the design, the user can quickly confirm or deny suspicious login 
+activity quickly. This improves security and builds trust and user satisfaction. This focus on 
+usability and accessibility ensures all users will have a seamless experience, regardless of ability 
+or circumstance. 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+53 
+ 
+ 
+Figure 4.18: Prototype Design of Reset Password Page 
+Figure 4.18 shows the prototype design for the reset password page. Once the user clicks “No it’s 
+not me” at the approver page, it will ask the user to reset their password. The clean design with 
+clearly labeled fields like "Password" and "Confirm", will reduce user confusion and make the 
+task intuitive, ensuring that users can complete the process quickly and accurately. The "Reset" 
+button will appear with high contrast and well-sized, making it accessible for users with motor 
+impairments using an assistive technologies input method. The consistent and minimalistic layout 
+ensures a smooth experience on both desktop and mobile devices, catering to diverse user needs. 
+4.4 Detailed Design 
+The detailed design of the system encompasses several components and modules combined 
+together for a specific purpose that adds to functionality and security. The Account Management 
+Module shall deal with user account operations such as registration, login, and reset password. It 
+stores user credentials, email addresses, and answers to security questions securely, and provides 
+APIs to help in account registration and password reset processes. The Authentication Module 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+54 
+ 
+implements MFA via OTP verification to ensure that only authorized users have access to the 
+system. It includes APIs related to the generation and validation of OTPs, adding an additional 
+layer of security to the login. 
+The Session Management Module tracks the active user sessions, monitors login activity, and 
+detects unauthorized access attempts, and notifies users in cases of anomalies, such as logins from 
+unfamiliar IP addresses. It provides APIs for starting and terminating user sessions, making the 
+system more secure and transparent to the users. The IP Management Module further reinforces 
+security in the validation and registration of IP addresses, ensuring that login attempts are only 
+made from authorized devices. It includes APIs for checking the validity of IP addresses and 
+adding new ones to the list of trusted devices. Besides, the Notification Module supports the users 
+through messages and notifications for any occurrence of an event, which relates to security 
+features, such as notifications of login from unregistered IPs or password changes in accounts. 
+The design decisions aim at offering the highest possible degree of security with ease in operation. 
+It strengthens the MFA authentication in a way that verification must be two-fold, via password 
+and an OTP. Although MFA increases the effort required for users during login, the added security 
+justifies this trade-off. Similarly, IP Validation adds another layer of protection by restricting logins 
+to registered IP addresses. While this may cause slight delays when users log in from new devices, 
+the benefit of preventing unauthorized access outweighs the inconvenience. For Session 
+Monitoring, which offers further security by tracking the activity of the users and alerting them 
+immediately upon detecting suspicious behavior. This takes additional resources on the database, 
+but the added security makes it well worth the added resource usage. 
+In the design of the system, MySQL was chosen for its scalability, ease of use, and robust security 
+features. While NoSQL databases may offer better performance in high-scale read operations, 
+MySQL’s ability to handle complex queries and maintain relational data integrity better fits the 
+needs of the system. Additionally, a lot of effort was put into designing a simple and accessible 
+user interface. This ensures that the system is intuitive and user-friendly for a diverse audience, 
+
+Anomalous Device Detection and Response 
+Chapter 4 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+55 
+ 
+though it slightly extended the development timeline. The balance of security, usability, and 
+scalability was central in the design decisions to ensure that the system is able to handle an 
+increasing number of users while maintaining its functionality and ease of use. 
+ 
+ 
+
+Anomalous Device Detection and Response 
+References 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+56 
+ 
+References 
+Antonenko, D. (2022, February 23). Infosec Best Practices: Implementing Effective Password 
+Policies. Businesstechweekly.com. 
+https://www.businesstechweekly.com/cybersecurity/password-security/password-policies/ 
+Barnard, J., & Stryker, C. (2023, December 12). What is anomaly detection? | IBM. 
+Www.ibm.com. https://www.ibm.com/topics/anomaly-detection 
+Coursera Staff. (2024, March 29). What Is Anomaly Detection in Machine Learning? Coursera. 
+https://www.coursera.org/articles/anomaly-detection-machine-learning 
+Cypress Data Defense. (2020, June 15). 6 Password Security Risks and How to Avoid Them. 
+Www.cypressdatadefense.com. 
+https://www.cypressdatadefense.com/blog/password-security-risks/ 
+Editor, T. (2022, October 7). The Importance of Strong Passwords, MFA and Good Password 
+Hygiene | WatchGuard Blog. Www.watchguard.com. 
+https://www.watchguard.com/wgrd-news/blog/cybersecurity-awareness-month-importanc 
+e-strong-passwords-mfa-and-good-password 
+Google. (2024). Security. Google.com. https://myaccount.google.com/security?pli=1 Google. 
+(2024). Security Command Center conceptual overview. Google Cloud. 
+https://cloud.google.com/security-command-center/docs/concepts-security-command-cen 
+ter-overview 
+Google. (2024). Designing for Global Accessibility, Part I. Google Design. 
+https://design.google/library/designing-global-accessibility-part-1 
+Grobler, M., Gaire, R., & Nepal, S. (2021). User, Usage and Usability: Redefining Human Centric 
+Cyber Security. Frontiers in Big Data, 4. 
+https://doi.org/10.3389/fdata.2021.583723 
+HotdogsHot. (2018). Reddit - Dive into anything. Reddit.com. 
+https://www.reddit.com/r/MobileLegendsGame/comments/glaj4x/tried_and_tested_succe 
+ssfully_remove_3rd_party/?rdt=63591 
+Inc, W. com / A. (2024, July 4). Password Reuse: A Major Vulnerability You Need to Avoid. 
+
+Anomalous Device Detection and Response 
+References 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+57 
+ 
+Jetpack. https://jetpack.com/blog/password-reuse/ 
+Jabal. (2023, September 5). The Easiest Way to Log Out a Mobile Legend Account. VCGamers 
+News. 
+https://www.vcgamers.com/news/en/the-easiest-way-log-out-mobile-legend-account/#goo 
+gle_vignette 
+kimkischel. (2022, October 12). Identity Protection alerts now available in Microsoft 365 Defender. 
+TECHCOMMUNITY.MICROSOFT.COM. 
+https://techcommunity.microsoft.com/blog/microsoftthreatprotectionblog/identity-protecti 
+on-alerts-now-available-in-microsoft-365-defender/3648872 
+Leal, A. (2022, August 14). Human Factor in Cybersecurity: The Weakest Link? KuppingerCole. 
+https://www.kuppingercole.com/events/csls2022/blog/human-factor-in-cybersecurity-
+theweakest-link 
+Mobile Legend. (2024). Mobilelegends.com. 
+https://www.mobilelegends.com/news/articleldetail?newsid=2728939 
+Nailman, A. (2024, October 15). Comparative Analysis of Supervised vs Unsupervised Anomaly 
+Detection. Machine Learning Models. 
+https://machinelearningmodels.org/comparative-analysis-of-supervised-vs-
+unsupervisedanomaly-detection/ 
+Quiroz-Vázquez, C. (2024, July 18). Anomaly Detection in Machine Learning: Examples, 
+Applications & Use Cases | IBM. Www.ibm.com. 
+https://www.ibm.com/think/topics/machine-learning-for-anomaly-detection 
+Ralph. (2023, September 7). Cultivating a Security-Conscious Culture: A Guide for 
+Organizations - Tech Insight Daily. Tech Insight Daily - Your Tech Insight Daily. 
+https://techinsightdaily.com/475/cultivating-a-security-conscious-culture-a-guide-for-orga 
+nizations/ 
+Schnell. (2022, August 13). Advantages and Disadvantages of Agile Methodology: Pros and 
+Cons. Schnell Solutions. https://www.bespokesoftwaredevelopment.com/blog/agile-
+project-management-methodol ogy-advantages-disadvantages/ 
+softchris. (2024). Monitor and report on security events in Microsoft Entra ID - Training. 
+
+Anomalous Device Detection and Response 
+References 
+_____________________________________________________________________________________ 
+_____________________________________________________________________________________ 
+BACS3404 Project I  
+58 
+ 
+Microsoft.com. 
+https://learn.microsoft.com/en-us/training/modules/monitor-report-aad-security-events/ 
+Synn. (2024). Synn Store BLOG - How to Log Out of Mobile Legends: A Step-by-Step Guide. 
+Synnmlbb.com; Synn Store BLOG - How to Log Out of Mobile Legends: A Step-by-Step 
+Guide. 
+https://synnmlbb.com/blog/how-to-log-out-of-mobile-legends-a-step-by-step-guide 
+Team, U. C. (2022, September 30). Notification UX: How To Design Notifications For A Better 
+User Experience. Thoughts about Product Adoption, User Onboarding and Good UX | 
+Userpilot Blog. https://userpilot.com/blog/notification-ux/ 
+Thacker, D. (2018, April 25). With new security and intelligent features, the new Gmail means 
+business. Google. 
+https://blog.google/products/g-suite/new-security-and-intelligent-features-new-gmail-mea 
+ns-business/ 
+timurengin. (2023, January 30). Combatting Risky Sign-ins in Azure Active Directory. 
+TECHCOMMUNITY.MICROSOFT.COM. 
+https://techcommunity.microsoft.com/blog/identity/combatting-risky-sign-ins-in-azure-ac 
+tive-directory/3724786 
+Vigliarolo, B. (2019, January 27). Brute force and dictionary attacks: A cheat sheet. 
+TechRepublic; TechRepublic. 
+https://www.techrepublic.com/article/brute-force-and-dictionary-attacks-a-cheat-sheet/ 
+yelevin, cwatson-cat, batamig, & JamesTran-MSFT. (2022, November 3). Work with anomaly 
+detection analytics rules in Microsoft Sentinel. Learn.microsoft.com. 
+https://learn.microsoft.com/en-us/azure/sentinel/work-with-anomaly-rules 

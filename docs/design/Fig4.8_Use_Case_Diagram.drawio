@@ -1,0 +1,165 @@
+<mxfile host="app.diagrams.net" agent="5.0">
+  <diagram id="fig4-8-usecase" name="Fig4.8 System Use Case Diagram">
+    <mxGraphModel dx="1832" dy="908" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1280" pageHeight="820" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="boundary" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;verticalAlign=top;align=center;fontStyle=1;fontSize=12;" value="VulnScan" vertex="1">
+          <mxGeometry height="680" width="780" x="260" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="uSign" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Sign In" vertex="1">
+          <mxGeometry height="58" width="170" x="565" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="uKB" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="View Vulnerability Knowledge Base" vertex="1">
+          <mxGeometry height="58" width="170" x="565" y="645" as="geometry" />
+        </mxCell>
+        <mxCell id="uUsers" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Manage User Accounts" vertex="1">
+          <mxGeometry height="58" width="170" x="300" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="uProfiles" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Manage Scan Profiles" vertex="1">
+          <mxGeometry height="58" width="170" x="300" y="265" as="geometry" />
+        </mxCell>
+        <mxCell id="uVulnDef" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Manage Vulnerability Definitions" vertex="1">
+          <mxGeometry height="58" width="170" x="300" y="355" as="geometry" />
+        </mxCell>
+        <mxCell id="uAudit" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="View Audit Logs" vertex="1">
+          <mxGeometry height="58" width="170" x="300" y="445" as="geometry" />
+        </mxCell>
+        <mxCell id="uScan" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Start Vulnerability Scan" vertex="1">
+          <mxGeometry height="58" width="170" x="830" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="uResults" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="View Scan Results" vertex="1">
+          <mxGeometry height="58" width="170" x="830" y="265" as="geometry" />
+        </mxCell>
+        <mxCell id="uReport" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Generate / Export Scan Report" vertex="1">
+          <mxGeometry height="58" width="170" x="830" y="355" as="geometry" />
+        </mxCell>
+        <mxCell id="eA1" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;" target="uUsers">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="160" y="360" />
+              <mxPoint x="278" y="360" />
+              <mxPoint x="278" y="204" />
+              <mxPoint x="300" y="204" />
+            </Array>
+            <mxPoint x="160" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eA2" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;" target="uProfiles">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="160" y="360" />
+              <mxPoint x="278" y="360" />
+              <mxPoint x="278" y="294" />
+              <mxPoint x="300" y="294" />
+            </Array>
+            <mxPoint x="160" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eA3" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;" target="uVulnDef">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="160" y="360" />
+              <mxPoint x="278" y="360" />
+              <mxPoint x="278" y="384" />
+              <mxPoint x="300" y="384" />
+            </Array>
+            <mxPoint x="160" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eA4" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;" target="uAudit">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="160" y="360" />
+              <mxPoint x="278" y="360" />
+              <mxPoint x="278" y="474" />
+              <mxPoint x="300" y="474" />
+            </Array>
+            <mxPoint x="160" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eA5" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;" target="uSign">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="160" y="360" />
+              <mxPoint x="278" y="360" />
+              <mxPoint x="278" y="129" />
+              <mxPoint x="565" y="129" />
+            </Array>
+            <mxPoint x="160" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eA6" edge="1" parent="1" source="Gw5AgBQqsiU0WmY7DsCt-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;exitX=1;exitY=0.3333333333333333;exitDx=0;exitDy=0;exitPerimeter=0;" target="uKB">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="160" y="360" />
+              <mxPoint x="278" y="360" />
+              <mxPoint x="278" y="674" />
+            </Array>
+            <mxPoint x="160" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eD1" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;" target="uScan">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1080" y="360" />
+              <mxPoint x="1015" y="360" />
+              <mxPoint x="1015" y="204" />
+              <mxPoint x="1000" y="204" />
+            </Array>
+            <mxPoint x="1120" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eD2" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;" target="uResults">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1080" y="360" />
+              <mxPoint x="1015" y="360" />
+              <mxPoint x="1015" y="294" />
+              <mxPoint x="1000" y="294" />
+            </Array>
+            <mxPoint x="1120" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eD3" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;" target="uReport">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1080" y="360" />
+              <mxPoint x="1015" y="360" />
+              <mxPoint x="1015" y="384" />
+              <mxPoint x="1000" y="384" />
+            </Array>
+            <mxPoint x="1120" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eD4" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;" target="uSign">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1080" y="360" />
+              <mxPoint x="1015" y="360" />
+              <mxPoint x="1015" y="129" />
+              <mxPoint x="735" y="129" />
+            </Array>
+            <mxPoint x="1120" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eD5" edge="1" parent="1" source="Gw5AgBQqsiU0WmY7DsCt-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;exitX=0;exitY=0.3333333333333333;exitDx=0;exitDy=0;exitPerimeter=0;" target="uKB">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1080" y="360" />
+              <mxPoint x="1015.01" y="360" />
+              <mxPoint x="1015.01" y="674" />
+            </Array>
+            <mxPoint x="1120" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Gw5AgBQqsiU0WmY7DsCt-1" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" value="&lt;span style=&quot;white-space: normal;&quot;&gt;Administrator&lt;/span&gt;" vertex="1">
+          <mxGeometry height="160" width="100" x="60" y="304" as="geometry" />
+        </mxCell>
+        <mxCell id="Gw5AgBQqsiU0WmY7DsCt-4" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" value="Developer" vertex="1">
+          <mxGeometry height="150" width="100" x="1120" y="309" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

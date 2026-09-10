@@ -1,0 +1,140 @@
+
+===== TABLE 0 (4 rows x 3 cols) =====
+OWASP Category | Description | Supported in VulnScan
+SQL Injection | Improper validation of user input allows malicious SQL statements to be executed. | Yes
+Cross-Site Scripting (XSS) | Untrusted scripts are injected into web pages viewed by users. | Yes
+Security Misconfiguration (HTTP Security Headers) | Missing or improperly configured HTTP security headers expose applications to additional security risks. | Yes
+
+===== TABLE 1 (6 rows x 2 cols) =====
+CVSS Score | Severity Level
+0.0 | None
+0.1 – 3.9 | Low
+4.0 – 6.9 | Medium
+7.0 – 8.9 | High
+9.0 – 10.0 | Critical
+
+===== TABLE 2 (13 rows x 5 cols) =====
+Features | OWASP ZAP | Burp Suite Community | Acunetix | Proposed VulnScan
+Open Source | ✓ | ✓(Community Edition) | ✗ | ✓
+Automated Vulnerability Scanning | ✓ | Limited | ✓ | ✓
+Manual Security Testing | ✓ | ✓ | Limited | ✗
+Risk Assessment | Limited | Limited | ✓ | ✓
+Vulnerability Knowledge Base | Limited | Limited | Limited | ✓
+Remediation Guidance | Basic | Basic | ✓ | ✓
+Configurable Scan Profiles | Limited | ✗ | ✓ | ✓
+Role-Based Access Control | ✗ | ✗ | ✓ | ✓
+Security Audit Logging | ✗ | ✗ | Limited | ✓
+Educational Focus | Moderate | Low | Low | High
+Suitable for Beginners | Moderate | Low | Moderate | High
+Web-Based Interface | ✗ | ✗ | ✓ | ✓
+
+===== TABLE 3 (11 rows x 3 cols) =====
+Requirement ID | Functional Requirement | Description
+FR-01 | User Authentication | The system shall allow users to register, log in securely, and log out using authenticated credentials.
+FR-02 | Role-Based Access Control | The system shall differentiate access privileges between Administrators and Developers based on user roles.
+FR-03 | Vulnerability Management | The system shall allow administrators to create, update, enable, disable, and maintain vulnerability definitions and remediation information.
+FR-04 | Scan Profile Management | The system shall allow administrators to create and manage configurable scan profiles consisting of selected vulnerability modules.
+FR-05 | Web Vulnerability Scanning | The system shall allow developers to initiate vulnerability scans by providing a target website URL and selecting a scan profile.
+FR-06 | Web Crawling | The system shall automatically discover and analyse web pages within the specified scan scope before executing vulnerability detection modules.
+FR-07 | Vulnerability Detection | The system shall detect supported vulnerabilities, including SQL Injection (SQLi), Cross-Site Scripting (XSS), and HTTP Security Header misconfigurations.
+FR-08 | Scan Result Management | The system shall store, display, and manage scan results, including detected vulnerabilities, affected pages, risk scores, and supporting evidence.
+FR-09 | Vulnerability Knowledge Base | The system shall provide descriptions, impacts, secure coding practices, recommendations, and reference links for each supported vulnerability.
+FR-10 | Security Audit Logging | The system shall record significant user and system activities, including login attempts, administrative actions, and scan operations, for auditing purposes.
+
+===== TABLE 4 (9 rows x 3 cols) =====
+Requirement ID | Non-Functional Requirement | Description
+NFR-01 | Security | The system shall protect user credentials through password hashing, enforce role-based access control, and record significant system activities using security audit logs.
+NFR-02 | Performance | The system shall perform vulnerability scans efficiently and respond to user requests within an acceptable time under normal operating conditions.
+NFR-03 | Reliability | The system shall maintain consistent operation and preserve scan data accurately throughout the scanning process.
+NFR-04 | Scalability | The system shall support the addition of new vulnerability detection modules and scan profiles without requiring major modifications to the existing architecture or database.
+NFR-05 | Maintainability | The system shall adopt a modular software architecture and a normalized database structure to simplify future maintenance and enhancements.
+NFR-06 | Usability | The system shall provide a user-friendly interface that enables developers to perform vulnerability scans and interpret scan results with minimal technical complexity.
+NFR-07 | Compatibility | The system shall operate on modern web browsers and support integration with Microsoft SQL Server through the Flask backend.
+NFR-08 | Availability | The system shall remain accessible whenever required during normal operation and recover gracefully from unexpected failures where possible.
+
+===== TABLE 5 (4 rows x 2 cols) =====
+Priority | Requirements
+High | User Authentication, Role-Based Access Control, Web Crawling, Vulnerability Detection, Scan Result Management
+Medium | Scan Profile Management, Vulnerability Management, Security Audit Logging
+Low | Vulnerability Knowledge Base, Future Vulnerability Modules
+
+===== TABLE 6 (9 rows x 2 cols) =====
+Entity | Purpose
+User | Stores user account information, authentication details, and role assignments.
+Scan | Records each vulnerability scanning session performed by users.
+ScanProfile | Stores reusable scanning configurations.
+ProfileModule | Defines the vulnerability detection modules associated with each scan profile.
+Vulnerability | Maintains the vulnerability knowledge base, including descriptions and remediation guidance.
+DiscoveredPage | Stores web pages identified during the crawling process.
+Finding | Records vulnerabilities detected during each scan together with their severity and supporting evidence.
+SecurityAuditLog | Records important user and system activities for auditing and security monitoring.
+
+===== TABLE 7 (1 rows x 1 cols) =====
+System Document In this section, students should provide the following pieces of information: System (hardware and software requirements).  Students should describe the minimum hardware and software requirements to install the software application which has been developed by the students, for example, DBMS, OS, program development tools etc. Installation.  Under this section, students should create an ‘installation’ CD and provide a brief step-by-step guide on how a new user can install the software on a computer system. Students should indicate any special setup information, such as the specific location of placing the database files, the SQL statements to add tables, etc.  Software source code should also be included in this CD.  Students are not required to print out the software code. Operation Document Under this section, students are required to provide a brief step-by-step guide on how to use the installed software.  The guides should teach the user how to run the software and use its major functions and features.  For example, steps show guide the users on how to run the system, e.g. to use an executable file or to use the IDE. The login information such as username and password for each of the different users (or roles) must be provided. Some screen interfaces would be useful.
+
+===== 470-535 (4.4 detailed) =====
+[470][normal] Purpose:
+[471][normal] This interface provides administrators with a centralized dashboard for monitoring and managing the overall operation of VulnScan. It displays key system metrics, recent scanning activities, vulnerability statistics, system health, and provides access to administrative functions such as user management, scan profile management, vulnerability management, audit log monitoring, system reports, and data export. 
+[472][Heading 2] 
+[473][Heading 2] 4.4 Detailed Design
+[474][Heading 3] 4.4.1 User Authentication Process
+[475][normal] The user authentication process ensures that only authorised users can access the VulnScan platform. When a user submits their login credentials, the request is forwarded to the Flask REST API, where the credentials are validated against the information stored in the User entity. Passwords are verified using secure hashing techniques to protect user credentials during authentication.
+[476][normal] Upon successful authentication, the system generates a JSON Web Token (JWT) that is returned to the client. The JWT is included in subsequent requests to verify the user's identity and assigned role. Based on the authenticated role, the system redirects the user to either the Developer Dashboard or the Administrator Dashboard, ensuring that users only access functions relevant to their responsibilities. Failed authentication attempts are recorded in the SecurityAuditLog to support system monitoring and security auditing.
+[477][normal] 
+[478][normal] 
+[479][normal] 
+[480][normal] 
+[481][normal] Figure 4.7: User Authentication Activity Diagram
+[482][normal] Purpose:
+[483][normal] This workflow illustrates the authentication process performed when a user logs into VulnScan. It shows how login credentials are validated, how the system verifies the user's account status against the database, generates a JSON Web Token (JWT) upon successful authentication, and redirects the user to the appropriate dashboard based on their assigned role, while failed authentication attempts result in an error response. 
+[484][normal] 
+[485][normal] 
+[486][normal] 
+[487][normal] 
+[488][normal] 
+[489][normal] 
+[490][normal] 
+[491][normal] 
+[492][normal] 
+[493][normal] 
+[494][normal] 
+[495][normal] 
+[496][Heading 3] 4.4.2 Vulnerability Scanning Process
+[497][normal] The vulnerability scanning process begins when a developer creates a new scan by providing a target website URL and selecting an appropriate scan profile. The selected scan profile determines which vulnerability detection modules will be executed during the assessment.
+[498][normal] The Scanner Engine first activates the Web Crawler to discover accessible pages within the target website. The discovered pages are recorded in the DiscoveredPage entity before being analysed by the enabled vulnerability detection modules. During the current implementation, the Scanner Engine supports SQL Injection (SQLi), Cross-Site Scripting (XSS), and HTTP Security Header analysis. Any identified vulnerabilities are stored as findings together with their severity, affected location, supporting evidence, and remediation recommendations.
+[499][normal] After the scanning process is completed, the scan status is updated and the results are presented to the user through the Scan Result interface. The modular design of the Scanner Engine allows additional vulnerability detection modules to be incorporated in future versions without modifying the overall system architecture.
+[500][normal] 
+[501][normal] 
+[502][normal] 
+[503][normal] 
+[504][normal] 
+[505][normal] Figure 4.8: Vulnerability Scanning Activity Diagram 
+[506][normal] Purpose:
+[507][normal] This activity diagram illustrates the end-to-end vulnerability scanning process performed by VulnScan. It shows how a developer initiates a scan, how the system validates the request, executes the configured vulnerability detection modules through the scanner engine, stores the scan results in the database, updates the scan status, and finally presents the findings to the user for analysis and reporting. 
+[508][normal] 
+[509][normal] 
+[510][normal] 
+[511][normal] 
+[512][normal] 
+[513][normal] 
+[514][normal] 
+[515][Heading 3] 4.4.3 Security Audit Logging Process
+[516][normal] To improve system accountability and security monitoring, VulnScan records important user and system activities using the SecurityAuditLog entity. Whenever significant events occur, such as user authentication, scan creation, vulnerability management, or administrative operations, the Business Logic Layer automatically generates audit records containing the event description, event time, responsible user, and related system information.
+[517][normal] The audit logging mechanism enables administrators to monitor system activities, investigate security incidents, and maintain a historical record of important operations. Centralising these records also supports future maintenance and forensic analysis by providing a complete history of significant events performed within the application.
+[518][normal] 
+[519][normal] 
+[520][normal] 
+[521][normal] 
+[522][normal] 
+[523][normal] 
+[524][normal] 
+[525][normal] Figure 4.9: Security Audit Logging Activity Diagram
+[526][normal] Purpose:
+[527][normal] This activity diagram illustrates how VulnScan records and manages security audit logs throughout the system. It shows how user and system actions are captured, validated, stored in the SecurityAuditLog entity, and made available for administrators to review, supporting accountability, security monitoring, and future forensic analysis. 
+[528][Heading 2] 
+[529][Heading 2] 4.5 Chapter Summary and Evaluation
+[530][normal] This chapter presented the overall system design of VulnScan, which serves as the blueprint for the implementation of the proposed web application vulnerability assessment platform. The design was developed based on the functional and non-functional requirements identified in Chapter 3, ensuring that the proposed system architecture satisfies the project's objectives while supporting maintainability, scalability, and security.
+[531][normal] The chapter first described the overall system architecture, illustrating how the Presentation Layer, API Layer, Business Logic Layer, Scanner Engine, and Data Layer interact to provide the core functionalities of VulnScan. It then presented the database design, including the Entity Relationship Diagram (ERD) and the purpose of each database entity. The user interface design was subsequently discussed to demonstrate how Developers and Administrators interact with the system through a consistent and user-friendly interface. Finally, the detailed design explained the major system processes, including user authentication, vulnerability scanning, and security audit logging.
+[532][normal] Overall, the proposed system design provides a structured and modular foundation for implementing VulnScan. The design decisions presented in this chapter support future system enhancements while ensuring that the application remains maintainable and extensible. The next chapter describes the implementation of the proposed system based on the designs presented in this chapter.
+[533][normal] 
+[534][normal] 

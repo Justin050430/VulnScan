@@ -1,0 +1,90 @@
+<mxfile host="app.diagrams.net" agent="5.0">
+  <diagram id="fig4-2-deployment" name="Fig4.2 Deployment Diagram">
+    <mxGraphModel dx="1527" dy="757" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="880" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="eClientApp" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;" value="HTTPS">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="115" />
+              <mxPoint x="295" y="115" />
+              <mxPoint x="295" y="180" />
+              <mxPoint x="330" y="180" />
+            </Array>
+            <mxPoint x="260.0000000000001" y="115.00000000000006" as="sourcePoint" />
+            <mxPoint x="330.0000000000002" y="180.0000000000001" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eGoogleApp" edge="1" parent="1" source="hji69tC2DN-PIi-yuT5J-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;exitX=0.417;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0;entryDx=180;entryDy=0;entryPerimeter=0;" target="hji69tC2DN-PIi-yuT5J-19" value="HTTPS (OAuth 2.0)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1000" y="110.03" />
+              <mxPoint x="1000" y="210.03" />
+            </Array>
+            <mxPoint x="960" y="115.00000000000006" as="sourcePoint" />
+            <mxPoint x="930" y="180.0000000000001" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eAppDb" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;entryX=0;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" target="hji69tC2DN-PIi-yuT5J-10" value="TCP (SQL Server)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="560" y="510" />
+              <mxPoint x="560" y="510" />
+            </Array>
+            <mxPoint x="560" y="410" as="sourcePoint" />
+            <mxPoint x="550" y="560" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eAppTarget" edge="1" parent="1" source="hji69tC2DN-PIi-yuT5J-19" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;endArrow=none;entryX=0;entryY=0;entryDx=0;entryDy=450;entryPerimeter=0;exitX=0.993;exitY=0.412;exitDx=0;exitDy=0;exitPerimeter=0;" target="hji69tC2DN-PIi-yuT5J-5" value="HTTP / HTTPS (scan requests)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="690" y="520" />
+            </Array>
+            <mxPoint x="690" y="440.0000000000002" as="sourcePoint" />
+            <mxPoint x="680" y="600" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-1" parent="1" style="verticalAlign=top;align=left;spacingTop=8;spacingLeft=2;spacingRight=12;shape=cube;size=10;direction=south;fontStyle=4;html=1;whiteSpace=wrap;" value="" vertex="1">
+          <mxGeometry height="120" width="180" x="80" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-4" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="«device»&lt;div&gt;Client&lt;br&gt;(Web Browser)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="30" width="130" x="105" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-5" parent="1" style="verticalAlign=top;align=left;spacingTop=8;spacingLeft=2;spacingRight=12;shape=cube;size=10;direction=south;fontStyle=4;html=1;whiteSpace=wrap;" value="" vertex="1">
+          <mxGeometry height="120" width="460" x="680" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-6" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="«external»&lt;div&gt;Target Web Application&lt;br&gt;(subject of vulnerability assessment)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="30" width="380" x="730" y="645" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-8" parent="1" style="verticalAlign=top;align=left;spacingTop=8;spacingLeft=2;spacingRight=12;shape=cube;size=10;direction=south;fontStyle=4;html=1;whiteSpace=wrap;" value="" vertex="1">
+          <mxGeometry height="120" width="180" x="1050" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-9" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="«external»&lt;div&gt;Google OAuth 2.0&lt;br&gt;(Identity Provider)&lt;/div&gt;" vertex="1">
+          <mxGeometry height="30" width="170" x="1050" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-10" parent="1" style="verticalAlign=top;align=center;spacingTop=8;spacingLeft=2;spacingRight=12;shape=cube;size=10;direction=south;fontStyle=4;html=1;whiteSpace=wrap;" value="&lt;span style=&quot;font-weight: 700;&quot;&gt;«server» &lt;br&gt;Database Server&lt;/span&gt;" vertex="1">
+          <mxGeometry height="280" width="500" x="60" y="520" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-12" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="" vertex="1">
+          <mxGeometry height="170" width="420" x="90" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-13" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="«artifact»&lt;div&gt;Microsoft SQL Server&lt;br&gt;User · Scan · ScanProfile · ProfileModule&lt;br&gt;Vulnerability · DiscoveredPage · Finding · SecurityAuditLog&lt;/div&gt;" vertex="1">
+          <mxGeometry height="110" width="420" x="90" y="630" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-18" connectable="0" parent="1" style="group" value="" vertex="1">
+          <mxGeometry height="370" width="610" x="330" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-19" parent="hji69tC2DN-PIi-yuT5J-18" style="verticalAlign=top;align=center;spacingTop=8;spacingLeft=2;spacingRight=12;shape=cube;size=10;direction=south;fontStyle=4;html=1;whiteSpace=wrap;" value="&lt;span style=&quot;font-weight: 700;&quot;&gt;«server» &lt;br&gt;Application Server&lt;/span&gt;" vertex="1">
+          <mxGeometry height="370" width="610" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-20" parent="hji69tC2DN-PIi-yuT5J-18" style="html=1;whiteSpace=wrap;" value="«artifact»&amp;nbsp;&lt;div&gt;VulnScan Web Application (Flask)&lt;br&gt;Presentation · API · Business Logic Layers&lt;/div&gt;" vertex="1">
+          <mxGeometry height="110" width="560" x="20" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="hji69tC2DN-PIi-yuT5J-21" parent="hji69tC2DN-PIi-yuT5J-18" style="html=1;whiteSpace=wrap;" value="«artifact»&amp;nbsp;&lt;div&gt;Scanner Engine&lt;br&gt;Web Crawler · SQL Injection · XSS · HTTP Security Header Modules&lt;/div&gt;" vertex="1">
+          <mxGeometry height="110" width="560" x="25" y="220" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

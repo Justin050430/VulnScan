@@ -1,0 +1,230 @@
+
+===== 1.4.1 scope (112-140) =====
+[112][normal] 
+[113][normal] 
+[114][Heading 2] 1.4 Scope and Limitations
+[115][normal] The scope of the proposed system defines the functionalities and boundaries of VulnScan. The project focuses on the development of an intelligent web-based vulnerability assessment platform that assists users in identifying common web application security vulnerabilities, assessing associated risks, and providing appropriate remediation guidance. The scope of the project is divided into functional scope and project limitations.
+[116][Heading 3] 1.4.1 Functional Scope
+[117][normal] The proposed system includes the following functionalities:
+[118][normal] User Authentication and Role-Based Access Control
+[119][normal] The system supports secure user authentication using username and password.
+[120][normal] Two user roles are provided: Administrator and Developer.
+[121][normal] Administrators manage users, vulnerabilities, scan profiles, and system configurations, while Developers perform vulnerability assessments and view scan results.
+[122][normal] Web Application Vulnerability Assessment
+[123][normal] The system allows users to initiate vulnerability scans by specifying a target web application URL.
+[124][normal] The scanner automatically crawls accessible web pages and performs vulnerability assessments based on the selected scan profile.
+[125][normal] Configurable Scan Profiles
+[126][normal] Administrators can configure predefined scan profiles consisting of selected vulnerability modules and scanning depth.
+[127][normal] Developers select an appropriate scan profile before starting a vulnerability assessment.
+[128][normal] Risk Assessment
+[129][normal] The system evaluates detected vulnerabilities according to predefined severity levels and presents the results through an organized dashboard.
+[130][normal] Risk assessment information assists users in prioritizing remediation efforts.
+[131][normal] 
+[132][normal] Vulnerability Knowledge Base
+[133][normal] The system provides comprehensive information for each supported vulnerability, including descriptions, security impacts, remediation recommendations, secure coding practices, and OWASP references (OWASP Foundation, 2021).
+[134][normal] Security Audit Logging
+[135][normal] The system records significant security-related activities such as user authentication, scan execution, administrative actions, and report generation to improve accountability and traceability.
+[136][Heading 3] 1.4.2 Project Limitations
+[137][normal] The proposed system is developed within the constraints of an undergraduate Final Year Project. Therefore, several limitations are identified:
+[138][normal] The system focuses on selected common web application vulnerabilities suitable for the project scope and does not aim to provide comprehensive penetration testing comparable to commercial security assessment platforms.
+[139][normal] The system performs automated vulnerability assessment only and does not exploit or actively attack target systems beyond the implemented detection mechanisms.
+
+===== 1.6 org (156-200) =====
+[156][normal] This report is organised into six chapters, each focusing on a specific aspect of the proposed project.
+[157][normal] Chapter 1 introduces the proposed project by presenting the project background, problem statement, objectives, scope and limitations, significance of the project, and the overall organisation of the report. This chapter establishes the motivation and direction of the proposed system.
+[158][normal] Chapter 2 reviews the literature related to web application vulnerability assessment, cybersecurity concepts, and existing vulnerability assessment tools. Similar systems are analysed and compared to identify their strengths, limitations, and research gaps. The findings from the literature review provide the foundation for the proposed system design.
+[159][normal] Chapter 3 describes the research methodology adopted throughout the project. It explains the project development methodology, system development process, software and hardware requirements, overall system architecture, database design, and implementation approach used to develop VulnScan.
+[160][normal] Chapter 4 presents the implementation and development of the proposed system. It discusses the implementation of major system modules, including user authentication, vulnerability scanning, risk assessment, scan profile management, vulnerability management, audit logging, and the integrated knowledge base. Database implementation and user interface design are also presented in this chapter.
+[161][normal] Chapter 5 evaluates the developed system through system testing and validation. The chapter presents the testing methodology, test cases, testing results, discussion of system performance, and an evaluation of whether the project objectives have been successfully achieved.
+[162][normal] Chapter 6 concludes the report by summarising the overall project, highlighting the project's contributions and achievements, discussing its limitations, and proposing recommendations and future enhancements for further system improvement.
+[163][Heading 2] 1.7 Chapter Summary and Evaluation
+[164][normal] This chapter introduced the proposed project by discussing the background of web application security and the importance of vulnerability assessment in protecting modern web applications. The problems associated with existing vulnerability assessment tools were identified, leading to the formulation of the project objectives and the proposed solution. The scope, limitations, and significance of the project were also presented to establish the boundaries and expected contributions of the proposed system. Finally, the overall organisation of the report was outlined to provide readers with an overview of the subsequent chapters. The next chapter reviews the relevant literature, existing technologies, and related systems that form the theoretical foundation of the proposed project.
+[165][normal] 
+[166][normal] 
+[167][normal] 
+[168][normal] 
+[169][normal] 
+[170][normal] 
+[171][normal] 
+[172][normal] 
+[173][normal] 
+[174][normal] 
+[175][normal] 
+[176][normal] 
+[177][normal] 
+[178][normal] 
+[179][normal] 
+[180][normal] Chapter 2
+[181][normal] 
+[182][normal] Literature Review
+[183][normal] 
+[184][Heading 1] 2.0 Literature Review
+[185][normal] This chapter reviews the literature related to web application security, vulnerability assessment methodologies, and technologies relevant to the development of the proposed system. The review begins by discussing fundamental concepts including web application security, vulnerability assessment, the OWASP Top 10, risk assessment, secure coding practices, and role-based access control. Subsequently, several existing vulnerability assessment tools are analysed and compared to identify their strengths and limitations. Finally, the research gaps identified from the literature review are discussed to justify the development of the proposed system, VulnScan.
+[186][Heading 2] 2.1 Related Theories and Concepts
+[187][Heading 3] 2.1.1 Web Application Security
+[188][normal] Web application security refers to the practice of protecting web applications from unauthorized access, malicious attacks, data breaches, and other security threats throughout the software development lifecycle. Modern web applications frequently process sensitive information such as user credentials, financial records, healthcare information, and confidential business data, making them attractive targets for cybercriminals. Consequently, security must be incorporated into every phase of application development rather than being treated as a separate activity after deployment (OWASP Foundation, 2021).
+[189][normal] Web application vulnerabilities commonly arise from insecure coding practices, improper authentication mechanisms, insufficient input validation, security misconfigurations, outdated software components, and inadequate access control. Attackers exploit these weaknesses to gain unauthorized access, execute malicious code, steal confidential information, or disrupt normal system operations. The increasing sophistication of cyberattacks has made web application security one of the most important domains within cybersecurity research and software engineering (OWASP Foundation, 2021).
+[190][normal] To improve application security, organizations increasingly adopt secure software development practices, regular vulnerability assessments, security testing, and continuous monitoring throughout the software development lifecycle. International standards and security frameworks such as the OWASP Top 10 and the National Institute of Standards and Technology (NIST) Cybersecurity Framework provide widely accepted guidelines for identifying and mitigating common web application security risks (OWASP Foundation, 2021).
+[191][Heading 3] 2.1.2 Vulnerability Assessment
+[192][normal] Vulnerability assessment is a systematic process of identifying, analysing, and evaluating security weaknesses within an information system or web application before they can be exploited by attackers. Unlike penetration testing, which actively attempts to exploit identified vulnerabilities, vulnerability assessment primarily focuses on discovering and documenting security weaknesses to support risk mitigation and secure software development (Scambray et al., 2011). The objective of vulnerability assessment is to provide developers and security practitioners with sufficient information to prioritize remediation activities and strengthen the overall security posture of an application.
+[193][normal] Modern vulnerability assessment commonly combines automated scanning techniques with manual verification to improve detection accuracy. Automated vulnerability scanners significantly reduce the time required to identify common security weaknesses such as SQL Injection, Cross-Site Scripting (XSS), insecure HTTP headers, broken authentication, and security misconfigurations. However, automated tools may also generate false positives and false negatives, making human verification an important component of comprehensive security assessment (OWASP Foundation, 2021).
+[194][normal] Vulnerability assessment has become an essential activity within the Secure Software Development Lifecycle (SSDLC). Performing security assessments during software development enables vulnerabilities to be identified earlier, reducing remediation costs and minimizing the likelihood of security incidents after deployment. Consequently, organizations increasingly integrate automated vulnerability scanning into continuous integration and continuous deployment (CI/CD) pipelines as part of DevSecOps practices (NIST, 2020).
+[195][normal] 
+[196][normal] 
+[197][normal] 
+[198][normal] 
+[199][Heading 3] 2.1.3 OWASP Top 10
+
+===== 2.4/2.5 (300-325) =====
+[300][normal] 
+[301][normal] 
+[302][Heading 2] 2.4 Summary of Key Findings
+[303][normal] The literature review conducted in this chapter has identified several key findings that establish the theoretical and technical foundation for the development of the proposed VulnScan system.
+[304][normal] Web Application Security
+[305][normal] The review highlights that web applications have become one of the primary targets of cyberattacks due to their widespread use in handling sensitive information. Consequently, implementing effective security measures throughout the software development lifecycle is essential to minimize security vulnerabilities and protect organizational assets (OWASP Foundation, 2021; NIST, 2020).
+[306][normal] Vulnerability Assessment
+[307][normal] The literature demonstrates that vulnerability assessment is a proactive security practice that enables organizations to identify and evaluate security weaknesses before they are exploited by attackers. Automated vulnerability assessment tools significantly improve the efficiency of vulnerability detection, while standardized risk assessment methodologies such as the Common Vulnerability Scoring System (CVSS) assist developers in prioritizing remediation activities according to the severity of identified vulnerabilities (FIRST, 2023).
+[308][normal] Existing Vulnerability Assessment Systems
+[309][normal] The review of OWASP ZAP, Burp Suite Community Edition, and Acunetix indicates that these tools possess strong vulnerability assessment capabilities and are widely adopted within the cybersecurity industry. Nevertheless, each tool exhibits certain limitations with respect to educational support, usability for beginners, centralized management, and integrated vulnerability remediation guidance.
+[310][normal] 
+[311][normal] 
+[312][normal] 
+[313][normal] Research Gap
+[314][normal] The comparative analysis reveals that existing vulnerability assessment systems primarily focus on vulnerability detection rather than combining vulnerability assessment with educational resources, configurable scan management, centralized administration, and comprehensive security audit logging. These findings indicate an opportunity to develop a more integrated vulnerability assessment platform that addresses both technical and educational requirements.
+[315][normal] Design Implications for VulnScan
+[316][normal] Based on the literature review and comparative analysis, several design decisions were established for the proposed VulnScan system. The system will adopt a modular vulnerability architecture to support future scalability, implement configurable scan profiles to improve scanning flexibility, integrate role-based access control for secure user management, maintain comprehensive security audit logs to enhance accountability, and provide an integrated vulnerability knowledge base to improve users' understanding of identified security issues. These design decisions directly address the research gaps identified throughout this chapter and form the foundation of the system architecture presented in Chapter 3.
+[317][Heading 2] 2.5 Chapter Summary and Evaluation
+[318][normal] This chapter reviewed the literature related to web application security and the technologies relevant to the development of the proposed VulnScan system. The discussion began with fundamental concepts including web application security, vulnerability assessment, the OWASP Top 10, risk assessment, secure coding practices, and role-based access control. Existing vulnerability assessment systems were then analysed and compared to identify their strengths and limitations. Based on the literature review, several research gaps were identified, providing a clear justification for the proposed system. Overall, the findings presented in this chapter establish the theoretical and technical foundation for VulnScan. The following chapter discusses the research methodology, system architecture, database design, and implementation approach adopted in developing the proposed system.
+[319][normal] 
+[320][normal] 
+[321][normal] 
+[322][normal] 
+[323][normal] 
+[324][normal] 
+
+===== 4.1/4.3 (420-470) =====
+[420][normal] System Design
+[421][Heading 1] 4.0 System Design
+[422][normal] Before designing the proposed system, the functional and non-functional requirements identified in Chapter 3 were analysed to ensure that the system architecture meets the project's objectives. This chapter presents the overall system design of VulnScan, including the architecture design, database design, user interface design, and detailed design of the major system modules. The proposed design emphasises modularity, maintainability, scalability, and security to support efficient vulnerability assessment while allowing future enhancements with minimal modifications.
+[423][normal] The system design serves as the blueprint for the implementation of VulnScan. It illustrates how the major system components interact with one another, how data is organised within the database, how users interact with the system through the user interface, and how each module contributes to the overall functionality of the application. By establishing a clear and structured design, the proposed system aims to satisfy the functional and non-functional requirements identified in the previous chapter while supporting future system expansion.
+[424][Heading 2] 4.1 Architecture Design
+[425][normal] 
+[426][normal] Figure 4.1: Overall System Architecture of VulnScan
+[427][normal] The overall architecture of VulnScan is designed using a layered architecture to separate system responsibilities into distinct layers, thereby improving maintainability, scalability, and modularity. As illustrated in Figure 4.1, the system consists of five primary layers: the Presentation Layer, API Layer, Business Logic Layer, Scanner Engine Layer, and Data Layer. Each layer performs a specific function while interacting with adjacent layers through well-defined interfaces, reducing coupling between system components and simplifying future maintenance (Pressman & Maxim, 2020).
+[428][normal] The Presentation Layer provides separate interfaces for Developers and Administrators through a web application. Developers are able to initiate vulnerability scans, review scan results, and manage scan profiles, whereas Administrators perform system management tasks such as user administration, vulnerability management, and monitoring system activities. User requests are forwarded to the API Layer, where the Flask REST API processes incoming requests and coordinates communication between the user interface and the backend services.
+[429][normal] The Business Logic Layer contains the core application modules responsible for implementing the business rules of the system. These modules include Authentication, Scan Management, Scan Profile Management, Vulnerability Management, and Audit Logging. The Business Logic Layer validates user requests, applies access control, manages application data, and coordinates interactions with the Scanner Engine.
+[430][normal] The Scanner Engine Layer is responsible for performing vulnerability assessments on target web applications. It consists of a Web Crawler and multiple independent vulnerability detection modules, including SQL Injection, Cross-Site Scripting (XSS), and HTTP Security Header analysis. The modular design enables additional vulnerability detection modules, such as Cross-Site Request Forgery (CSRF), XML External Entity (XXE), Server-Side Request Forgery (SSRF), and Command Injection, to be incorporated in future versions without requiring significant modifications to the overall system architecture.
+[431][normal] The Data Layer utilises Microsoft SQL Server to manage application data, including user accounts, scan information, vulnerability definitions, scan profiles, findings, discovered pages, and security audit logs. This layered architecture promotes separation of concerns, facilitates future system enhancements, and ensures that each system component can be developed, tested, and maintained independently.
+[432][normal] 
+[433][Heading 3] 
+[434][normal] 
+[435][Heading 2] 
+[436][Heading 2] 4.2 Database Design
+[437][normal] The database is designed to provide a structured and reliable repository for managing user information, scan configurations, vulnerability definitions, scan results, and system activities. Microsoft SQL Server was selected as the database management system because of its robustness, transactional reliability, advanced security features, and seamless integration with SQLAlchemy. These capabilities make it suitable for managing the relational data required by VulnScan while supporting future scalability and maintenance.
+[438][normal] The database design follows the principles of relational database modelling and has been normalised to Third Normal Form (3NF) to minimise data redundancy and maintain data consistency. Related data are separated into individual entities, with relationships established through primary and foreign keys to preserve referential integrity. This approach improves data organisation, simplifies maintenance, and reduces the risk of update anomalies.
+[439][normal] As illustrated in Figure 4.2, the VulnScan database consists of eight entities: User, Scan, ScanProfile, ProfileModule, Vulnerability, DiscoveredPage, Finding, and SecurityAuditLog. Each entity is responsible for storing a specific category of information required by the system. The relationships among these entities enable the system to manage vulnerability scanning activities, configurable scan profiles, modular vulnerability definitions, detected findings, discovered web pages, and security audit records while maintaining consistency across the database.
+[440][normal] The User entity manages user accounts, authentication information, and user roles, providing the foundation for role-based access control. The Scan entity stores information relating to each vulnerability assessment session and acts as the central entity connecting scan profiles, discovered pages, and detected findings. During execution, the Web Crawler records discovered web pages in the DiscoveredPage entity, while identified vulnerabilities are stored within the Finding entity and linked to the corresponding vulnerability definitions maintained in the Vulnerability entity.
+[441][normal] To improve flexibility and future scalability, VulnScan adopts a configurable scan profile mechanism through the ScanProfile and ProfileModule entities. Rather than hardcoding supported vulnerabilities within the application, administrators can configure which vulnerability detection modules belong to each scan profile. This modular approach allows future detection modules, such as Cross-Site Request Forgery (CSRF), XML External Entity (XXE), Server-Side Request Forgery (SSRF), and Command Injection, to be incorporated without redesigning the database structure.
+[442][normal] Finally, the SecurityAuditLog entity records significant user and system activities throughout the application. Maintaining audit records enhances accountability, supports security monitoring, and facilitates future forensic analysis by preserving a history of important events performed within the system.
+[443][normal] Table 4.1: Description of Database Entities 
+[444][normal] 
+[445][normal] 
+[446][normal] 
+[447][normal] Figure 4.2: Entity Relationship Diagram (ERD) of VulnScan
+[448][normal] 
+[449][Heading 2] 
+[450][Heading 2] 4.3 User Interface Design
+[451][normal] The user interface of VulnScan is designed to provide a simple, consistent, and intuitive experience for both Developers and Administrators. The interface emphasises usability by presenting system functions in a clear and organised manner, allowing users to perform vulnerability scanning and system administration with minimal complexity. Consistent layouts, navigation menus, and interface components are adopted throughout the system to improve user experience and reduce the learning curve.
+[452][normal] The system provides separate interfaces based on user roles. After successful authentication, Developers are redirected to the Developer Dashboard, where they can manage scan profiles, initiate vulnerability scans, monitor scan progress, and review previous scan results. Administrators are redirected to the Administrator Dashboard, which provides additional functions such as user management, vulnerability management, scan profile configuration, and security audit log monitoring. This separation ensures that users only have access to functions relevant to their assigned roles.
+[453][normal] The Login Page serves as the entry point to the system by allowing registered users to authenticate using their credentials. Upon successful login, users are redirected to the appropriate dashboard according to their assigned role. If authentication fails, appropriate error messages are displayed to guide users while preventing unauthorised access.
+[454][normal] The Scan Management Page enables developers to configure and execute vulnerability scans by specifying the target URL and selecting a predefined scan profile. After the scan is completed, the Scan Result Page presents the detected vulnerabilities together with their severity level, affected pages, supporting evidence, and recommended remediation. The Administrator Dashboard provides management functions for maintaining users, vulnerabilities, scan profiles, and security audit logs, allowing administrators to oversee the overall operation of the system.
+[455][normal] Overall, the user interface design focuses on usability, consistency, and accessibility to ensure that both developers and administrators can efficiently perform their respective tasks while interacting with VulnScan.
+[456][Heading 2] 
+[457][normal] Figure 4.3: Login Page User Interface
+[458][normal] Purpose:
+This interface serves as the entry point to the VulnScan platform, allowing registered users to authenticate securely using their email address and password. Upon successful authentication, users are redirected to the appropriate dashboard based on their assigned role (Developer or Administrator), ensuring role-based access control and secure access to system functionalities.
+[459][normal] 
+[460][normal] 
+[461][normal] Figure 4.4: Developer Dashboard
+[462][normal] Purpose:
+[463][normal] This interface illustrates the primary workspace used by Developers to configure vulnerability scans, monitor scan history, and access security reports. It demonstrates how users create new scans by selecting a target URL and scan profile while providing quick access to previous scan results and scan management features. 
+[464][normal] 
+[465][normal] Figure 4.5: Scan Result Page
+[466][normal] Purpose:
+[467][normal] This interface presents the results of a completed vulnerability assessment, allowing developers to review detected vulnerabilities, their severity levels, affected locations, supporting evidence, and recommended remediation actions. It also provides summary statistics, scan information, filtering capabilities, and report export options to assist users in analysing and documenting the security assessment results. 
+[468][normal] 
+[469][normal] Figure 4.6: Administrators Dashboard
+
+===== refs/appx (630-705) =====
+[630][normal] Discuss the creativity, innovativeness, contribution of the proposed system. Explain why the proposed system is necessary. Describe the marketability of the system.
+[631][Heading 2] Limitations and Future Improvements
+[632][normal] Identify the limitations of the research or project. Provide suggestions for improvement or further development of the system or research in the future.
+[633][Heading 2] Issues and Solutions
+[634][normal] Students are required to describe the various problems faced by students during the project development and explain what has been done to solve the problems.  The valuable experiences gained or lessons learnt through the project as a whole. The issues may include technical issues, project management issues, team dynamics problems, and other difficulties encountered and lessons learnt. How the issues are solved or can be solved to ensure the project can be completed on time or to be improved in the future.
+[635][Heading 1] References
+[636][normal] https://owasp.org/www-project-top-ten/
+[637][normal] https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final
+[638][normal] https://portswigger.net/burp/documentation
+[639][normal] https://www.zaproxy.org/
+[640][normal] https://www.first.org/cvss/
+[641][normal] https://csrc.nist.gov/projects/role-based-access-control
+[642][normal] https://portswigger.net/burp/communitydownload
+[643][normal] https://www.acunetix.com/
+[644][normal] https://agilemanifesto.org/
+[645][normal] 
+[646][normal] 
+[647][normal] 
+[648][normal] 
+[649][normal] 
+[650][normal] 
+[651][normal] 
+[652][normal] publication, etc.), should also be given. Web references can be listed separately (e.g., after the reference list) under a different heading if desired, or can be included in the reference list. The list of references should contain all the items that have been explicitly referred to in the report.  Students may have referred to some manuals or conducted research on certain knowledge areas, for example Oracle, RFID scanners etc. 
+[653][normal] If the students choose to write a bibliography, then they should list down all materials that are useful either directly or indirectly to the project concerned and which the students have read.  An example of material useful could be an article or an Oracle user manual etc. 
+[654][normal] References should be cited in the main text using Author-Year system.  The full references should be given as below (essentially APA Referencing format), in the alphabetical order in 10 pt. Times New Roman, with a 6pt spacing between each. References should be arranged first alphabetically and then further sorted chronologically if necessary. More than one reference from the same author(s) in the same year must be identified by the letters "a", "b", "c", etc., placed after the year of publication.
+[655][normal] Please ensure that every reference cited in the text is also present in the reference list (and vice versa). Any references cited in the abstract must be given in full.
+[656][normal] Web references used as a minimum, the full URL should be given and the date when the reference was last accessed. Any further information, if known (DOI, author names, dates, reference to a source
+[657][normal] 
+[658][normal] Appendices
+[659][normal] In order to enhance better understanding of the project, students should as far as possible include all directly relevant materials, figures or diagrams in the main body rather than in the Appendix.  The appendix is reserved only for items which may not directly be relevant or essential to enhance a reader’s understanding of the project, or which may interrupt the smooth reading of the project document (for example being too voluminous).  
+[660][normal] Appendices should only include supportive materials directly referred to in the writing and should be kept to a minimum, e.g. selected pages of an annual report, not the entire document.  Examples of items included in Appendices are: 
+[661][normal] Company’s report and documentation, such as sample invoice, purchase order form, etc.
+[662][normal] Project meeting documentation e.g. minutes of meetings, tracking documents, memos etc.
+[663][normal] Questionnaires and results, interview questions and results, pilot test and results, observation sheet and results, experiment test plan and results, etc.
+[664][normal] Analysis/design diagrams (only those not incorporated in the main body of the report). 
+[665][normal] 
+[666][normal] If there is more than one appendix, they should be identified as A, B, etc (e.g. Appendix A). Formulae and equations in appendices should be given separate numbering: Eq. (A.1), Eq. (A.2), etc.; in a subsequent appendix, Eq. (B.1) and so on. Similarly for tables and figures: Table A.1; Fig. A.1, etc.
+[667][normal] 
+[668][normal] IMPORTANT NOTE TO STUDENTS
+[669][normal] 
+[670][normal] APPENDIX n User Guide 
+[671][normal] List the username and password of multiple roles (if applicable)
+[672][normal] Provide clear screen shots of each page, explain the functions of each button
+[673][normal] 
+[674][normal] As a rough guide, the user guide should include the following sections:
+[675][normal] 
+[676][normal] 
+[677][normal] 
+[678][normal] APPENDIX n+1 Developer Guide*
+[679][normal] *To be included for Smart Campus Projects and Real-Life Projects. This section should include the following:
+[680][normal] List the necessary software, installer, API, library that must be installed
+[681][normal] List the authentication details, such as username and password for all security
+[682][normal] 
+[683][normal] Other Appendices:
+[684][normal] Supporting documents
+[685][normal] Non-disclosure agreement (if applicable)
+[686][normal] Other detailed documentation, such as important references, interview results, survey results, etc.
+[687][normal] 
+[688][normal] 
+[689][normal] 
+[690][normal] 
+[691][normal] 
+[692][normal] 
+[693][normal] 
+[694][normal] 
+[695][normal] 
+[696][normal] 
+[697][normal] 
+[698][normal] 
+[699][normal] This page is intentionally left blank to indicate the back cover. Ensure that the back cover is black in color.
+[700][normal] 
+[701][normal] 

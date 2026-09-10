@@ -170,6 +170,10 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Test artefacts
+testing/results.xml
+pytest-report.xml
+
 # PyPI configuration file
 .pypirc
 

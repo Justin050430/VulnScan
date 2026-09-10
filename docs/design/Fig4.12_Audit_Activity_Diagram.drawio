@@ -1,0 +1,112 @@
+<mxfile host="app.diagrams.net" agent="5.0">
+  <diagram id="fig4-12-audit-activity" name="Fig4.12 Security Audit Logging Activity Diagram">
+    <mxGraphModel dx="1527" dy="757" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="920" pageHeight="840" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="start" parent="1" style="ellipse;fillNode;fillColor=#000000;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="40" width="40" x="230" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Significant action occurs (authentication, scan, administrative operation)" vertex="1">
+          <mxGeometry height="60" width="260" x="120" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Capture event context (user, IP address, entity, timestamp)" vertex="1">
+          <mxGeometry height="60" width="260" x="120" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="d1" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Significant event?" vertex="1">
+          <mxGeometry height="100" width="110" x="195" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Discard event (no record)" vertex="1">
+          <mxGeometry height="60" width="220" x="145" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Compose audit record (category, action, description)" vertex="1">
+          <mxGeometry height="60" width="190" x="575" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;" value="Insert audit record into SecurityAuditLog" vertex="1">
+          <mxGeometry height="60" width="300" x="520" y="560" as="geometry" />
+        </mxCell>
+        <mxCell id="fin1" parent="1" style="ellipse;ringNode;fillColor=#FFFFFF;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="40" width="40" x="230" y="690" as="geometry" />
+        </mxCell>
+        <mxCell id="fin1i" parent="1" style="ellipse;fillNode;fillColor=#000000;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="12" width="12" x="244" y="704" as="geometry" />
+        </mxCell>
+        <mxCell id="fin2" parent="1" style="ellipse;ringNode;fillColor=#FFFFFF;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="40" width="40" x="650" y="690" as="geometry" />
+        </mxCell>
+        <mxCell id="fin2i" parent="1" style="ellipse;fillNode;fillColor=#000000;strokeColor=#000000;" value="" vertex="1">
+          <mxGeometry height="12" width="12" x="664" y="704" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="start" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;targetArrow=classic;" target="a1" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="250" y="150" />
+              <mxPoint x="250" y="180" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="a1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;targetArrow=classic;" target="a2" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="250" y="240" />
+              <mxPoint x="250" y="290" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="a2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;targetArrow=classic;" target="d1" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="250" y="350" />
+              <mxPoint x="250" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;targetArrow=classic;" target="a3" value="No">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="215" y="435" />
+              <mxPoint x="215" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;targetArrow=classic;" target="a4" value="Yes">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="435" />
+              <mxPoint x="480" y="435" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;targetArrow=classic;entryX=0.506;entryY=0.024;entryDx=0;entryDy=0;entryPerimeter=0;" target="fin1" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="249.4" y="620.01" />
+              <mxPoint x="250.19" y="620.01" />
+            </Array>
+            <mxPoint x="249.42857142857136" y="610" as="sourcePoint" />
+            <mxPoint x="249.43" y="692.66" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="a4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;targetArrow=classic;" target="a5" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="a5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#000000;targetArrow=classic;" target="fin2" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="670" y="620" />
+              <mxPoint x="670" y="690" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="YWHl4jfPirEynI5tlBHt-3" parent="1" style="swimlane;startSize=20;whiteSpace=wrap;html=1;" value="&lt;span style=&quot;white-space: nowrap;&quot;&gt;VulnScan System (Business Logic)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="680" width="370" x="110" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="YWHl4jfPirEynI5tlBHt-4" parent="1" style="swimlane;startSize=20;whiteSpace=wrap;html=1;" value="&lt;span style=&quot;white-space: nowrap;&quot;&gt;SecurityAuditLog (Database)&lt;/span&gt;" vertex="1">
+          <mxGeometry height="680" width="350" x="480" y="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
