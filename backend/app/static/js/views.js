@@ -34,7 +34,20 @@
   }
 
   /* ============================================================ LOGIN */
+  /* Friendly text for errors the OAuth callback/Google return via the hash,
+     e.g. '#/login?error=...'. Unknown values are shown verbatim. */
+  const OAUTH_ERRORS = {
+    missing_code: 'Google did not return an authorization code. Please try again.',
+    google_network_error: 'Could not reach the server to complete Google sign-in. Please try again.',
+    google_auth_failed: 'Google sign-in could not be completed. Please try again.',
+    google_not_configured: 'Google Sign-In is not configured on this server.',
+    redirect_uri_mismatch: 'Google rejected the callback address. Verify the Authorized redirect URI in Google Cloud Console.',
+    access_denied: 'Google sign-in was cancelled.'
+  };
+
   function loginHtml(params) {
+    const rawError = (params && params.error) ? String(params.error) : '';
+    const oauthError = rawError ? (OAUTH_ERRORS[rawError] || rawError) : '';
     return `
     <div class="login-wrap">
       <div class="login-left">
@@ -59,7 +72,7 @@
               <label for="password">Password</label>
               <input id="password" name="password" type="password" placeholder="Enter your password" required />
             </div>
-            <div id="login-error" class="error-text"></div>
+            <div id="login-error" class="error-text">${U.esc(oauthError)}</div>
             <button class="btn btn-primary" type="submit">Sign In →</button>
           </form>
           <div class="divider">OR</div>

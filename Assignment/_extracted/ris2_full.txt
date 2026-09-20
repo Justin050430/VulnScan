@@ -1,0 +1,159 @@
+===== TABLE 0 (4x4) =====
+--- T0 R0 C0 ---
+Student Name
+--- T0 R0 C1 ---
+OOI JIAN XIN
+--- T0 R0 C2 ---
+OOI JIAN XIN
+--- T0 R0 C3 ---
+OOI JIAN XIN
+--- T0 R1 C0 ---
+Programme
+--- T0 R1 C1 ---
+RIS
+--- T0 R1 C2 ---
+RIS
+--- T0 R1 C3 ---
+RIS
+--- T0 R2 C0 ---
+Email
+--- T0 R2 C1 ---
+ooijx-wm23@student.tarc.edu.my
+--- T0 R2 C2 ---
+Mobile Phone No
+--- T0 R2 C3 ---
+0166306598
+--- T0 R3 C0 ---
+Supervisor Name
+--- T0 R3 C1 ---
+DR. NAIM
+--- T0 R3 C2 ---
+DR. NAIM
+--- T0 R3 C3 ---
+DR. NAIM
+
+===== TABLE 1 (8x1) =====
+--- T1 R0 C0 ---
+PROJECT TITLE
+--- T1 R1 C0 ---
+VulnScan – Intelligent Web Application Vulnerability Assessment Platform with Risk Assessment and Remediation Knowledge Base
+--- T1 R2 C0 ---
+ABSTRACT
+--- T1 R3 C0 ---
+Web applications remain a primary target for cyberattacks due to vulnerabilities such as SQL Injection, Cross-Site Scripting (XSS), and insecure configurations, which may lead to data breaches and system compromise. While existing vulnerability scanning tools such as OWASP ZAP and Burp Suite provide comprehensive capabilities, they are often complex, resource-intensive, and require significant expertise, limiting their practical use for small-scale developers and controlled environments.
+This project proposes the development of VulnScan, an intelligent web application vulnerability assessment system with an integrated security dashboard. The system adopts a modular architecture consisting of a scanning engine, detection engine, risk assessment module and remediation knowledge base. It performs automated crawling, payload injection and response analysis to detect vulnerabilities; assesses the detected vulnerabilities according to the Common Vulnerability Scoring System (CVSS) and their potential impact; and provides remediation guidance through an integrated knowledge base, supported by configurable scan profiles, user management and security audit logging.
+The system is implemented using Python with a web-based dashboard for visualization and management of scan results. The expected outcome is a practical, scalable, and industry-relevant security tool that supports early-stage vulnerability detection and improves secure development practices. This project contributes to SDG 9 (Industry, Innovation and Infrastructure) and SDG 16 (Peace, Justice and Strong Institutions).
+--- T1 R4 C0 ---
+PROBLEM
+--- T1 R5 C0 ---
+Lack of Security Testing in Small-Scale Web Applications
+Web applications have become essential platforms for businesses, organizations, and individual developers to deliver services and manage data. However, many small-scale web applications, particularly those developed by students, startups, and independent developers, are deployed without proper security testing. Due to limited resources and lack of cybersecurity expertise, developers often prioritize functionality over security, leaving applications vulnerable to common attacks such as SQL Injection and Cross-Site Scripting (XSS), which remain among the most critical web security risks (OWASP, 2025). This lack of systematic vulnerability assessment increases the risk of data breaches, unauthorized access, and system exploitation.
+Complexity and Inaccessibility of Existing Vulnerability Scanning Tools
+Existing professional vulnerability scanning tools such as OWASP ZAP and Burp Suite provide comprehensive features for detecting web application vulnerabilities. However, these tools are often complex, requiring significant configuration, technical knowledge, and manual interaction. For beginner developers or small-scale projects, the steep learning curve and resource requirements make these tools less accessible. As a result, many developers either avoid using such tools or use them incorrectly, leading to incomplete or ineffective security assessments (Tracy et al., 2007).
+Inefficient Detection and Late Identification of Web Vulnerabilities
+In many development environments, vulnerabilities are only discovered after deployment or during penetration testing phases, rather than being identified early in the development lifecycle. This delayed detection increases the cost and complexity of fixing security issues, as vulnerabilities may already be embedded deeply within the system. Furthermore, the absence of automated and simplified scanning solutions limits the ability to continuously monitor and detect vulnerabilities in a timely manner, exposing systems to prolonged security risks (CWE, n.d.).
+--- T1 R6 C0 ---
+SOLUTION
+--- T1 R7 C0 ---
+System Overview
+The proposed system, VulnScan, is a lightweight automated web application vulnerability scanner designed to identify common security weaknesses in web applications within a controlled environment. The system focuses on detecting selected high-priority vulnerabilities, namely SQL Injection (SQLi), Cross-Site Scripting (XSS) and HTTP security header misconfigurations, through automated crawling, payload injection and response analysis. VulnScan aims to provide a practical and technically robust solution for developers to perform early-stage security assessment without requiring advanced penetration testing expertise. In addition to vulnerability detection, the system provides configurable scan profiles, a vulnerability knowledge base, role-based user management with optional Google single sign-on, security audit logging and report export, allowing assessments to be managed and reviewed within a single platform. This approach directly addresses the lack of accessible security testing tools, reduces system complexity for developers, and enables earlier detection of vulnerabilities within the development lifecycle.
+System Architecture
+The system adopts a modular architecture consisting of the following core components:
+Scanning Engine
+Responsible for crawling target web applications and identifying accessible pages and input points, such as URL query parameters. The engine systematically injects predefined payloads into these input points to simulate attack scenarios, with crawling restricted to the target's own scope so that no third-party systems are contacted. Support for additional input types, such as HTML form submission, is identified as a future enhancement.
+Detection Engine
+Analyses server responses to identify indicators of vulnerabilities. Detection techniques include response pattern analysis, error message identification and behaviour comparison to determine the presence of SQL Injection, Cross-Site Scripting (XSS) and HTTP security header weaknesses.
+Reporting Module
+Generates structured vulnerability reports including the vulnerability type, severity level and risk score, affected components, supporting evidence and recommended mitigation strategies. Reports can be exported in portable formats such as PDF and CSV for documentation and reporting purposes.
+Web-Based Dashboard
+Provides a user interface for managing scans, viewing results and visualizing detected vulnerabilities through charts and summary statistics. The dashboard also supports scan history tracking, scan profile selection and role-based access for Developers and Administrators, including review of security audit logs.
+Risk Assessment Module
+Assigns a severity level and a risk score to each detected vulnerability using the Common Vulnerability Scoring System (CVSS) v3.1 base metrics (FIRST, 2019), which take into account the exploitability of the weakness and its potential impact on confidentiality, integrity and availability. This enables prioritization of critical vulnerabilities and supports more effective decision-making during remediation.
+Remediation Knowledge Base
+Provides actionable mitigation suggestions for each detected vulnerability. For example, in the case of SQL Injection, the system recommends the use of parameterized queries and input validation techniques. Each knowledge base entry documents the vulnerability description, security impact, remediation recommendation, secure coding practice and OWASP reference, and administrators can maintain these entries through the system. This enhances the usability of the system by guiding developers on how to fix identified issues.
+System Workflow
+The user inputs a target web application URL through the dashboard.
+The scanning engine crawls the application to identify accessible endpoints and input fields.
+The system injects test payloads into identified input points.
+The detection engine analyses server responses to determine potential vulnerabilities.
+Detected vulnerabilities are analysed to determine their severity, potential impact, and remediation priority through the Risk Assessment Module
+The Remediation Knowledge Base provides remediation guidance, secure coding practices, and mitigation strategies for each identified vulnerability.
+A structured report is generated and displayed on the dashboard for user analysis.
+Critical Functions
+Automated web application crawling
+Payload injection for vulnerability testing
+Detection of SQL Injection, Cross-Site Scripting (XSS) and HTTP security header weaknesses
+Vulnerability classification and reporting
+Dashboard-based visualization, scan management and security audit log review
+Risk assessment and vulnerability prioritization
+Knowledge-based remediation guidance
+Technology Stack
+--- T1 R7 C0 nested (9x3) ---
+  | Component | Technology | Description
+  | Backend & Scanning Engine | Python (Flask Framework) | Implements core scanning logic including web crawling, payload injection, vulnerability detection, and API services
+  | Frontend Dashboard | HTML, CSS, JavaScript | Provides user interface for managing scans, visualizing results, and interacting with the system
+  | Database | Microsoft SQL Server | Stores user accounts, scan configurations, vulnerability definitions, scan results and security audit records for tracking and analysis
+  | HTTP Communication | Requests Library | Sends HTTP requests to target web applications during scanning process
+  | HTML Parsing | Python Standard Library (html.parser) | Parses HTML responses to extract links, pages and input parameters during crawling
+  | Detection Logic | Response Pattern and Signature Analysis | Identifies vulnerability indicators through known SQL error signatures, reflected payload checks, behavioural response comparison and security header validation
+  | Risk Analysis & Recommendation | Python (CVSS v3.1 Base Score) | Calculates a standardised risk score and severity level from CVSS v3.1 base metrics and generates remediation recommendations from the vulnerability knowledge base
+  | Cloud Deployment | Microsoft Azure (App Service, Azure SQL Database) | Planned hosting platform for the web application and its managed database, with automated deployment through a CI/CD pipeline
+
+===== TABLE 2 (8x1) =====
+--- T2 R0 C0 ---
+TARGET MARKET
+--- T2 R1 C0 ---
+Primary Users (Developers and Small-to-Medium Enterprises)
+The primary target users of VulnScan are web developers and small-to-medium enterprises (SMEs) that develop and maintain web applications but may lack dedicated cybersecurity teams or resources. These users require a practical and efficient solution to identify security vulnerabilities during the development and testing phases. VulnScan enables them to perform automated vulnerability assessments without requiring advanced penetration testing expertise, allowing for early detection and remediation of common web security issues.
+Secondary Users (Freelance Developers and Startups)
+Freelance developers and startup teams represent another key user group, as they often work under time and budget constraints while developing web-based systems. These users typically prioritize rapid deployment and may not have access to enterprise-grade security tools. VulnScan provides a lightweight and accessible solution that integrates into their development workflow, helping them enhance application security without significant overhead.
+Organizational Context
+The system is intended for use in controlled development and testing environments, such as local development servers, staging environments, and internal testing platforms. It is not designed for unauthorized scanning of external systems, ensuring compliance with ethical and legal cybersecurity practices.
+--- T2 R2 C0 ---
+COMPETITION / CONTRIBUTION
+--- T2 R3 C0 ---
+Existing Tools and Solutions
+Several established tools are widely used for web application vulnerability scanning, including OWASP ZAP, Burp Suite, and Nikto. These tools provide comprehensive scanning capabilities, advanced configuration options, and support for a wide range of vulnerabilities. They are commonly used by cybersecurity professionals and penetration testers for in-depth security assessment.
+However, these tools are often complex, requiring significant technical expertise to configure and operate effectively. Many of them involve manual setup, detailed configuration of scanning parameters, and interpretation of raw results, which can be challenging for developers without a strong background in cybersecurity. Additionally, some professional tools, such as Burp Suite Professional, are commercial products with licensing costs, making them less accessible for small-scale developers and SMEs.
+Limitations of Existing Solutions
+Despite their capabilities, existing tools present several limitations in the context of small-scale development environments:
+High complexity and steep learning curve, making them less suitable for developers with limited security expertise
+Lack of simplified and integrated reporting dashboards, which may hinder quick understanding of vulnerabilities
+Resource-intensive configurations, which may not be ideal for lightweight or rapid development workflows
+Limited focus on streamlined, automated scanning for common vulnerabilities in controlled environments
+These limitations create a gap for a more accessible, lightweight, and automated vulnerability scanning solution tailored for practical use.
+Proposed Contribution
+VulnScan addresses these limitations by providing a lightweight and modular vulnerability scanning system specifically designed for developers and SMEs. Unlike existing tools that prioritize comprehensive and advanced penetration testing, VulnScan focuses on automated detection, risk-based prioritization, and intelligent remediation support of common web vulnerabilities through a simplified and efficient workflow.
+The key contributions of this project include:
+A lightweight scanning architecture that reduces complexity while maintaining technical effectiveness
+An automated vulnerability detection process with minimal manual configuration
+An integrated web-based dashboard for clear visualization, classification, and management of vulnerabilities
+A developer-oriented design that supports early-stage security testing within the development lifecycle
+By focusing on usability, automation, and targeted vulnerability detection, VulnScan provides a practical alternative for developers who require an efficient and accessible security assessment tool without the overhead of enterprise-level solutions. This contributes to improving secure development practices by enabling wider adoption of vulnerability assessment tools among developers with limited cybersecurity expertise.
+In addition, the integration of risk assessment and automated security recommendations enhances the system beyond traditional vulnerability scanners by providing intelligent insights and actionable guidance. This supports more effective decision-making and accelerates the vulnerability remediation process, making the system more practical for real-world deployment.
+--- T2 R4 C0 ---
+MILESTONES
+--- T2 R5 C0 ---
+Proposed Development Model / Research Method : The project adopts an Agile Incremental Development Model, where the system is developed in iterative phases with progressive integration of core modules. Each phase focuses on designing, implementing, and testing specific components of the system, allowing continuous evaluation and refinement throughout the development lifecycle.
+Project Schedule:
+--- T2 R5 C0 nested (9x3) ---
+  | ACTIVITIES | EXPECTED OUTCOME | COMPLETION DATE
+  | Phase 1 — Planning & Requirements Analysis | Defined project scope, problem statement, literature review, system requirements specification | Week 1
+  | Phase 2 — System Design | System architecture diagram, module design (scanning engine, detection engine, dashboard), database schema, UI wireframes | Week 2
+  | Phase 3 — Scanning Engine Development | Functional web crawler, input point detection, payload injection module | Week 4
+  | Phase 4 — Detection Engine & Risk Scoring Development | Implementation of vulnerability detection logic (SQL Injection, XSS and HTTP security header analysis), risk scoring and response analysis modules | Week 6
+  | Phase 5 — Backend & API Development | Integrated backend system using Python (Flask) covering authentication, user management, scan profiles, the vulnerability knowledge base, security audit logging and API endpoints for communication between modules | Week 7
+  | Phase 6 — Dashboard Development | Functional web-based dashboard for scan management, result visualization, and reporting | Week 9
+  | Phase 7 — System Integration & Testing | Integrated system, test cases, vulnerability detection validation, debugging and optimization | Week 10
+  | Phase 8 — Documentation & Final Preparation | Complete FYP report (Chapter 1–7), system deployment, user manual, demo preparation and presentation materials | Week 12
+--- T2 R6 C0 ---
+REFERENCES
+--- T2 R7 C0 ---
+CWE. (n.d.). CWE - Common Weakness Enumeration. Cwe.mitre.org. https://cwe.mitre.org/
+Forum of Incident Response and Security Teams. (2019). Common Vulnerability Scoring System v3.1: Specification document. https://www.first.org/cvss/v3.1/specification-document
+Halfond, W., Viegas, J., & Orso, A. (n.d.). A Classification of SQL Injection Attacks and Countermeasures. https://viterbi-web.usc.edu/~halfond/papers/halfond06issse.pdf
+‌ OWASP. (2020). OWASP ZAP. Zaproxy.org. https://www.zaproxy.org/
+OWASP. (2020, December 3). OWASP Web Security Testing Guide. Owasp.org. https://owasp.org/www-project-web-security-testing-guide/
+OWASP. (2025, July). OWASP Top Ten. Owasp.org; OWASP. https://owasp.org/www-project-top-ten/
+PortSwigger. (2024). Burp Suite Scanner. Portswigger.net. https://portswigger.net/burp
+Tracy, M., Jansen, W., Scarfone, K., & Winograd, T. (2007). Special Publication 800-44 Version 2 Guidelines on Securing Public. https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-44ver2.pdf

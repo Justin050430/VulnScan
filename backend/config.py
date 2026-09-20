@@ -107,6 +107,11 @@ class TestingConfig(Config):
     # Run scans synchronously so tests are deterministic.
     SCAN_ASYNC = False
     SCANNER_ALLOW_PRIVATE_TARGETS = True
+    # Tests must be hermetic: never pick up real Google credentials from a
+    # developer's .env. Tests that need them (e.g. the OAuth flow tests) set
+    # them explicitly on the app fixture.
+    GOOGLE_CLIENT_ID = ""
+    GOOGLE_CLIENT_SECRET = ""
 
 
 class ProductionConfig(Config):
