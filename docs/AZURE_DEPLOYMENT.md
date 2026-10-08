@@ -16,6 +16,18 @@ chapter.
 | Secrets | App Service **Application settings** | Optionally backed by Azure Key Vault |
 | Source / pipeline | GitHub + **GitHub Actions** | CI on PRs, CD on `main` (NFR-09) |
 
+### Concrete values (this deployment)
+
+| Item | Value |
+| --- | --- |
+| Subscription | `Azure for Students` (`2e4ea030-fd2b-46af-a753-12f96bd10f23`) |
+| Resource group | `vulnscan` (Malaysia West) |
+| Web App name | `vulnscan` |
+| Public URL | `https://vulnscan-erehf4djeqg8dvbe.malaysiawest-01.azurewebsites.net` |
+| SQL server | `vulnscan.database.windows.net` |
+| SQL database | `vulnscandb` |
+| Runtime | App Service Linux, Python 3.13 |
+
 The `malaysiawest` region does **not** support Azure Service Connector
 (`Microsoft.ServiceLinker/linkers`). The Web App is therefore created **without**
 the portal "database" option and the connection is configured manually via the
@@ -54,7 +66,8 @@ git-ignored and is **not** deployed, so every value must be set here.
 | `DATABASE_URL` | see §4 |
 | `GOOGLE_CLIENT_ID` | Google OAuth client id |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
-| `GOOGLE_REDIRECT_URI` | `https://<app>.azurewebsites.net/api/auth/google/callback` |
+| `GOOGLE_REDIRECT_URI` | `https://vulnscan-erehf4djeqg8dvbe.malaysiawest-01.azurewebsites.net/api/auth/google/callback` |
+| `WEBSITE_HTTPLOGGING_RETENTION_DAYS` | `1` |
 | `SCANNER_ALLOW_PRIVATE_TARGETS` | `false` (production SSRF protection) |
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `1` (enables the Oryx `pip install` build) |
 
@@ -124,7 +137,7 @@ In Google Cloud Console → **Credentials → OAuth 2.0 Client → Authorized re
 URIs**, add:
 
 ```
-https://<app>.azurewebsites.net/api/auth/google/callback
+https://vulnscan-erehf4djeqg8dvbe.malaysiawest-01.azurewebsites.net/api/auth/google/callback
 ```
 
 ---
@@ -148,8 +161,8 @@ Pull requests are validated by `.github/workflows/ci.yml`.
 
 ## 9. Verification checklist
 
-- [ ] `https://<app>.azurewebsites.net/` loads the login page (not the Azure
-      default site).
+- [ ] `https://vulnscan-erehf4djeqg8dvbe.malaysiawest-01.azurewebsites.net/`
+      loads the login page (not the Azure default site).
 - [ ] Login as the seeded Developer works.
 - [ ] A scan can be started and reaches *Completed*.
 - [ ] The PDF/CSV report downloads.
@@ -166,6 +179,7 @@ Pull requests are validated by `.github/workflows/ci.yml`.
 | App won't start / 500 on boot | `SECRET_KEY` / `JWT_SECRET_KEY` missing (§3) |
 | `Can't open lib 'ODBC Driver ...'` | Use `ODBC Driver 18 for SQL Server` in `DATABASE_URL` |
 | Database connection timeout | SQL firewall missing client IP / "Allow Azure services" (§5) |
+| `Login failed for user ... Azure Active Directory only authentication is enabled` | SQL server created with **Entra-only auth** (SQL auth disabled) | `az sql server ad-only-auth disable -g vulnscan -n vulnscan` then reset the admin password |
 | `NoRegisteredProviderFound ... linkers` | Region lacks Service Connector — create the Web App without the DB option |
 | `InUseSubnetCannotBeDeleted` | Delete the attached Private Endpoint before the subnet/VNet |
 | `InvalidParameterValue ... Login` | SQL admin login uses a reserved/invalid name (§4) |
