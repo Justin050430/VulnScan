@@ -63,4 +63,4 @@ jobs:
         with:
           app-name: 'vulnscan'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_81B82CB0A8E649C287DC77AB44BD89E8 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1317373CC0F44AA3B9BD4F5D5BA09CDB }}
