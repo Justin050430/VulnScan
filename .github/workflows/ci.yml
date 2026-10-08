@@ -1,8 +1,8 @@
 name: VulnScan CI
 
+# Pull requests are gated here; direct pushes to `main` are tested and
+# deployed by the "Deploy to Azure App Service" workflow (deploy.yml).
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:

@@ -25,3 +25,6 @@ email-validator==2.2.0
 
 # PDF report generation
 reportlab==4.4.0
+
+# Production WSGI server (Azure App Service runs the app with Gunicorn)
+gunicorn==23.0.0

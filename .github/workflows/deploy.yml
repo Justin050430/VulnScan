@@ -1,0 +1,72 @@
+name: Deploy to Azure App Service
+
+# Continuous deployment (NFR-09):
+#   * the full test suite runs first — a failing test blocks the deploy
+#   * the application is published to the Azure Web App on every push to `main`
+#
+# Required GitHub configuration
+#   (Settings -> Secrets and variables -> Actions):
+#     Secret    AZURE_WEBAPP_PUBLISH_PROFILE  = contents of the App Service "Publish Profile" file
+#     Variable  AZURE_WEBAPP_NAME             = the Azure Web App name (e.g. vulnscan-app)
+#
+# See docs/AZURE_DEPLOYMENT.md for the full walkthrough.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Run test suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run VulnScan test suite
+        # The suite uses an in-memory SQLite database and controlled local
+        # targets; MSSQL integration tests skip automatically when no SQL
+        # Server instance is available on the runner.
+        run: python -m pytest testing -q --junitxml=testing/results.xml
+
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: testing/results.xml
+          if-no-files-found: warn
+
+  deploy:
+    name: Deploy to Azure Web App
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: .
