@@ -1,0 +1,38 @@
+name: Dependency Security Audit
+
+# F3 (hardening): scan the pinned runtime dependencies for known
+# vulnerabilities with pip-audit.  A finding fails the job so vulnerable
+# dependency versions cannot reach `main` unnoticed.
+#
+# Fixing a finding:
+#   * preferred: bump the package in requirements.txt to a fixed version
+#     (then re-run the test suite), or
+#   * if a fix is genuinely not adoptable yet, add an explicit
+#     `--ignore-vuln <ID>` with a comment explaining why and until when.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  pip-audit:
+    name: pip-audit (runtime requirements)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Audit pinned runtime dependencies
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          pip-audit -r requirements.txt --progress-spinner off

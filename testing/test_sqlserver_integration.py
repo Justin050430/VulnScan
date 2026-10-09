@@ -83,6 +83,20 @@ def _login(client, email, password):
     return resp.get_json()["access_token"]
 
 
+def _wait_terminal(client, token, scan_id, timeout=90):
+    """Poll a scan to a terminal state (async workers run in background)."""
+    deadline = time.time() + timeout
+    detail = None
+    while time.time() < deadline:
+        detail = client.get(f"/api/scans/{scan_id}",
+                            headers=auth(token)).get_json()["Scan"]
+        if detail["Status"] in ("Completed", "Failed"):
+            return detail
+        time.sleep(0.4)
+    raise AssertionError(
+        f"scan {scan_id} did not finish: {detail and detail['Status']}")
+
+
 def test_dialect_is_sql_server(mssql_app):
     with mssql_app.app_context():
         assert _db.engine.dialect.name == "mssql"
@@ -136,10 +150,14 @@ def test_profile_delete_blocked_when_referenced(mssql_app, mssql_client, target)
         "target_url": target, "scan_profile_id": profile["ScanProfileID"],
         "scan_name": "FK profile test"})
     assert resp.status_code == 202
+    scan_id = resp.get_json()["Scan"]["ScanID"]
     # now deleting the profile must be refused
     resp = mssql_client.delete(f"/api/scan-profiles/{profile['ScanProfileID']}",
                                headers=auth(admin))
     assert resp.status_code == 400
+    # Wait for the async scan to finish so it does not count towards the
+    # active-scan concurrency caps of the tests that follow (F2).
+    _wait_terminal(mssql_client, dev, scan_id)
 
 
 def test_concurrent_scans_on_sql_server(mssql_app, mssql_client, target):

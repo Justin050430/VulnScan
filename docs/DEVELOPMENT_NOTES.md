@@ -511,3 +511,41 @@ implemented, tested and committed:
   detectable signal ..."), the CSV verification row
   `253,SQL Injection,id,2026-10-09 15:05 UTC,Resolved,,19`, the findings
   header carries the new columns, and the PDF starts `%PDF-` (68.6 kB).
+
+### Tenth increment (F1–F4) — 2026-10-09
+
+- **F1 - orphan scan recovery.** `create_app()` now runs
+  `recover_orphan_scans()` at startup: scans left `Pending`/`Running` by a
+  previous process are marked `Failed` (with `FinishedAt` and a
+  `System`/`ORPHAN_SCANS_RECOVERED` audit record) so users are never stuck
+  with a permanently running scan.  Scans that are alive in the current
+  process are detected through the in-memory progress registry and never
+  touched.  Non-fatal by design (the schema may not exist before the first
+  `init-db`/migration) and toggleable via `SCANNER_RECOVER_ORPHAN_SCANS`.
+- **F2 - active-scan concurrency caps.** `start_scan` now rejects new scans
+  once `SCAN_MAX_ACTIVE_PER_USER` (default 3) or `SCAN_MAX_ACTIVE_GLOBAL`
+  (default 5) `Pending`/`Running` scans exist, counted from the database so
+  the caps hold across workers; completed/failed scans never count, and
+  orphan recovery keeps the counts honest after restarts.  Error messages
+  state the limit and current count; `0` disables a cap.
+- **F3 - dependency security audit.** `requirements.txt` bumped to fully
+  patched versions after a `pip-audit` scan found 18 advisories in 4
+  packages: Werkzeug 3.1.8→3.1.9, cryptography 45.0.0→50.0.0,
+  requests 2.32.4→2.33.0, python-dotenv 1.1.0→1.2.2.  `pip-audit -r
+  requirements.txt` now reports **no known vulnerabilities**, and the new
+  `Dependency Security Audit` workflow (`.github/workflows/security-audit.yml`)
+  runs pip-audit on every push/PR so a vulnerable pin cannot land unnoticed.
+- **F4 - post-deploy behavioural smoke check.**
+  `.github/workflows/post-deploy-smoke.yml` triggers on completion of the
+  deploy workflow, checks out the deployed commit, hashes
+  `backend/app/static/js/views.js` and polls the live app (health, SPA and
+  the exact served bundle hash) for up to ~13 minutes - absorbing the
+  observed App Service restart lag - and fails if the new build never goes
+  live.  It deliberately leaves `deploy.yml` untouched.
+- **Verification** — new `testing/test_hardening.py` (5 tests): orphan
+  Running + Pending scans are failed with an audit record (and recovery is
+  idempotent), a live in-process scan is not recovered, per-user and global
+  caps reject with 400, and finished scans never count towards the caps.
+  The MSSQL integration test that previously left an async scan running now
+  waits for it so the caps stay deterministic.  Full suite re-run after the
+  increment (including the upgraded dependencies).

@@ -89,6 +89,13 @@ class Config:
     SCANNER_ENABLE_TIME_BASED = _as_bool(os.getenv("SCANNER_ENABLE_TIME_BASED", "false"))
     # Run scans in a background worker thread (async). Set false for tests.
     SCAN_ASYNC = _as_bool(os.getenv("SCAN_ASYNC", "true"))
+    # Startup recovery: fail scans orphaned by a previous process (F1).
+    SCANNER_RECOVER_ORPHAN_SCANS = _as_bool(
+        os.getenv("SCANNER_RECOVER_ORPHAN_SCANS", "true")
+    )
+    # Concurrency caps for active (Pending/Running) scans (F2); 0 disables.
+    SCAN_MAX_ACTIVE_PER_USER = int(os.getenv("SCAN_MAX_ACTIVE_PER_USER", "3"))
+    SCAN_MAX_ACTIVE_GLOBAL = int(os.getenv("SCAN_MAX_ACTIVE_GLOBAL", "5"))
 
     # ---------------------------------------------------------------- Misc
     AUDIT_LOG_ENABLED = True

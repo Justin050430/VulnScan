@@ -43,8 +43,32 @@ def create_app(config_name=None):
     _register_error_handlers(app)
     _register_blueprints(app)
     _register_cli(app)
+    _recover_orphan_scans(app)
 
     return app
+
+
+def _recover_orphan_scans(app):
+    """
+    Fail scans orphaned by a previous process so users are never stuck with a
+    permanently 'Running' scan (F1).  Never fatal: startup must proceed even
+    when the schema does not exist yet.
+    """
+    if not app.config.get("SCANNER_RECOVER_ORPHAN_SCANS", True):
+        return
+    try:
+        with app.app_context():
+            from app.services.scan_service import recover_orphan_scans
+
+            recovered = recover_orphan_scans()
+            if recovered:
+                app.logger.warning(
+                    "Startup recovery failed %d orphaned scan(s): %s",
+                    len(recovered), recovered,
+                )
+    except Exception:
+        # e.g. tables not created yet (first run / before migrations).
+        app.logger.debug("Orphan scan recovery skipped", exc_info=True)
 
 
 # --------------------------------------------------------------------------- JWT

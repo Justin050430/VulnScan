@@ -19,11 +19,14 @@ from app.scanner.engine import ScanValidationError, run_scan, validate_scan_requ
 from app.utils.constants import (
     AUDIT_CATEGORY_REPORT,
     AUDIT_CATEGORY_SCAN,
+    AUDIT_CATEGORY_SYSTEM,
+    AUDIT_STATUS_FAILURE,
     FINDING_STATUSES,
     SCAN_STATUS_CANCELLED,
     SCAN_STATUS_COMPLETED,
     SCAN_STATUS_FAILED,
     SCAN_STATUS_PENDING,
+    SCAN_STATUS_RUNNING,
     SCAN_STATUSES,
     SEVERITIES,
 )
@@ -54,6 +57,77 @@ def _default_scan_name(target_url):
     return f"Vulnerability Scan - {host}"
 
 
+def _active_scans_query():
+    return Scan.query.filter(
+        Scan.Status.in_((SCAN_STATUS_PENDING, SCAN_STATUS_RUNNING))
+    )
+
+
+def _enforce_active_scan_caps(user):
+    """
+    Reject a new scan when the configured concurrency caps are reached (F2).
+
+    Counts are read from the database, so they hold across workers; scans
+    orphaned by a restart are failed at startup (F1) and therefore never
+    block new work.
+    """
+    per_user = int(current_app.config.get("SCAN_MAX_ACTIVE_PER_USER", 3) or 0)
+    global_cap = int(current_app.config.get("SCAN_MAX_ACTIVE_GLOBAL", 5) or 0)
+    if per_user > 0:
+        mine = _active_scans_query().filter(Scan.UserID == user.UserID).count()
+        if mine >= per_user:
+            raise ScanServiceError(
+                f"You already have {mine} active scan(s); wait for one to "
+                f"finish before starting another (limit {per_user})."
+            )
+    if global_cap > 0:
+        total = _active_scans_query().count()
+        if total >= global_cap:
+            raise ScanServiceError(
+                f"The scanner is busy with {total} active scan(s); try again "
+                f"shortly (limit {global_cap})."
+            )
+
+
+def recover_orphan_scans():
+    """
+    Fail scans left Pending/Running by a previous process (F1).
+
+    A scan is only recovered when the in-memory progress registry has no
+    unfinished entry for it - scans running in this process are never touched.
+    Returns the list of recovered scan IDs.
+    """
+    from app.scanner import progress
+
+    orphans = (
+        Scan.query
+        .filter(Scan.Status.in_((SCAN_STATUS_PENDING, SCAN_STATUS_RUNNING)))
+        .all()
+    )
+    recovered = []
+    for scan in orphans:
+        snap = progress.snapshot(scan.ScanID)
+        if snap is not None and not snap.get("finished"):
+            continue  # alive in this process
+        scan.Status = SCAN_STATUS_FAILED
+        scan.FinishedAt = datetime.utcnow()
+        recovered.append(scan.ScanID)
+    if recovered:
+        write_audit(
+            category=AUDIT_CATEGORY_SYSTEM,
+            action="ORPHAN_SCANS_RECOVERED",
+            description=(
+                f"Startup recovery marked {len(recovered)} orphaned scan(s) "
+                f"as Failed (interrupted before the last restart): {recovered}."
+            ),
+            entity_type="Scan",
+            status=AUDIT_STATUS_FAILURE,
+            commit=False,
+        )
+        db.session.commit()
+    return recovered
+
+
 def start_scan(user, target_url, scan_profile_id, scan_name=None, ip_address=None,
                run_async=True):
     """
@@ -65,6 +139,8 @@ def start_scan(user, target_url, scan_profile_id, scan_name=None, ip_address=Non
         normalised_target = validate_scan_request(target_url, profile)
     except ScanValidationError as exc:
         raise ScanServiceError(str(exc)) from exc
+
+    _enforce_active_scan_caps(user)
 
     if not scan_name or not str(scan_name).strip():
         scan_name = _default_scan_name(normalised_target)

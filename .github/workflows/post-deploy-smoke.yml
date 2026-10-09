@@ -1,0 +1,60 @@
+name: Post-Deploy Smoke Check
+
+# F4 (hardening): after "Deploy to Azure App Service" succeeds, verify the
+# running application actually serves the commit that was just deployed.
+#
+# Motivation (observed during development): App Service finishes the OneDeploy
+# restart several minutes after the pipeline reports success, so a check taken
+# too early can still hit the OLD build.  This workflow hashes the repository
+# copy of the main frontend bundle and polls the live app until the served
+# bytes match, failing if the new build never appears.
+#
+# This workflow deliberately does not touch deploy.yml; it is triggered by the
+# deploy workflow's completion event.
+
+on:
+  workflow_run:
+    workflows: ["Deploy to Azure App Service"]
+    types: [completed]
+
+jobs:
+  smoke:
+    name: Verify deployed build is live
+    # Only run after a successful deploy of THIS repository (not forks).
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout the deployed commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Wait for the new build, then verify health + bundle hash
+        env:
+          BASE_URL: https://vulnscan-erehf4djeqg8dvbe.malaysiawest-01.azurewebsites.net
+        run: |
+          set -euo pipefail
+          expected=$(sha256sum backend/app/static/js/views.js | awk '{print $1}')
+          echo "Expected views.js sha256: $expected"
+
+          for attempt in $(seq 1 40); do
+            health=$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/api/health" || true)
+            spa=$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/" || true)
+            curl -fsS -o /tmp/served_views.js "$BASE_URL/static/js/views.js" || true
+            served=$(sha256sum /tmp/served_views.js 2>/dev/null | awk '{print $1}' || echo none)
+
+            if [ "$health" = "200" ] && [ "$spa" = "200" ] && [ "$served" = "$expected" ]; then
+              echo "Smoke check PASSED on attempt $attempt: health=$health, spa=$spa, served bundle matches the deployed commit."
+              exit 0
+            fi
+
+            echo "Attempt $attempt: health=$health spa=$spa served=$served (restart may still be in progress; waiting 20s)"
+            sleep 20
+          done
+
+          echo "Smoke check FAILED: the app never served the expected build (~13 minutes of retries)." >&2
+          exit 1
