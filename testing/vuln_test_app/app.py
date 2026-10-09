@@ -178,6 +178,42 @@ def blind():
     )
 
 
+def _html_escape(value):
+    import html as _html
+
+    return _html.escape(value, quote=True)
+
+
+_FLAKY_ERROR_STATE = {"consumed": False}
+
+
+@app.route("/flaky_error")
+def flaky_error():
+    """
+    Control page for the SQLi repeat-confirmation logic: the first request
+    whose input contains a SQL metacharacter returns a database error once;
+    repeated identical requests return a normal page, simulating a transient
+    error page that must NOT be reported as confirmed evidence.
+    """
+    idv = request.args.get("id", "")
+    has_metachar = ("'" in idv) or ('"' in idv) or ("--" in idv) or (";" in idv)
+    if has_metachar and not _FLAKY_ERROR_STATE["consumed"]:
+        _FLAKY_ERROR_STATE["consumed"] = True
+        return (
+            "<!doctype html><html><head><title>Server error</title></head><body>"
+            "<h1>Application error</h1>"
+            "<p>Incorrect syntax near '1'.</p>"
+            "</body></html>",
+            500,
+        )
+    safe = _html_escape(idv)
+    return (
+        "<!doctype html><html><head><title>Item lookup</title></head><body>"
+        f"<h1>Item lookup</h1><p>Item: {safe}</p>"
+        "</body></html>"
+    )
+
+
 @app.route("/external-link")
 def external_link():
     """Page containing a link to an out-of-scope host (scope test)."""

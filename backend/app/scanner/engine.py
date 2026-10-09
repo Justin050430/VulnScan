@@ -216,6 +216,13 @@ def _store_finding(page_row, vuln, result):
     evidence = result.evidence
     if result.detail:
         evidence = f"{evidence}\n\n{result.detail}".strip()
+    footer = []
+    if result.technique:
+        footer.append(f"DETECTION TECHNIQUE: {result.technique}")
+    if result.cvss_vector:
+        footer.append(f"CVSS Vector: {result.cvss_vector}")
+    if footer:
+        evidence = f"{evidence}\n\n" + "\n".join(footer)
     finding = Finding(
         Severity=result.severity,
         RiskScore=round(result.risk_score, 1),

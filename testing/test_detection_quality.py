@@ -160,3 +160,45 @@ def test_no_xss_false_positive_in_non_executable_contexts(client, dev_token, tar
         xss = [f for f in detail["Findings"]
                if f["VulnerabilityName"] == "Cross-Site Scripting (XSS)"]
         assert not xss, f"false-positive XSS reported for {path}"
+
+
+# --------------------------------------------------------------------------
+# A1 (enhancement): structured SQLi evidence, reproducibility and CVSS vector
+# --------------------------------------------------------------------------
+def test_error_based_evidence_contains_reproducibility_and_vector(full_scan):
+    """Confirmed error-based findings carry structured evidence and the vector."""
+    sqli = [f for f in full_scan["Findings"]
+            if f["VulnerabilityName"] == "SQL Injection" and "/product" in f["URL"]]
+    assert sqli, "error-based SQLi should be detected on /product"
+    finding = sqli[0]
+    evidence = finding["Evidence"]
+    assert "REPRODUCIBILITY: signature reproduced on 2/2 identical requests" in evidence
+    assert "BASELINE REQUEST:" in evidence
+    assert "REMEDIATION:" in evidence
+    assert "REFERENCES:" in evidence
+    assert "VERIFICATION: Not retested yet." in evidence
+    assert finding["CVSSVector"] == "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+    assert finding["Technique"] and "error-based" in finding["Technique"]
+
+
+def test_unreproduced_error_signature_is_suspected(client, dev_token, target):
+    """A one-shot (non-reproducible) error page must be SUSPECTED, not Confirmed."""
+    profiles = client.get("/api/scan-profiles",
+                          headers=auth(dev_token)).get_json()["ScanProfiles"]
+    pid = next(p for p in profiles
+               if p["Name"] == "OWASP Top 10 Full Scan")["ScanProfileID"]
+    resp = client.post("/api/scans", headers=auth(dev_token), json={
+        "target_url": target + "flaky_error?id=1",
+        "scan_profile_id": pid, "scan_name": "Flaky error control"})
+    assert resp.status_code == 202
+    sid = resp.get_json()["Scan"]["ScanID"]
+    detail = client.get(f"/api/scans/{sid}",
+                        headers=auth(dev_token)).get_json()["Scan"]
+    sqli = [f for f in detail["Findings"]
+            if f["VulnerabilityName"] == "SQL Injection"]
+    assert sqli, "the one-shot error page should produce an SQLi observation"
+    finding = sqli[0]
+    assert finding["Classification"] == "Suspected"
+    assert finding["Confidence"] < 0.8
+    assert "did NOT reproduce" in finding["Evidence"]
+    assert finding["CVSSVector"] == "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"

@@ -229,3 +229,32 @@ These do not change the documented design but are worth stating:
   `VulnScan`; ODBC Driver 17.
 - Secrets live only in `backend/.env` (see `backend/.env.example`);
   nothing is hard-coded.
+
+## Enhancement round 4 — detection quality (2026-10-09)
+
+Enhancement programme plan documented in the session workspace
+(`System_Enhancement_Assessment.md`, `Research_Log.md`); first increment
+implemented, tested and committed:
+
+- **SQLi evidence & reliability (A1)**
+  - Error-based findings now REQUIRE the database-error signature to
+    reproduce on the identical repeated request before being reported as
+    CONFIRMED; a one-shot error page is reported as SUSPECTED (confidence
+    0.65) with an explicit "did NOT reproduce" note.
+  - Payloads are ordered by the parameter's input type (numeric values try
+    numeric-context payloads first).
+  - Three read-only DB-specific error payloads added (SQL Server
+    `CONVERT(int, @@version)`, MySQL `extractvalue`, PostgreSQL `CAST`).
+  - Every SQLi finding stores structured evidence: verdict line, baseline
+    vs test request lines, reproducibility, why/alternatives/limitations,
+    remediation, references and verification status.
+- **CVSS vector exposure (A6)**
+  - Every scored finding embeds `DETECTION TECHNIQUE:` and
+    `CVSS Vector:` lines in its evidence (written centrally by the engine,
+    so all modules benefit).
+  - `GET /api/scans/{id}` additionally returns `CVSSVector` and
+    `Technique` per finding (parsed from evidence; no schema change).
+- **Verification** — new tests:
+  `test_error_based_evidence_contains_reproducibility_and_vector` and
+  `test_unreproduced_error_signature_is_suspected` (backed by the new
+  controlled endpoint `/flaky_error` in `testing/vuln_test_app`).

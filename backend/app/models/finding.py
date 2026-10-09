@@ -1,4 +1,5 @@
 """Finding entity - vulnerabilities detected during a scan with severity/evidence."""
+import re
 from datetime import datetime
 from decimal import Decimal
 
@@ -52,7 +53,14 @@ class Finding(db.Model):
             else "Suspected"
         )
 
+    #: Regexes that surface structured evidence details (no schema change).
+    _CVSS_VECTOR_RE = re.compile(r"CVSS Vector:\s*(CVSS:3\.[01]/[A-Za-z0-9:./-]+)")
+    _TECHNIQUE_RE = re.compile(r"DETECTION TECHNIQUE:\s*([^\n]+)")
+
     def to_dict(self, include_vuln=True):
+        evidence_text = self.Evidence or ""
+        vector_match = self._CVSS_VECTOR_RE.search(evidence_text)
+        technique_match = self._TECHNIQUE_RE.search(evidence_text)
         data = {
             "FindingID": self.FindingID,
             "Severity": self.Severity,
@@ -61,6 +69,10 @@ class Finding(db.Model):
                 float(self.Confidence) if self.Confidence is not None else None
             ),
             "Classification": self.classification,
+            "CVSSVector": vector_match.group(1) if vector_match else None,
+            "Technique": (
+                technique_match.group(1).strip() if technique_match else None
+            ),
             "RequestMethod": self.RequestMethod,
             "Parameter": self.Parameter,
             "Payload": self.Payload,

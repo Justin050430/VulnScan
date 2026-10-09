@@ -10,6 +10,9 @@ response -> classify):
    signature.  A finding is only confirmed when the signature appears in the
    injected response *and was absent from the baseline response*, which
    prevents false positives on pages that legitimately display SQL-like text.
+   The identical request is then repeated: the CONFIRMED class requires the
+   signature to reproduce, otherwise the observation is reported as SUSPECTED
+   (possible transient error page).
 
 2. **Boolean-based differential (suspected, lower confidence).**
    A logically-true payload and a logically-false payload are each sent
@@ -27,6 +30,7 @@ response -> classify):
 Only safe, read-only payloads are used (no stacked queries, no writes).
 """
 import logging
+import re
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from app.scanner.base import DetectionModule
@@ -39,7 +43,18 @@ logger = logging.getLogger("vulnscan.sqli")
 CVSS_ERROR_BASED = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"   # 9.8 Critical
 CVSS_BOOLEAN_SUSPECTED = "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"  # 5.9 Medium
 
+# Detection technique labels (stored with every finding's evidence).
+TECHNIQUE_ERROR_BASED = "error-based (SQL metacharacter triggers a database error)"
+TECHNIQUE_BOOLEAN_DIFFERENTIAL = "boolean differential (true/false responses compared)"
+
+REFERENCES = (
+    "OWASP Top 10 A03:2021 Injection (https://owasp.org/Top10/A03_2021-Injection/); "
+    "OWASP WSTG - Testing for SQL Injection "
+    "(https://owasp.org/www-project-web-security-testing-guide/)"
+)
+
 # Payloads chosen to trigger identifiable DBMS errors when echoed unsafely.
+# All payloads are read-only: they provoke error messages, never extract data.
 ERROR_PAYLOADS = [
     "'",
     '"',
@@ -49,6 +64,10 @@ ERROR_PAYLOADS = [
     "' UNION SELECT NULL--",
     "1);--",
     "1' ORDER BY 1--",
+    # DB-specific read-only error triggers (SQL Server / MySQL / PostgreSQL).
+    "1' AND 1=CONVERT(int, @@version)--",
+    "1' AND extractvalue(1,concat(0x7e,0x7e))--",
+    "1' AND 1=CAST('a' AS int)--",
 ]
 
 # Payload pairs used for the boolean differential technique.
@@ -97,10 +116,9 @@ class SQLInjectionModule(DetectionModule):
         baseline = self.http.get(self.page.url)
         if not baseline.ok:
             return results
-        baseline_masked = baseline.text or ""
 
         for name, value in parameters.items():
-            confirmed = self._error_based(name, baseline_masked)
+            confirmed = self._error_based(name, baseline, value)
             if confirmed is not None:
                 results.append(confirmed)
                 continue
@@ -110,25 +128,36 @@ class SQLInjectionModule(DetectionModule):
         return results
 
     # ---------------------------------------------------------------- error
-    def _error_based(self, param_name, baseline_body):
-        baseline_lower = (baseline_body or "").lower()
-        for payload in ERROR_PAYLOADS:
+    def _error_based(self, param_name, baseline, original_value):
+        baseline_text = baseline.text or ""
+        baseline_lower = baseline_text.lower()
+        inconclusive = None
+        for payload in self._ordered_payloads(original_value):
             response = self.http.get(self._build_url(param_name, payload))
             if not response.ok:
                 continue
             body = response.text or ""
             signature = self._matched_signature(body.lower())
-            if signature and signature not in baseline_lower:
+            if not signature or signature in baseline_lower:
+                continue
+
+            # Reproduce the observation: a transient error page must not be
+            # reported with confirmed evidence.
+            repeat = self.http.get(self._build_url(param_name, payload))
+            reproduced = bool(
+                repeat.ok
+                and self._matched_signature((repeat.text or "").lower()) == signature
+            )
+            if reproduced:
                 return self._scored_result(
                     CVSS_ERROR_BASED,
                     0.92,
                     parameter=param_name,
                     payload=payload,
-                    evidence=(
-                        f"CONFIRMED: database error signature '{signature}' appeared "
-                        f"after injecting the payload {payload!r} into parameter "
-                        f"'{param_name}'; the signature was absent from the baseline "
-                        f"response."
+                    technique=TECHNIQUE_ERROR_BASED,
+                    evidence=self._error_evidence(
+                        param_name, payload, signature, baseline, response,
+                        repeated=True,
                     ),
                     detail=(
                         "Error-based SQL injection. The application returned a database "
@@ -136,7 +165,25 @@ class SQLInjectionModule(DetectionModule):
                         "user input reaches a SQL query without parameterisation."
                     ),
                 )
-        return None
+            if inconclusive is None:
+                inconclusive = self._scored_result(
+                    CVSS_ERROR_BASED,
+                    0.65,
+                    parameter=param_name,
+                    payload=payload,
+                    technique=TECHNIQUE_ERROR_BASED,
+                    evidence=self._error_evidence(
+                        param_name, payload, signature, baseline, response,
+                        repeated=False,
+                    ),
+                    detail=(
+                        "A database error appeared once after injecting the payload "
+                        "but did not reproduce on the identical repeated request. "
+                        "This is reported as SUSPECTED evidence; manual verification "
+                        "is recommended before treating it as an SQL injection."
+                    ),
+                )
+        return inconclusive
 
     # ------------------------------------------------------------ boolean
     def _boolean_differential(self, param_name, original_value):
@@ -180,14 +227,14 @@ class SQLInjectionModule(DetectionModule):
                 0.60,
                 parameter=param_name,
                 payload=true_payload,
-                evidence=(
-                    "SUSPECTED (blind/boolean): a logically-true SQL condition "
-                    f"resembled the baseline response (similarity "
-                    f"{base_vs_true:.2f}) more closely than the logically-false "
-                    f"condition did ({base_vs_false:.2f}); the two responses also "
-                    f"differed from each other (similarity {true_vs_false:.2f}) "
-                    f"and were stable across repeats. Reflected payload text was "
-                    f"masked before comparison. Manual verification is recommended."
+                technique=TECHNIQUE_BOOLEAN_DIFFERENTIAL,
+                evidence=self._boolean_evidence(
+                    param_name, true_payload, false_payload,
+                    baseline=baseline, t1=t1, f1=f1,
+                    base_vs_true=base_vs_true, base_vs_false=base_vs_false,
+                    true_vs_false=true_vs_false,
+                    stability_true=stability_true,
+                    stability_false=stability_false,
                 ),
                 detail=(
                     "Boolean-based (blind) SQL injection is suspected. No database error "
@@ -214,3 +261,102 @@ class SQLInjectionModule(DetectionModule):
             if signature in body_lower:
                 return signature
         return None
+
+    # ------------------------------------------------------------ evidence
+    @staticmethod
+    def _ordered_payloads(original_value):
+        """Try payloads that match the parameter's input type first."""
+        value = (original_value or "").strip()
+        numeric = bool(re.fullmatch(r"-?\d+", value)) if value else False
+        if not numeric:
+            return ERROR_PAYLOADS
+        numeric_first = [p for p in ERROR_PAYLOADS if p.startswith("1")]
+        others = [p for p in ERROR_PAYLOADS if not p.startswith("1")]
+        return numeric_first + others
+
+    def _error_evidence(self, param_name, payload, signature, baseline, response,
+                        repeated):
+        baseline_status = (
+            baseline.status_code if baseline.status_code is not None else "no response"
+        )
+        test_status = (
+            response.status_code if response.status_code is not None else "no response"
+        )
+        if repeated:
+            verdict = (
+                f"CONFIRMED: database error signature '{signature}' appeared after "
+                f"injecting the payload {payload!r} into parameter '{param_name}'; "
+                f"the signature was absent from the baseline response and reproduced "
+                f"on the identical repeated request."
+            )
+            reproducibility = "signature reproduced on 2/2 identical requests"
+        else:
+            verdict = (
+                f"SUSPECTED (unreproduced error): database error signature "
+                f"'{signature}' appeared once after injecting the payload {payload!r} "
+                f"into parameter '{param_name}' but did NOT reproduce on the "
+                f"identical repeated request."
+            )
+            reproducibility = (
+                "signature NOT reproduced (possible transient server error page); "
+                "reported as suspected evidence requiring manual verification"
+            )
+        return "\n".join([
+            verdict,
+            "",
+            f"BASELINE REQUEST: GET {self.page.url} -> HTTP {baseline_status}; "
+            f"database-error signature absent",
+            f"TEST REQUEST: GET {self._build_url(param_name, payload)} -> "
+            f"HTTP {test_status}; matched signature '{signature}'",
+            f"REPRODUCIBILITY: {reproducibility}",
+            "WHY THIS INDICATES SQL INJECTION: the response changed from a normal "
+            "page to a database-engine error only when a SQL metacharacter was "
+            "injected, and the error text identifies the database engine.",
+            "ALTERNATIVE EXPLANATIONS / LIMITATIONS: only read-only payloads are "
+            "used and no data was extracted; a custom error page could imitate a "
+            "database error, so manual verification is recommended; the technique "
+            "only applies where user input reaches a SQL query without "
+            "parameterisation.",
+            "REMEDIATION: use parameterised queries / prepared statements; "
+            "validate and type-check input server-side; apply least-privilege "
+            "database accounts; do not expose database error messages.",
+            f"REFERENCES: {REFERENCES}",
+            "VERIFICATION: Not retested yet.",
+        ])
+
+    def _boolean_evidence(self, param_name, true_payload, false_payload, *,
+                          baseline, t1, f1, base_vs_true, base_vs_false,
+                          true_vs_false, stability_true, stability_false):
+        return "\n".join([
+            "SUSPECTED (blind/boolean differential): a logically-true SQL "
+            f"condition response resembled the baseline (similarity "
+            f"{base_vs_true:.2f}) more closely than the logically-false condition "
+            f"did ({base_vs_false:.2f}); the two responses differed from each "
+            f"other (similarity {true_vs_false:.2f}) and each was stable across "
+            "repeated identical requests.",
+            "",
+            f"BASELINE REQUEST: GET {self.page.url} -> HTTP {baseline.status_code}",
+            f"TRUE CONDITION: GET {self._build_url(param_name, true_payload)} -> "
+            f"HTTP {t1.status_code}",
+            f"FALSE CONDITION: GET {self._build_url(param_name, false_payload)} -> "
+            f"HTTP {f1.status_code}",
+            f"DIFFERENTIAL METRICS: repeat stability {stability_true:.2f} / "
+            f"{stability_false:.2f} (required >= {MIN_STABILITY}); true-vs-false "
+            f"similarity {true_vs_false:.2f} (required <= {MAX_TRUE_FALSE_SIM}); "
+            f"baseline margin {base_vs_true - base_vs_false:.2f} "
+            f"(required >= {MIN_BASE_MARGIN}); reflected payload text masked "
+            "before comparison",
+            "WHY THIS INDICATES SQL INJECTION: the response changed systematically "
+            "with the truth value of an injected SQL condition while remaining "
+            "stable across repeats - behaviour that content-based comparison of a "
+            "non-injectable parameter does not produce.",
+            "ALTERNATIVE EXPLANATIONS / LIMITATIONS: a server-side reason that "
+            "depends on the literal input text (not SQL truth) could mimic this; "
+            "no database error was observed, so confirmation requires manual "
+            "testing; only read-only conditions are used and no data was extracted.",
+            "REMEDIATION: use parameterised queries / prepared statements; "
+            "validate and type-check input server-side; apply least-privilege "
+            "database accounts.",
+            f"REFERENCES: {REFERENCES}",
+            "VERIFICATION: Not retested yet.",
+        ])

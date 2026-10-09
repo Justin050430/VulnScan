@@ -37,6 +37,9 @@ class DetectionResult:
     payload: Optional[str] = None
     evidence: str = ""
     detail: str = ""
+    #: detection technique label and CVSS v3.1 vector (stored with the evidence)
+    technique: Optional[str] = None
+    cvss_vector: Optional[str] = None
 
 
 class DetectionModule:
@@ -83,5 +86,6 @@ class DetectionModule:
             severity=severity,
             risk_score=score,
             confidence=confidence,
+            cvss_vector=cvss_vector,
         )
         return self._result(**overrides)
