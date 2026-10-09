@@ -404,3 +404,40 @@ implemented, tested and committed:
   detail pane shows the technique badge, `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
   and bolded evidence sections. Full test suite: **138 passed** (no Python
   changes in this increment).
+
+### Seventh increment (C3 + C4) — 2026-10-09
+
+- **Pre-scan summary / scan plan (C3).** New endpoint
+  `GET /api/scan-profiles/<id>/preview` (authenticated) returns a
+  machine-derived plan for the selected profile: enforced limits (depth,
+  page cap, request delay, external-link policy), the selected modules with
+  the concrete detection techniques each will run
+  (`app/utils/modules.py::MODULE_TECHNIQUES` — kept in sync with the
+  implementations: error-based / conditional-error / boolean / opt-in
+  time-based for SQLi, executable-context reflection analysis for XSS,
+  per-rule header policy evaluation), an explicit *what will be tested*
+  list and an equally explicit *what will NOT be tested* list (no POST
+  bodies/forms, no JavaScript execution, no authenticated pages, error
+  pages stored but skipped, non-query-string values untouched, time-based
+  SQLi only when the operator enables it), plus an honest request-budget
+  note (exact request counts depend on the target and are reported live by
+  the monitor - never estimated as fact). The **New Scan** page renders
+  this as a live "scan plan" panel that follows the profile selection
+  (stale responses discarded).
+- **Knowledge-base code examples (C4).** `SecurityCodingPractice` text now
+  renders through a small safe formatter: blocks beginning with
+  `Unsafe:` / `Safe:` become labelled code panels (red / green) with the
+  code fully escaped inside `<pre>`; remaining text stays escaped prose.
+  The SQL Injection, XSS and Missing HTTP Security Headers seed entries
+  were enriched with concrete unsafe/safe examples (fresh installs pick
+  them up; existing databases keep their content, and the examples can be
+  pasted through the admin KB editor).
+- **Verification** — 2 new tests (`test_profile_preview_lists_plan`,
+  `test_profile_preview_unknown_id`): the preview exposes profile limits,
+  all three module keys with techniques, the will/will-not lists and the
+  budget note; unknown profile returns 404. Full suite: **140 passed**.
+  Browser checks (local): the New Scan plan panel follows the profile
+  selector (1-module headers profile → 3 will-test / 6 will-not-test;
+  full profile → 4 SQLi techniques + time-based note / 7 will-not-test);
+  KB modals render the unsafe/safe examples with raw HTML proven inert
+  (`&lt;p&gt;` escaped, no injected element).

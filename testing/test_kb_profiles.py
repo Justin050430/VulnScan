@@ -118,3 +118,23 @@ def test_delete_profile_in_use_blocked(client, admin_token):
     pid = r.get_json()["ScanProfile"]["ScanProfileID"]
     resp = client.delete(f"/api/scan-profiles/{pid}", headers=auth(admin_token))
     assert resp.status_code == 200
+
+
+def test_profile_preview_lists_plan(client, dev_token):
+    profiles = client.get("/api/scan-profiles", headers=auth(dev_token)).get_json()["ScanProfiles"]
+    full = next(p for p in profiles if p["Name"] == "OWASP Top 10 Full Scan")
+    data = client.get(f"/api/scan-profiles/{full['ScanProfileID']}/preview",
+                      headers=auth(dev_token)).get_json()["Preview"]
+    assert data["Limits"]["MaxPages"] == full["MaxPages"]
+    keys = {m["ModuleKey"] for m in data["Modules"]}
+    assert {"sqli", "xss", "http_headers"} <= keys
+    sqli = next(m for m in data["Modules"] if m["ModuleKey"] == "sqli")
+    assert any("error-based" in t for t in sqli["Techniques"])
+    assert any("depth" in s for s in data["WillTest"])
+    assert any("POST" in s for s in data["WillNotTest"])
+    assert "RequestBudgetNote" in data
+
+
+def test_profile_preview_unknown_id(client, dev_token):
+    resp = client.get("/api/scan-profiles/999999/preview", headers=auth(dev_token))
+    assert resp.status_code == 404

@@ -18,6 +18,92 @@ def get_profile(profile_id):
     return db.session.get(ScanProfile, int(profile_id))
 
 
+def build_scan_preview(profile_id):
+    """
+    Describe what a scan with this profile will and will not test (C3).
+
+    The scope statements are derived from the profile's limits and the
+    implemented detection modules - the same limits the engine enforces.
+    """
+    from app.utils.modules import (
+        MODULE_HTTP_HEADERS,
+        MODULE_SQLI,
+        techniques_for_module_key,
+    )
+
+    profile = get_profile(profile_id)
+    if profile is None:
+        raise ScanProfileServiceError("Scan profile not found.")
+
+    modules = []
+    for m in profile.modules:
+        if m.vulnerability is None:
+            continue
+        key = m.vulnerability.module_key
+        modules.append({
+            "VulnerabilityID": m.VulnerabilityID,
+            "Name": m.vulnerability.Name,
+            "ModuleKey": key,
+            "Techniques": techniques_for_module_key(key),
+        })
+
+    delay = profile.RequestDelayMs or 0
+    external = bool(profile.FollowExternalLinks)
+
+    will_test = [
+        f"Crawl links on the target's own host up to depth {profile.MaxDepth} "
+        f"and at most {profile.MaxPages} page(s), waiting at least {delay} ms "
+        "between requests.",
+        "GET query-string parameters discovered on every analysed page, tested "
+        "by each selected detection module.",
+    ]
+    if any(m["ModuleKey"] == MODULE_HTTP_HEADERS for m in modules):
+        will_test.append(
+            "The HTTP security header policy of every analysed page."
+        )
+    if external:
+        will_test.append(
+            "Links to external hosts (FollowExternalLinks is enabled for this profile)."
+        )
+
+    will_not_test = [
+        "POST/PUT/DELETE request bodies or form submission.",
+        "JavaScript-rendered content (the crawler does not execute JavaScript).",
+        "Authenticated or login-protected pages.",
+        "Pages answering with an error status (4xx/5xx) - they are stored but not tested.",
+        "Values that are not GET query-string parameters (HTTP headers, cookies, JSON bodies).",
+    ]
+    if not external:
+        will_not_test.append(
+            "Pages outside the target host (external links are not followed)."
+        )
+    if any(m["ModuleKey"] == MODULE_SQLI for m in modules):
+        will_not_test.append(
+            "Time-based blind SQL injection unless the server operator has enabled it."
+        )
+
+    return {
+        "ScanProfileID": profile.ScanProfileID,
+        "Name": profile.Name,
+        "Limits": {
+            "MaxDepth": profile.MaxDepth,
+            "MaxPages": profile.MaxPages,
+            "RequestDelayMs": profile.RequestDelayMs,
+            "FollowExternalLinks": external,
+        },
+        "Modules": modules,
+        "WillTest": will_test,
+        "WillNotTest": will_not_test,
+        "RequestBudgetNote": (
+            f"The crawler fetches at most {profile.MaxPages} page(s). Detection "
+            "modules then issue a bounded number of requests per discovered "
+            "parameter; the exact count depends on the target's links and query "
+            "parameters and is reported live in the scan monitor "
+            "(HTTP requests issued)."
+        ),
+    }
+
+
 def _normalise_profile_args(name, max_depth, follow_external, request_delay_ms, max_pages):
     if not name or not str(name).strip():
         raise ScanProfileServiceError("Profile name is required.")

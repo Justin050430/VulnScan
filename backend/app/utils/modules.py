@@ -44,3 +44,26 @@ def name_for_module_key(key):
 def implemented_module_names():
     """Names of vulnerabilities that have a real detection implementation."""
     return set(MODULE_NAMES.values())
+
+
+# Human-readable detection techniques per module, used by the pre-scan
+# preview (C3).  Keep in sync with the actual module implementations.
+MODULE_TECHNIQUES = {
+    MODULE_SQLI: [
+        "error-based (database error signatures)",
+        "conditional-error differential",
+        "boolean differential analysis",
+        "time-based blind (only when enabled by the server operator)",
+    ],
+    MODULE_XSS: [
+        "executable-context reflection analysis",
+    ],
+    MODULE_HTTP_HEADERS: [
+        "HTTP security header policy evaluation (per rule)",
+    ],
+}
+
+
+def techniques_for_module_key(key):
+    """Detection techniques implemented by a module key (may be empty)."""
+    return list(MODULE_TECHNIQUES.get(key, []))

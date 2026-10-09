@@ -115,6 +115,30 @@
     panel.setAttribute('aria-busy', TERMINAL_STATUSES.includes(p.Status) ? 'false' : 'true');
   }
 
+  /* Pre-scan summary (C3): what the selected profile will and will not test. */
+  function scanPlanHtml(p) {
+    if (!p) return U.empty('No scan plan available.');
+    const limits = p.Limits || {};
+    const mods = p.Modules || [];
+    return `
+      <div class="plan">
+        <div class="plan-head">Modules &amp; techniques</div>
+        ${mods.map(m => `<div class="plan-mod"><b>${U.esc(m.Name)}</b>
+          <div class="plan-tech">${(m.Techniques || []).map(t => `<span class="chip-mini">${U.esc(t)}</span>`).join('') || '<span class="chip-mini">policy evaluation</span>'}</div></div>`).join('') || U.empty('No detection modules selected.')}
+        <div class="plan-limits">
+          <span class="chip-mini">depth ≤ ${limits.MaxDepth}</span>
+          <span class="chip-mini">≤ ${limits.MaxPages} pages</span>
+          <span class="chip-mini">≥ ${limits.RequestDelayMs} ms between requests</span>
+          <span class="chip-mini">${limits.FollowExternalLinks ? 'external links: followed' : 'external links: ignored'}</span>
+        </div>
+        <div class="plan-head" style="margin-top:10px">What will be tested</div>
+        <ul class="plan-list plan-yes">${(p.WillTest || []).map(t => `<li>${U.esc(t)}</li>`).join('')}</ul>
+        <div class="plan-head" style="margin-top:10px">What will NOT be tested</div>
+        <ul class="plan-list plan-no">${(p.WillNotTest || []).map(t => `<li>${U.esc(t)}</li>`).join('')}</ul>
+        <div class="plan-note">${U.esc(p.RequestBudgetNote || '')}</div>
+      </div>`;
+  }
+
   /* ============================================================ LOGIN */
   /* Friendly text for errors the OAuth callback/Google return via the hash,
      e.g. '#/login?error=...'. Unknown values are shown verbatim. */
@@ -361,6 +385,7 @@
             <b>ℹ About Scan Profiles</b><br/>
             Scan profiles determine which vulnerability modules will be executed during the scan and how deeply the target is crawled.
           </div>
+          <div id="scan-plan">${U.loading('Loading scan plan...')}</div>
           <div style="display:flex;gap:10px;justify-content:flex-end">
             <button class="btn btn-secondary" id="reset-btn">Reset</button>
             <button class="btn btn-primary" id="start-btn" style="width:auto">Start Scan</button>
@@ -389,8 +414,24 @@
       const p = findIn(profiles, 'ScanProfileID', parseInt(sel.value, 10));
       if (p) info.textContent = `${(p.Modules || []).length} module(s): ${(p.Modules || []).map(m => m.Name).join(', ')} · max depth ${p.MaxDepth}`;
     }
-    sel.addEventListener('change', showInfo);
+    const planBox = el.querySelector('#scan-plan');
+    let planSeq = 0;
+    async function showPlan() {
+      const pid = parseInt(sel.value, 10);
+      const seq = ++planSeq;
+      planBox.innerHTML = U.loading('Loading scan plan...');
+      try {
+        const body = await apiGetJson('/api/scan-profiles/' + pid + '/preview');
+        if (seq !== planSeq) return; // a newer selection superseded this request
+        planBox.innerHTML = scanPlanHtml(body && body.Preview);
+      } catch (err) {
+        if (seq !== planSeq) return;
+        planBox.innerHTML = `<div style="color:var(--muted);font-size:12.5px">Scan plan unavailable: ${U.esc(err.message)}</div>`;
+      }
+    }
+    sel.addEventListener('change', () => { showInfo(); showPlan(); });
     showInfo();
+    showPlan();
     el.querySelector('#reset-btn').addEventListener('click', () => {
       el.querySelector('#target_url').value = '';
       el.querySelector('#scan_name').value = '';
@@ -796,6 +837,23 @@
   }
 
   /* ============================================================ KNOWLEDGE BASE */
+  /* Renders KB practice text: "Unsafe:" / "Safe:" blocks become labelled code
+     examples; everything else stays escaped prose. */
+  function kbRichText(text) {
+    const blocks = String(text || '').split(/\n\s*\n/).filter(b => b.trim());
+    if (!blocks.length) return '';
+    return blocks.map(b => {
+      const m = b.match(/^(Unsafe|Safe):[ \t]*\r?\n?([\s\S]*)$/i);
+      if (m) {
+        const cls = m[1].toLowerCase();
+        return `<div class="kb-example kb-${cls}">
+          <div class="kb-ex-label">${cls === 'unsafe' ? '⚠ Unsafe pattern' : '✔ Safe pattern'}</div>
+          <pre class="kb-code">${U.esc((m[2] || '').trim())}</pre></div>`;
+      }
+      return `<p style="white-space:pre-wrap;margin-top:6px">${U.esc(b)}</p>`;
+    }).join('');
+  }
+
   async function knowledgeBase(el) {
     el.innerHTML = U.loading('Loading knowledge base…');
     const isAdmin = (API.user || {}).Role === 'Administrator';
@@ -841,7 +899,7 @@
           <p style="margin-top:10px"><b>Description</b><br/>${U.esc(v.Description)}</p>
           <p style="margin-top:8px"><b>Impact</b><br/>${U.esc(v.Impact)}</p>
           <p style="margin-top:8px"><b>Remediation</b><br/>${U.esc(v.Recommendation)}</p>
-          <p style="margin-top:8px"><b>Secure Coding Practice</b><br/>${U.esc(v.SecurityCodingPractice)}</p>
+          <p style="margin-top:8px"><b>Secure Coding Practice</b></p>${kbRichText(v.SecurityCodingPractice)}
           <p style="margin-top:8px"><b>References</b><br/>${U.esc(v.OWASPReference)}<br/>
           ${v.ReferenceURL ? `<a href="${U.esc(v.ReferenceURL)}" target="_blank" rel="noopener">${U.esc(v.ReferenceURL)}</a>` : ''}</p>`,
         `<button class="btn btn-secondary" onclick="U.closeModal()">Close</button>`);

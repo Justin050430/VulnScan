@@ -48,7 +48,13 @@ VULNERABILITIES = [
         ),
         "SecurityCodingPractice": (
             "Use an ORM or parameterised statements; escape dynamic identifiers; "
-            "validate and whitelist input; do not expose database errors to users."
+            "validate and whitelist input; do not expose database errors to users.\n"
+            "\n"
+            "Unsafe:\n"
+            "cursor.execute(\"SELECT * FROM users WHERE name = '\" + name + \"'\")\n"
+            "\n"
+            "Safe:\n"
+            "cursor.execute(\"SELECT * FROM users WHERE name = ?\", (name,))"
         ),
         "OWASPReference": "A03:2021 - Injection",
         "ReferenceURL": "https://owasp.org/Top10/A03_2021-Injection/",
@@ -73,7 +79,14 @@ VULNERABILITIES = [
         ),
         "SecurityCodingPractice": (
             "Encode output based on context (HTML, attribute, URL, JavaScript); "
-            "use frameworks that auto-escape; never use innerHTML with untrusted data."
+            "use frameworks that auto-escape; never use innerHTML with untrusted data.\n"
+            "\n"
+            "Unsafe:\n"
+            "element.innerHTML = \"<p>\" + userComment + \"</p>\"\n"
+            "\n"
+            "Safe:\n"
+            "element.textContent = userComment   // encoded by the browser\n"
+            "// or a framework binding that escapes by default, e.g. {{ userComment }}"
         ),
         "OWASPReference": "A03:2021 - Injection",
         "ReferenceURL": "https://owasp.org/www-community/attacks/xss/",
@@ -98,7 +111,18 @@ VULNERABILITIES = [
         ),
         "SecurityCodingPractice": (
             "Configure security headers centrally (web server / framework middleware) "
-            "and include header checks in automated security tests."
+            "and include header checks in automated security tests.\n"
+            "\n"
+            "Unsafe:\n"
+            "# No security headers configured - server defaults are used\n"
+            "\n"
+            "Safe:\n"
+            "# Flask middleware example\n"
+            "@app.after_request\n"
+            "def add_security_headers(resp):\n"
+            "    resp.headers[\"Content-Security-Policy\"] = \"default-src 'self'\"\n"
+            "    resp.headers[\"X-Content-Type-Options\"] = \"nosniff\"\n"
+            "    return resp"
         ),
         "OWASPReference": "A05:2021 - Security Misconfiguration",
         "ReferenceURL": "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/",

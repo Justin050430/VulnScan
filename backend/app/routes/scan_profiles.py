@@ -19,6 +19,17 @@ def list_scan_profiles():
     }), 200
 
 
+@scan_profiles_bp.get("/<int:profile_id>/preview")
+@any_authenticated
+def scan_profile_preview(profile_id):
+    """Pre-scan summary: what the profile will and will not test (C3)."""
+    try:
+        preview = scan_profile_service.build_scan_preview(profile_id)
+    except scan_profile_service.ScanProfileServiceError as exc:
+        return jsonify({"message": str(exc)}), 404
+    return jsonify({"Preview": preview}), 200
+
+
 def _payload(request):
     data = request.get_json(silent=True) or {}
     return {
