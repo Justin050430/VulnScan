@@ -378,6 +378,40 @@ def update_finding_status(scan, finding_id, status, user, ip_address=None):
     return finding
 
 
+def retest_finding(scan, finding_id, user, ip_address=None):
+    """
+    Synchronously re-verify one finding against its exact page (D1).
+
+    Returns (finding, retest_result); commits the evidence/status changes
+    and writes an audit record.
+    """
+    from app.scanner.retest import RetestError, retest_finding as run_retest
+
+    finding = db.session.get(Finding, int(finding_id))
+    if finding is None:
+        raise ScanServiceError("Finding not found.")
+    if finding.page is None or finding.page.ScanID != scan.ScanID:
+        raise ScanServiceError("Finding does not belong to this scan.")
+    try:
+        result = run_retest(finding)
+    except RetestError as exc:
+        raise ScanServiceError(str(exc)) from exc
+    db.session.commit()
+    write_audit(
+        category=AUDIT_CATEGORY_SCAN,
+        action="FINDING_RETESTED",
+        description=f"Finding {finding.FindingID} "
+                    f"({finding.vulnerability.Name}) on scan {scan.ScanID} "
+                    f"re-tested: {result['Verdict']}.",
+        user=user,
+        entity_type="Finding",
+        entity_id=finding.FindingID,
+        ip_address=ip_address,
+        commit=True,
+    )
+    return finding, result
+
+
 def export_report(scan, user, ip_address=None):
     """Record a report-export audit event (caller performs the generation)."""
     write_audit(

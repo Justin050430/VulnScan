@@ -56,11 +56,18 @@ class Finding(db.Model):
     #: Regexes that surface structured evidence details (no schema change).
     _CVSS_VECTOR_RE = re.compile(r"CVSS Vector:\s*(CVSS:3\.[01]/[A-Za-z0-9:./-]+)")
     _TECHNIQUE_RE = re.compile(r"DETECTION TECHNIQUE:\s*([^\n]+)")
+    _RETEST_RE = re.compile(
+        r"RETEST (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) UTC - ([A-Za-z ]+)"
+    )
 
     def to_dict(self, include_vuln=True):
         evidence_text = self.Evidence or ""
         vector_match = self._CVSS_VECTOR_RE.search(evidence_text)
         technique_match = self._TECHNIQUE_RE.search(evidence_text)
+        retests = [
+            {"At": m.group(1) + " UTC", "Verdict": m.group(2).strip()}
+            for m in self._RETEST_RE.finditer(evidence_text)
+        ]
         data = {
             "FindingID": self.FindingID,
             "Severity": self.Severity,
@@ -73,6 +80,8 @@ class Finding(db.Model):
             "Technique": (
                 technique_match.group(1).strip() if technique_match else None
             ),
+            "Retests": retests,
+            "LatestRetestVerdict": retests[-1]["Verdict"] if retests else None,
             "RequestMethod": self.RequestMethod,
             "Parameter": self.Parameter,
             "Payload": self.Payload,

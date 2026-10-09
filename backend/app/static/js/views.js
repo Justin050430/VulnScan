@@ -744,6 +744,7 @@
           <td class="mono">${U.esc(f.URL || '')}${f.Parameter ? ' <span class="chip-mini">param: ' + U.esc(f.Parameter) + '</span>' : ''}</td>
           <td class="actions">
             <button class="btn btn-xs btn-secondary" data-detail="1" title="Details">👁 Detail</button>
+            <button class="btn btn-xs btn-secondary" data-retest="1" title="Re-run the original detection against this page to verify the finding">🔁 Retest</button>
             <select class="status-select" data-status="1">
               <option value="Open" ${f.Status === 'Open' ? 'selected' : ''}>Open</option>
               <option value="Resolved" ${f.Status === 'Resolved' ? 'selected' : ''}>Resolved</option>
@@ -761,6 +762,9 @@
                 <span class="chip-mini">Confidence ${f.Confidence != null ? Math.round(Number(f.Confidence) * 100) + '%' : '–'}</span>
                 <span class="chip-mini">Detected ${U.fmtDT(f.DetectedAt)}</span>
               </div>
+              ${(f.Retests || []).length ? `<div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
+                ${f.Retests.map(r => `<span class="badge ${r.Verdict === 'Resolved' ? 'confirmed' : r.Verdict === 'Still Detected' ? 'failed' : 'unclassified'}" title="Verification history">🔁 ${U.esc(r.At)} · ${U.esc(r.Verdict)}</span>`).join('')}
+              </div>` : ''}
               <div class="mono" style="margin:6px 0 4px">${U.esc(f.URL)} ${f.RequestMethod ? '(' + U.esc(f.RequestMethod) + ')' : ''} ${f.Parameter ? '· param ' + U.esc(f.Parameter) : ''}</div>
               ${f.Payload ? `<div style="margin:4px 0"><b>Payload:</b> <span class="mono">${U.esc(f.Payload)}</span></div>` : ''}
               <div class="evidence">${evidenceHtml(f.Evidence || '')}</div>
@@ -822,6 +826,25 @@
           const data = await API.put(`/api/scans/${scanId}/findings/${fid}`, { status: sel.value });
           U.toast('Finding marked as ' + sel.value + '.', 'ok');
         } catch (err) { U.toast(err.message, 'err'); location.hash = '#/scans/' + scanId + '?r=' + Date.now(); }
+      });
+    });
+    box.querySelectorAll('button[data-retest]').forEach(b => {
+      b.addEventListener('click', async () => {
+        const row = b.closest('tr.finding-row');
+        const fid = parseInt(row.dataset.id, 10);
+        const scanId = parseInt(location.hash.split('/')[2], 10);
+        b.disabled = true; b.textContent = '⏳ Verifying…';
+        try {
+          const data = await API.post(`/api/scans/${scanId}/findings/${fid}/retest`, {});
+          const verdict = data.Retest.Verdict;
+          U.toast('Retest verdict: ' + verdict + ' — ' + data.Retest.Message,
+            verdict === 'Still Detected' ? 'err' : verdict === 'Resolved' ? 'ok' : 'info');
+        } catch (err) {
+          U.toast(err.message, 'err');
+        } finally {
+          b.disabled = false; b.textContent = '🔁 Retest';
+          location.hash = '#/scans/' + scanId + '?r=' + Date.now();
+        }
       });
     });
   }

@@ -130,6 +130,37 @@ def update_finding_status(scan_id, finding_id):
     return jsonify({"message": "Finding updated.", "Finding": finding.to_dict()}), 200
 
 
+@scans_bp.post("/<int:scan_id>/findings/<int:finding_id>/retest")
+@any_authenticated
+def retest_finding(scan_id, finding_id):
+    """
+    Synchronously re-verify one finding against its exact page (D1).
+
+    Runs the finding's original detection module once more and classifies
+    the outcome: Resolved / Still Detected / Inconclusive / Unable to Verify.
+    Evidence gains a RETEST stanza; status updates only on a firm verdict.
+    """
+    user = get_current_user()
+    ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr
+    try:
+        scan = scan_service.get_scan(scan_id)
+        scan_service.ensure_scan_accessible(user, scan)
+        finding, result = scan_service.retest_finding(
+            scan, finding_id, user, ip_address=ip
+        )
+    except scan_service.ScanNotFoundError as exc:
+        return jsonify({"message": str(exc)}), 404
+    except scan_service.ScanAccessError as exc:
+        return jsonify({"message": str(exc)}), 403
+    except scan_service.ScanServiceError as exc:
+        return jsonify({"message": str(exc)}), 400
+    return jsonify({
+        "message": f"Retest finished: {result['Verdict']}.",
+        "Retest": result,
+        "Finding": finding.to_dict(),
+    }), 200
+
+
 @scans_bp.get("/<int:scan_id>/report")
 @any_authenticated
 def scan_report(scan_id):

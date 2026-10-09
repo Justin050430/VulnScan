@@ -441,3 +441,41 @@ implemented, tested and committed:
   full profile → 4 SQLi techniques + time-based note / 7 will-not-test);
   KB modals render the unsafe/safe examples with raw HTML proven inert
   (`&lt;p&gt;` escaped, no injected element).
+
+### Eighth increment (D1) — 2026-10-09
+
+- **Finding retest / verification workflow (D1).** New
+  `POST /api/scans/<scanId>/findings/<fid>/retest` (owner or admin)
+  synchronously re-runs the finding's **original detection module** against
+  its **exact page** and classifies the outcome honestly:
+  * **Resolved** - the module ran cleanly and the original parameter shows
+    no detectable signal (verified absence; the finding is auto-marked
+    Resolved),
+  * **Still Detected** - the module re-detected the same parameter (the
+    finding is re-opened),
+  * **Inconclusive** - the module itself failed while re-testing,
+  * **Unable to Verify** - the page is unreachable/no longer analysable or
+    the vulnerability has no implemented module (status left unchanged for
+    manual review).
+  Implementation: `app/scanner/retest.py` reuses the scan's SSRF/scope
+  validator (`make_url_validator`), keeps the profile's politeness delay
+  (capped at 1 s) and reports the real request count it issued.  A RETEST
+  stanza is appended to the finding evidence (verdict, technique,
+  confidence, requests, explicit status note); the original proof is never
+  modified.  `Finding.to_dict()` now exposes additive `Retests` /
+  `LatestRetestVerdict` keys parsed from the stanzas; every retest writes a
+  `FINDING_RETESTED` audit record.
+- **UI.** Findings rows gain a `🔁 Retest` button; the detail pane shows a
+  colour-coded verification-history chip per retest (green Resolved, red
+  Still Detected, grey otherwise) next to the original evidence.
+- **Verification** — new suite `testing/test_retest.py` (4 tests):
+  Still Detected on an unfixed page (status re-opened, history keys),
+  Resolved after the page is pointed at a safe variant (status auto-closed,
+  "verified absence" stanza), Unable to Verify when the page 404s (status
+  unchanged, honest reason), and access control (401 unauthenticated,
+  400 unknown finding, 404 unknown scan, 403 another developer, 200 admin).
+  Browser-verified end to end: retest of finding 304 (scan 17) →
+  `Still Detected` toast + stanza with technique/confidence/4 requests;
+  retest of finding 253 (scan 16, page pointed at the safe variant) →
+  `Resolved` toast, status auto-changed to Resolved, green history chip and
+  the RETEST stanza appended to the original evidence.
