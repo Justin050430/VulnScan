@@ -88,6 +88,22 @@ def scan_detail(scan_id):
     return jsonify({"Scan": detail}), 200
 
 
+@scans_bp.get("/<int:scan_id>/progress")
+@any_authenticated
+def scan_progress(scan_id):
+    """Live scan progress (B1): stage, counters and errors, honestly sourced."""
+    user = get_current_user()
+    try:
+        scan = scan_service.get_scan(scan_id)
+        scan_service.ensure_scan_accessible(user, scan)
+        progress = scan_service.get_scan_progress(scan)
+    except scan_service.ScanNotFoundError as exc:
+        return jsonify({"message": str(exc)}), 404
+    except scan_service.ScanServiceError as exc:
+        return jsonify({"message": str(exc)}), 403
+    return jsonify({"Progress": progress}), 200
+
+
 @scans_bp.put("/<int:scan_id>/findings/<int:finding_id>")
 @any_authenticated
 def update_finding_status(scan_id, finding_id):

@@ -17,6 +17,7 @@ from flask import current_app
 
 from app.extensions import db
 from app.models import DiscoveredPage, Finding, Scan
+from app.scanner import progress
 from app.scanner.base import PageInfo
 from app.scanner.client import HttpClient
 from app.scanner.crawler import Crawler
@@ -87,6 +88,7 @@ def run_scan(scan_id):
     if scan is None:
         logger.error("run_scan: scan %s not found", scan_id)
         return
+    progress.start(scan_id)
 
     profile = scan.scan_profile
     if profile is None:
@@ -121,6 +123,8 @@ def run_scan(scan_id):
         ),
     )
 
+    progress.update(scan_id, http=http, stage="crawling")
+
     try:
         # --------------------------------------------------------- crawl
         crawler = Crawler(
@@ -130,6 +134,7 @@ def run_scan(scan_id):
             follow_external=profile.FollowExternalLinks,
         )
         pages = crawler.crawl(scan.TargetURL)
+        progress.update(scan_id, pages_found=len(pages), stage="analysing")
         if not pages:
             _finish_failed(scan, "Crawler discovered no reachable pages.")
             return
@@ -169,8 +174,13 @@ def run_scan(scan_id):
                 continue
             module_specs.append((module_class, vuln))
 
+        pages_done = 0
+        findings_total = 0
         for page, page_row in page_rows:
+            pages_done += 1
             if page_row.HTTPStatus is None or page_row.HTTPStatus >= 400:
+                progress.update(scan_id, pages_done=pages_done,
+                                requests=http.request_count)
                 continue
             for module_class, vuln in module_specs:
                 try:
@@ -180,11 +190,23 @@ def run_scan(scan_id):
                     logger.exception(
                         "Module %s failed on %s", module_class.key, page_row.URL
                     )
+                    progress.add_error(
+                        scan_id,
+                        f"Module {module_class.key} failed on {page_row.URL}",
+                    )
                     continue
                 for result in results:
                     _store_finding(page_row, vuln, result)
+                    findings_total += 1
             db.session.commit()
+            progress.update(
+                scan_id,
+                pages_done=pages_done,
+                findings=findings_total,
+                requests=http.request_count,
+            )
 
+        progress.update(scan_id, stage="finalising")
         scan.Status = SCAN_STATUS_COMPLETED
         scan.FinishedAt = datetime.utcnow()
         db.session.commit()
@@ -203,6 +225,7 @@ def run_scan(scan_id):
             entity_id=scan.ScanID,
             commit=True,
         )
+        progress.finish(scan_id, "completed")
         logger.info("Scan %s completed with %d pages", scan_id, len(page_rows))
     except Exception:
         logger.exception("Scan %s failed unexpectedly", scan_id)
@@ -242,6 +265,7 @@ def _store_finding(page_row, vuln, result):
 def _finish_failed(scan, reason):
     scan.Status = SCAN_STATUS_FAILED
     scan.FinishedAt = datetime.utcnow()
+    progress.finish(scan.ScanID, "failed", error=reason)
     logger.warning("Scan %s failed: %s", scan.ScanID, reason)
     write_audit(
         category=AUDIT_CATEGORY_SCAN,

@@ -340,3 +340,27 @@ implemented, tested and committed:
   `test_time_based_detects_delay_when_enabled` (confirmed finding with
   reproducible delay + no finding on the `/safe_search` control).
   Full suite: **134 passed**.
+
+### Fifth increment (B1 + B2) — 2026-10-09
+
+- **Scan progress registry (`app/scanner/progress.py`, B1).** The engine now
+  publishes real counters while a scan runs: stage
+  (`queued → crawling → analysing → finalising → completed/failed`), pages
+  found/analysed, findings, per-module/step errors, failure reason and the
+  scanner's real request count. The registry is in-memory and per-process;
+  the API reports `LiveAvailable: false` and database-derived values when the
+  scan ran in another process (honest fallback - nothing is fabricated).
+- **`GET /api/scans/<id>/progress` (B1).** Authenticated (owner or admin),
+  returns: Status, Stage, LiveAvailable, PagesFound, PagesAnalysed,
+  PageCount, FindingCount, FindingsByModule, RequestsIssued, Errors,
+  FailureReason, StartedAt/FinishedAt, ElapsedSeconds.
+- **Coverage transparency on scan detail (B2).** `GET /api/scans/<id>` now
+  also returns `AnalysedPages`, `SkippedPages` (pages stored but not tested,
+  with HTTP status), `TestedParameters` (the GET query-string parameters the
+  modules could test) and a `CoverageNote` stating exactly what was and was
+  not tested (no POST bodies, form submission, JS-rendered content or
+  authenticated pages).
+- **Verification** — new suite `testing/test_scan_observability.py` (4 tests):
+  live stage/counters after completion, progress access control, coverage
+  fields, and the skip path (a 404 start page is stored, skipped and
+  disclosed). Full suite: **138 passed**.

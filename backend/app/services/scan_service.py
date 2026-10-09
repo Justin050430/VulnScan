@@ -7,19 +7,22 @@ and the UI can poll the scan status (Pending -> Running -> Completed/Failed).
 import logging
 import threading
 from datetime import datetime
+from urllib.parse import parse_qsl, urlparse
 
 from flask import current_app
 from sqlalchemy import func
 
 from app.extensions import db
-from app.models import DiscoveredPage, Finding, Scan, ScanProfile
+from app.models import DiscoveredPage, Finding, Scan, ScanProfile, Vulnerability
 from app.services.audit_service import write_audit
 from app.scanner.engine import ScanValidationError, run_scan, validate_scan_request
 from app.utils.constants import (
     AUDIT_CATEGORY_REPORT,
     AUDIT_CATEGORY_SCAN,
     FINDING_STATUSES,
+    SCAN_STATUS_CANCELLED,
     SCAN_STATUS_COMPLETED,
+    SCAN_STATUS_FAILED,
     SCAN_STATUS_PENDING,
     SCAN_STATUSES,
     SEVERITIES,
@@ -120,6 +123,12 @@ def _execute_in_context(scan_id, app=None):
     except Exception:
         logger.exception("Scan worker %s crashed", scan_id)
         try:
+            from app.scanner import progress
+
+            progress.finish(scan_id, "failed", error="Scan worker crashed")
+        except Exception:
+            pass
+        try:
             with app.app_context():
                 scan = db.session.get(Scan, int(scan_id))
                 if scan and scan.Status not in (SCAN_STATUS_COMPLETED,):
@@ -213,6 +222,34 @@ def get_scan_detail(scan_id):
     data["PageCount"] = len(pages)
     # Overall risk label from the most severe finding.
     data["OverallRisk"] = _overall_risk(findings)
+
+    # ---------------------------------------------------- coverage (B2)
+    analysed_pages = [
+        p for p in scan.pages
+        if p.HTTPStatus is not None and p.HTTPStatus < 400
+    ]
+    skipped_pages = [
+        p for p in scan.pages
+        if p.HTTPStatus is None or p.HTTPStatus >= 400
+    ]
+    tested_parameters = set()
+    for p in analysed_pages:
+        for name, _value in parse_qsl(urlparse(p.URL).query,
+                                      keep_blank_values=True):
+            tested_parameters.add(name)
+    data["AnalysedPages"] = len(analysed_pages)
+    data["SkippedPages"] = [
+        {"PageID": p.PageID, "URL": p.URL, "HTTPStatus": p.HTTPStatus}
+        for p in skipped_pages
+    ]
+    data["TestedParameters"] = sorted(tested_parameters)
+    data["CoverageNote"] = (
+        f"{len(analysed_pages)} of {len(scan.pages)} discovered page(s) were "
+        "analysed. Only GET query-string parameters are tested (no POST "
+        "bodies, form submission, JavaScript-rendered content or "
+        "authenticated pages); pages skipped due to a non-success HTTP "
+        "status are listed in SkippedPages and were not tested."
+    )
     return data
 
 
@@ -221,6 +258,89 @@ def _overall_risk(findings):
         return "None"
     order = {s: i for i, s in enumerate(SEVERITIES)}
     return max((f.Severity for f in findings), key=lambda s: order.get(s, 0))
+
+
+def get_scan_progress(scan):
+    """
+    Live progress for a scan (B1).
+
+    Live counters come from the in-memory progress registry when the scan ran
+    in this process; otherwise the response is derived from the database and
+    `LiveAvailable` is false.  Values that cannot be measured reliably
+    (e.g. request counts after a restart) are returned as null - never
+    fabricated.
+    """
+    from app.scanner.progress import snapshot
+
+    page_count = (
+        db.session.query(func.count(DiscoveredPage.PageID))
+        .filter(DiscoveredPage.ScanID == scan.ScanID)
+        .scalar()
+        or 0
+    )
+    finding_count = (
+        db.session.query(func.count(Finding.FindingID))
+        .join(DiscoveredPage, Finding.PageID == DiscoveredPage.PageID)
+        .filter(DiscoveredPage.ScanID == scan.ScanID)
+        .scalar()
+        or 0
+    )
+    by_module = (
+        db.session.query(Vulnerability.Name, func.count(Finding.FindingID))
+        .join(Finding, Finding.VulnerabilityID == Vulnerability.VulnerabilityID)
+        .join(DiscoveredPage, Finding.PageID == DiscoveredPage.PageID)
+        .filter(DiscoveredPage.ScanID == scan.ScanID)
+        .group_by(Vulnerability.Name)
+        .all()
+    )
+
+    terminal = scan.Status in (
+        SCAN_STATUS_COMPLETED, SCAN_STATUS_FAILED, SCAN_STATUS_CANCELLED,
+    )
+    live = snapshot(scan.ScanID)
+    if live is not None:
+        live_available = True
+        stage = live["stage"]
+        pages_found = live["pages_found"]
+        pages_analysed = live["pages_done"]
+        requests_issued = live["requests"]
+        errors = live["errors"]
+        failure_reason = live["error"]
+    else:
+        live_available = False
+        stage = (scan.Status or "unknown").lower()
+        pages_found = page_count
+        pages_analysed = page_count if terminal else None
+        requests_issued = None
+        errors = []
+        failure_reason = None
+
+    if scan.FinishedAt and scan.StartedAt:
+        elapsed = (scan.FinishedAt - scan.StartedAt).total_seconds()
+    elif scan.StartedAt:
+        elapsed = (datetime.utcnow() - scan.StartedAt).total_seconds()
+    else:
+        elapsed = None
+
+    return {
+        "ScanID": scan.ScanID,
+        "Status": scan.Status,
+        "Stage": stage,
+        "LiveAvailable": live_available,
+        "PagesFound": pages_found,
+        "PagesAnalysed": pages_analysed,
+        "PageCount": page_count,
+        "FindingCount": finding_count,
+        "FindingsByModule": [
+            {"Name": name, "Count": count} for name, count in by_module
+        ],
+        "RequestsIssued": requests_issued,
+        "Errors": errors,
+        "FailureReason": failure_reason,
+        "StartedAt": scan.StartedAt.isoformat() if scan.StartedAt else None,
+        "FinishedAt": scan.FinishedAt.isoformat() if scan.FinishedAt else None,
+        "ElapsedSeconds": round(elapsed, 1) if elapsed is not None else None,
+    }
 
 
 def ensure_scan_accessible(user, scan):
