@@ -117,7 +117,14 @@ def test_header_detection_confirmed_with_control_page(full_scan):
     assert headers, "missing-header findings expected on unprotected pages"
     for f in headers:
         assert f["Classification"] == "Confirmed"
-        assert f["RiskScore"] == 5.4
+        # Per-rule severity (A5): CSP 5.4 / framing 4.3 / MIME 4.3 /
+        # HSTS 4.2 / privacy rules 3.1.
+        assert f["RiskScore"] in (5.4, 4.3, 4.2, 3.1)
+        assert f["Parameter"] in (
+            "Content-Security-Policy", "X-Frame-Options",
+            "X-Content-Type-Options", "Referrer-Policy",
+            "Strict-Transport-Security", "Permissions-Policy",
+        )
     # the header-safe page must not be flagged
     assert not _by_url(headers, "/headers_ok")
 
@@ -140,17 +147,53 @@ def _scan_target(client, token, url, profile_name="Basic Security Headers"):
 
 
 def test_weak_header_values_are_reported(client, dev_token, target):
-    """Headers present but with insecure values must be reported."""
+    """Headers present with insecure values are reported per rule (A5)."""
     detail = _scan_target(client, dev_token, target + "weak_headers")
     headers = [f for f in detail["Findings"]
                if f["VulnerabilityName"] == "Missing HTTP Security Headers"]
-    assert headers, "insecure header values were not reported"
-    evidence = headers[0]["Evidence"]
-    assert "Improperly configured" in evidence
-    for name in ("X-Frame-Options", "X-Content-Type-Options", "Referrer-Policy"):
-        assert name in evidence
-    assert headers[0]["RiskScore"] == 5.4
-    assert headers[0]["Classification"] == "Confirmed"
+    by_param = {f["Parameter"]: f for f in headers}
+    assert set(by_param) == {
+        "X-Frame-Options", "X-Content-Type-Options", "Referrer-Policy",
+    }, sorted(by_param)
+    assert by_param["X-Frame-Options"]["Payload"] == "ALLOWALL"
+    assert by_param["X-Content-Type-Options"]["Payload"] == "sniff"
+    assert by_param["Referrer-Policy"]["Payload"] == "unsafe-url"
+    assert by_param["X-Frame-Options"]["RiskScore"] == 4.3
+    assert by_param["Referrer-Policy"]["RiskScore"] == 3.1
+    for f in headers:
+        assert f["Classification"] == "Confirmed"
+        assert "CURRENT VALUE:" in f["Evidence"]
+
+
+def test_weak_csp_directives_are_reported(client, dev_token, target):
+    """A CSP that permits inline scripts / wildcards is weak, not 'present'."""
+    detail = _scan_target(client, dev_token, target + "csp_weak")
+    headers = [f for f in detail["Findings"]
+               if f["VulnerabilityName"] == "Missing HTTP Security Headers"]
+    assert len(headers) == 1, [f["Parameter"] for f in headers]
+    finding = headers[0]
+    assert finding["Parameter"] == "Content-Security-Policy"
+    assert "unsafe-inline" in finding["Payload"]
+    assert "unsafe-inline" in finding["Evidence"]
+    assert finding["RiskScore"] == 5.4
+    assert finding["Classification"] == "Confirmed"
+
+
+def test_xfo_mitigated_by_frame_ancestors(client, dev_token, target):
+    """CSP frame-ancestors replaces X-Frame-Options (no finding expected)."""
+    detail = _scan_target(client, dev_token, target + "frame_ok")
+    headers = [f for f in detail["Findings"]
+               if f["VulnerabilityName"] == "Missing HTTP Security Headers"]
+    assert not headers, [f["Parameter"] for f in headers]
+
+
+def test_header_findings_carry_technique_and_vector(full_scan):
+    headers = [f for f in full_scan["Findings"]
+               if f["VulnerabilityName"] == "Missing HTTP Security Headers"]
+    assert headers
+    for f in headers:
+        assert f["Technique"] == "HTTP security header policy evaluation"
+        assert f["CVSSVector"].startswith("CVSS:3.1/")
 
 
 def test_no_xss_false_positive_in_non_executable_contexts(client, dev_token, target):

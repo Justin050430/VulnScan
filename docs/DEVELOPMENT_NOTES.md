@@ -285,3 +285,36 @@ implemented, tested and committed:
   breakout confirmed; event-handler injection confirmed with angle brackets
   encoded; script terminator breakout confirmed; encoded attribute control
   stays clean). Full suite: **129 passed**.
+
+### Third increment (A5) — 2026-10-09
+
+- **Header policy evaluation, per-rule findings.** The HTTP security-header
+  module now emits **one finding per failing rule** (previously one aggregate
+  finding per page with a uniform 5.4 score), each carrying:
+  - its own CVSS v3.1 vector and severity: CSP 5.4 Medium, framing 4.3
+    Medium, MIME 4.3 Medium, HSTS 4.2 Medium, Referrer-Policy 3.1 Low,
+    Permissions-Policy 3.1 Low;
+  - `Parameter` = the header name; `Payload` = the actual value (or
+    "missing");
+  - a structured evidence block (current value, recommended value, security
+    concern, impact/limitations, remediation example, references, verification
+    status) and a `TECHNIQUE` label.
+- **Policy-strength checks (not just presence):**
+  - CSP present but weak is now reported when `default-src`/`script-src`
+    allow `unsafe-inline`, `unsafe-eval`, `*` or `http:` sources;
+  - X-Frame-Options findings are **suppressed when the CSP defines
+    `frame-ancestors`** (the modern equivalent, per OWASP);
+  - HSTS (HTTPS responses only) is weak when `max-age` is absent, non-positive
+    or below 6 months (`HSTS_MIN_MAX_AGE`);
+  - Referrer-Policy is weak for unsafe values; Permissions-Policy remains a
+    presence check (documented).
+- **Controlled endpoints added:** `/csp_weak` (weak CSP, everything else
+  secure), `/frame_ok` (framing protected via `frame-ancestors` only).
+- **Behaviour change (documented):** finding granularity and severities for
+  this module changed; existing tests were updated accordingly
+  (`test_header_detection_confirmed_with_control_page`,
+  `test_weak_header_values_are_reported` now assert per-rule output), and
+  three new tests were added (`test_weak_csp_directives_are_reported`,
+  `test_xfo_mitigated_by_frame_ancestors`,
+  `test_header_findings_carry_technique_and_vector`).
+  Full suite: **132 passed**.

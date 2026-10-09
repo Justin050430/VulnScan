@@ -290,6 +290,41 @@ def script_reflect():
     )
 
 
+@app.route("/csp_weak")
+def csp_weak():
+    """CSP present but weak (unsafe-inline + wildcard); other headers secure."""
+    html = (
+        "<!doctype html><html><head><title>Weak CSP</title></head><body>"
+        "<h1>Weak CSP page</h1></body></html>"
+    )
+    resp = Response(html)
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'unsafe-inline' *"
+    )
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resp.headers["Permissions-Policy"] = "geolocation=()"
+    return resp
+
+
+@app.route("/frame_ok")
+def frame_ok():
+    """Framing protection via CSP frame-ancestors (no X-Frame-Options)."""
+    html = (
+        "<!doctype html><html><head><title>Frame protected</title></head><body>"
+        "<h1>Frame protected page</h1></body></html>"
+    )
+    resp = Response(html)
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; frame-ancestors 'none'"
+    )
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resp.headers["Permissions-Policy"] = "geolocation=()"
+    return resp
+
+
 @app.route("/external-link")
 def external_link():
     """Page containing a link to an out-of-scope host (scope test)."""
