@@ -318,3 +318,25 @@ implemented, tested and committed:
   `test_xfo_mitigated_by_frame_ancestors`,
   `test_header_findings_carry_technique_and_vector`).
   Full suite: **132 passed**.
+
+### Fourth increment (A3) — 2026-10-09
+
+- **Time-based SQLi (opt-in, bounded, last resort).** New fourth technique in
+  `sqli.py`, executed only when `SCANNER_ENABLE_TIME_BASED=true` (default
+  **false**) and only after error-based, conditional-error and boolean
+  techniques are inconclusive.  Protocol: two fast control requests establish
+  a timing baseline; a single controlled read-only wait payload
+  (`SLEEP` / `WAITFOR DELAY` / `pg_sleep`, 3 s) is sent twice and the finding
+  requires **both** test responses to be ≥ 2.5 s slower than the slowest
+  control.  Baselines slower than 5 s abort the technique (unreliable timing
+  environment).  CONFIRMED (0.85), CVSS 9.8; structured evidence includes the
+  measured durations, the control requests and the limitations.
+- Configuration: `SCANNER_ENABLE_TIME_BASED` added to `config.py` and
+  `backend/.env.example` (documented as slow: ≈ +6 s per tested parameter).
+- Controlled endpoint: `/time_blind` (bounded wait simulation) in
+  `testing/vuln_test_app`.
+- **Verification** — new tests:
+  `test_time_based_disabled_by_default` (no probes unless enabled) and
+  `test_time_based_detects_delay_when_enabled` (confirmed finding with
+  reproducible delay + no finding on the `/safe_search` control).
+  Full suite: **134 passed**.

@@ -85,6 +85,8 @@ class Config:
     # Protect against SSRF: block scanning of private/loopback networks unless
     # explicitly permitted for local development/testing.
     SCANNER_ALLOW_PRIVATE_TARGETS = _as_bool(os.getenv("SCANNER_ALLOW_PRIVATE_TARGETS", "true"))
+    # Opt-in, bounded time-based SQLi probes (slow; off by default).
+    SCANNER_ENABLE_TIME_BASED = _as_bool(os.getenv("SCANNER_ENABLE_TIME_BASED", "false"))
     # Run scans in a background worker thread (async). Set false for tests.
     SCAN_ASYNC = _as_bool(os.getenv("SCAN_ASYNC", "true"))
 

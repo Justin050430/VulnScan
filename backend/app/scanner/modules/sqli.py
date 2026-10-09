@@ -33,10 +33,18 @@ response -> classify):
    true variant produces a database error (and it reproduces), the database
    has evaluated the injected condition - direct evidence of SQL execution.
 
-Only safe, read-only payloads are used (no stacked queries, no writes).
+4. **Time-based (opt-in, bounded, last resort).**
+   Runs only when `SCANNER_ENABLE_TIME_BASED` is enabled (default OFF) and
+   the earlier techniques were inconclusive.  Two fast control requests
+   establish a timing baseline; a single controlled database-wait payload is
+   then sent twice and the finding requires BOTH test responses to be at
+   least 2.5s slower than the slowest control.
+
+Only safe, read-only payloads are used (no writes, no data extraction).
 """
 import logging
 import re
+import time
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from app.scanner.base import DetectionModule
@@ -55,6 +63,9 @@ TECHNIQUE_CONDITIONAL_ERROR = (
     "conditional error (error occurs only when the injected condition is true)"
 )
 TECHNIQUE_BOOLEAN_DIFFERENTIAL = "boolean differential (true/false responses compared)"
+TECHNIQUE_TIME_BASED = (
+    "time-based (response delay correlates with an injected database wait)"
+)
 
 REFERENCES = (
     "OWASP Top 10 A03:2021 Injection (https://owasp.org/Top10/A03_2021-Injection/); "
@@ -88,6 +99,16 @@ FALSE_SUFFIX = " AND '1'='2"
 # variant does not.  Read-only: no data is read, written or returned.
 CONDITIONAL_TRUE_SUFFIX = " AND 1=CASE WHEN 1=1 THEN 1/0 ELSE 1 END--"
 CONDITIONAL_FALSE_SUFFIX = " AND 1=CASE WHEN 1=2 THEN 1/0 ELSE 1 END--"
+
+# Time-based (opt-in) suffixes: controlled, read-only database waits.
+TIME_BASED_SLEEP_SECONDS = 3
+TIME_BASED_MIN_DELTA = 2.5
+TIME_BASED_MAX_CONTROL_SECONDS = 5.0
+TIME_BASED_SUFFIXES = (
+    f" AND SLEEP({TIME_BASED_SLEEP_SECONDS})--",           # MySQL / MariaDB
+    f"; WAITFOR DELAY '0:0:{TIME_BASED_SLEEP_SECONDS}'--",  # Microsoft SQL Server
+    f"; SELECT pg_sleep({TIME_BASED_SLEEP_SECONDS})--",     # PostgreSQL
+)
 
 # Signatures commonly present when a DB engine reports an error.
 SQL_ERROR_SIGNATURES = (
@@ -146,6 +167,10 @@ class SQLInjectionModule(DetectionModule):
             suspected = self._boolean_differential(name, value)
             if suspected is not None:
                 results.append(suspected)
+                continue
+            timed = self._time_based(name, value)
+            if timed is not None:
+                results.append(timed)
         return results
 
     # ---------------------------------------------------------------- error
@@ -352,6 +377,85 @@ class SQLInjectionModule(DetectionModule):
             "REMEDIATION: use parameterised queries / prepared statements; "
             "validate and type-check input server-side; apply least-privilege "
             "database accounts; do not expose database error messages.",
+            f"REFERENCES: {REFERENCES}",
+            "VERIFICATION: Not retested yet.",
+        ])
+
+    # ------------------------------------------------------------ time-based
+    def _time_based(self, param_name, original_value):
+        from flask import current_app
+
+        if not current_app.config.get("SCANNER_ENABLE_TIME_BASED", False):
+            return None
+
+        control_a = self._timed_get(self.page.url)
+        control_b = self._timed_get(self.page.url)
+        if control_a is None or control_b is None:
+            return None
+        base_max = max(control_a, control_b)
+        if base_max > TIME_BASED_MAX_CONTROL_SECONDS:
+            # Unreliable timing environment - do not attempt time-based tests.
+            return None
+
+        for suffix in TIME_BASED_SUFFIXES:
+            payload = f"{original_value}{suffix}"
+            first = self._timed_get(self._build_url(param_name, payload))
+            if first is None or first < base_max + TIME_BASED_MIN_DELTA:
+                continue
+            second = self._timed_get(self._build_url(param_name, payload))
+            if second is None or second < base_max + TIME_BASED_MIN_DELTA:
+                continue
+            return self._scored_result(
+                CVSS_ERROR_BASED,
+                0.85,
+                parameter=param_name,
+                payload=payload,
+                technique=TECHNIQUE_TIME_BASED,
+                evidence=self._time_evidence(
+                    param_name, payload, control_a, control_b, first, second),
+                detail=(
+                    "Time-based (blind) SQL injection. The response was "
+                    "reproducibly delayed only when a controlled database-wait "
+                    "payload was sent, indicating that the database executed "
+                    "an attacker-controlled wait condition."
+                ),
+            )
+        return None
+
+    def _timed_get(self, url):
+        """GET the URL and return its wall-clock duration in seconds."""
+        start = time.monotonic()
+        response = self.http.get(url)
+        elapsed = time.monotonic() - start
+        if not response.ok:
+            return None
+        return elapsed
+
+    def _time_evidence(self, param_name, payload, control_a, control_b,
+                       first, second):
+        return "\n".join([
+            f"CONFIRMED: a controlled database-wait payload caused a "
+            f"reproducible response delay for parameter '{param_name}' "
+            f"({first:.2f}s and {second:.2f}s vs control requests "
+            f"{control_a:.2f}s / {control_b:.2f}s).",
+            "",
+            f"BASELINE REQUEST (control x2): GET {self.page.url} -> "
+            f"{control_a:.2f}s / {control_b:.2f}s",
+            f"TEST REQUEST: GET {self._build_url(param_name, payload)} -> "
+            f"{first:.2f}s (first attempt), {second:.2f}s (repeat)",
+            f"DIFFERENTIAL: both test delays exceeded the slowest control "
+            f"request by >= {TIME_BASED_MIN_DELTA}s on two consecutive attempts "
+            f"(single controlled wait of {TIME_BASED_SLEEP_SECONDS}s)",
+            "WHY THIS INDICATES SQL INJECTION: the delay is reproducible, "
+            "specific to a database-wait payload and absent from control "
+            "requests, matching a database executing injected wait logic.",
+            "ALTERNATIVE EXPLANATIONS / LIMITATIONS: severe network or server "
+            "jitter can rarely mimic this (mitigated by control requests, "
+            "repetition and a large margin); time-based testing is slow and "
+            "runs only when enabled; manual verification is recommended.",
+            "REMEDIATION: use parameterised queries / prepared statements; "
+            "validate and type-check input server-side; apply least-privilege "
+            "database accounts.",
             f"REFERENCES: {REFERENCES}",
             "VERIFICATION: Not retested yet.",
         ])

@@ -325,6 +325,37 @@ def frame_ok():
     return resp
 
 
+@app.route("/time_blind")
+def time_blind():
+    """
+    Time-based SQLi control: simulates a database evaluating an injected
+    SLEEP / WAITFOR DELAY / pg_sleep primitive (wait bounded to 4 seconds).
+    """
+    import re as _re
+    import time as _time
+
+    idv = request.args.get("id", "")
+    lowered = idv.lower()
+    delay = 0.0
+    match = _re.search(r"sleep\((\d+(?:\.\d+)?)\)", lowered)
+    if match:
+        delay = float(match.group(1))
+    match = _re.search(r"delay '0:0:(\d+)'", lowered)
+    if match:
+        delay = float(match.group(1))
+    match = _re.search(r"pg_sleep\((\d+(?:\.\d+)?)\)", lowered)
+    if match:
+        delay = float(match.group(1))
+    if delay > 0:
+        _time.sleep(min(delay, 4))
+    safe = _html_escape(idv)
+    return (
+        "<!doctype html><html><head><title>Item lookup</title></head><body>"
+        f"<h1>Item lookup</h1><p>Query: {safe}</p>"
+        "</body></html>"
+    )
+
+
 @app.route("/external-link")
 def external_link():
     """Page containing a link to an out-of-scope host (scope test)."""

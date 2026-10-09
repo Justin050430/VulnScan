@@ -196,6 +196,45 @@ def test_header_findings_carry_technique_and_vector(full_scan):
         assert f["CVSSVector"].startswith("CVSS:3.1/")
 
 
+# --------------------------------------------------------------------------
+# A3 (enhancement): time-based SQLi (opt-in, bounded)
+# --------------------------------------------------------------------------
+def test_time_based_disabled_by_default(client, dev_token, target):
+    """No time-based probes unless SCANNER_ENABLE_TIME_BASED is enabled."""
+    detail = _scan_target(client, dev_token, target + "time_blind?id=1",
+                          "OWASP Top 10 Full Scan")
+    sqli = [f for f in detail["Findings"]
+            if f["VulnerabilityName"] == "SQL Injection"]
+    assert not sqli, "time-based probes must not run unless explicitly enabled"
+
+
+def test_time_based_detects_delay_when_enabled(app, client, dev_token, target):
+    """With the flag on, a reproducible database delay is CONFIRMED."""
+    app.config["SCANNER_ENABLE_TIME_BASED"] = True
+    try:
+        detail = _scan_target(client, dev_token, target + "time_blind?id=1",
+                              "OWASP Top 10 Full Scan")
+        sqli = [f for f in detail["Findings"]
+                if f["VulnerabilityName"] == "SQL Injection"]
+        assert sqli, "time-based delay should be detected when enabled"
+        finding = sqli[0]
+        assert finding["Classification"] == "Confirmed"
+        assert finding["Confidence"] >= 0.8
+        assert "time-based" in (finding["Technique"] or "")
+        assert "two consecutive attempts" in finding["Evidence"]
+        assert "control x2" in finding["Evidence"]
+
+        # control page: enabled time-based testing must not invent findings
+        control = _scan_target(client, dev_token,
+                               target + "safe_search?q=laptop",
+                               "OWASP Top 10 Full Scan")
+        control_sqli = [f for f in control["Findings"]
+                        if f["VulnerabilityName"] == "SQL Injection"]
+        assert not control_sqli, "no time-based finding expected on /safe_search"
+    finally:
+        app.config["SCANNER_ENABLE_TIME_BASED"] = False
+
+
 def test_no_xss_false_positive_in_non_executable_contexts(client, dev_token, target):
     """Un-encoded reflection inside a comment/textarea is not executable XSS."""
     for path in ("comment_reflect?q=x", "textarea_reflect?q=x"):
