@@ -57,17 +57,39 @@ class Finding(db.Model):
     _CVSS_VECTOR_RE = re.compile(r"CVSS Vector:\s*(CVSS:3\.[01]/[A-Za-z0-9:./-]+)")
     _TECHNIQUE_RE = re.compile(r"DETECTION TECHNIQUE:\s*([^\n]+)")
     _RETEST_RE = re.compile(
-        r"RETEST (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) UTC - ([A-Za-z ]+)"
+        r"RETEST (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) UTC - ([A-Za-z ]+)\n"
+        r"RETEST DETAILS: ([^\n]*)"
+        r"(?:\nRETEST TECHNIQUE: ([^\n]*))?"
+        r"(?:\nRETEST CONFIDENCE: ([0-9.]+))?"
+        r"(?:\nRETEST REQUESTS ISSUED: (\d+))?"
     )
 
+    def evidence_vector(self):
+        """CVSS v3.1 vector recorded in the evidence (or None)."""
+        m = self._CVSS_VECTOR_RE.search(self.Evidence or "")
+        return m.group(1) if m else None
+
+    def evidence_technique(self):
+        """Detection technique recorded in the evidence (or None)."""
+        m = self._TECHNIQUE_RE.search(self.Evidence or "")
+        return m.group(1).strip() if m else None
+
+    def retest_entries(self):
+        """Parsed RETEST stanzas (oldest first) from the evidence."""
+        entries = []
+        for m in self._RETEST_RE.finditer(self.Evidence or ""):
+            entries.append({
+                "At": m.group(1) + " UTC",
+                "Verdict": m.group(2).strip(),
+                "Message": (m.group(3) or "").strip(),
+                "Technique": (m.group(4) or "").strip() or None,
+                "Confidence": float(m.group(5)) if m.group(5) else None,
+                "RequestsIssued": int(m.group(6)) if m.group(6) else None,
+            })
+        return entries
+
     def to_dict(self, include_vuln=True):
-        evidence_text = self.Evidence or ""
-        vector_match = self._CVSS_VECTOR_RE.search(evidence_text)
-        technique_match = self._TECHNIQUE_RE.search(evidence_text)
-        retests = [
-            {"At": m.group(1) + " UTC", "Verdict": m.group(2).strip()}
-            for m in self._RETEST_RE.finditer(evidence_text)
-        ]
+        retests = self.retest_entries()
         data = {
             "FindingID": self.FindingID,
             "Severity": self.Severity,
@@ -76,10 +98,8 @@ class Finding(db.Model):
                 float(self.Confidence) if self.Confidence is not None else None
             ),
             "Classification": self.classification,
-            "CVSSVector": vector_match.group(1) if vector_match else None,
-            "Technique": (
-                technique_match.group(1).strip() if technique_match else None
-            ),
+            "CVSSVector": self.evidence_vector(),
+            "Technique": self.evidence_technique(),
             "Retests": retests,
             "LatestRetestVerdict": retests[-1]["Verdict"] if retests else None,
             "RequestMethod": self.RequestMethod,

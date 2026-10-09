@@ -762,9 +762,7 @@
                 <span class="chip-mini">Confidence ${f.Confidence != null ? Math.round(Number(f.Confidence) * 100) + '%' : '–'}</span>
                 <span class="chip-mini">Detected ${U.fmtDT(f.DetectedAt)}</span>
               </div>
-              ${(f.Retests || []).length ? `<div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
-                ${f.Retests.map(r => `<span class="badge ${r.Verdict === 'Resolved' ? 'confirmed' : r.Verdict === 'Still Detected' ? 'failed' : 'unclassified'}" title="Verification history">🔁 ${U.esc(r.At)} · ${U.esc(r.Verdict)}</span>`).join('')}
-              </div>` : ''}
+              ${(f.Retests || []).length ? beforeAfterHtml(f) : ''}
               <div class="mono" style="margin:6px 0 4px">${U.esc(f.URL)} ${f.RequestMethod ? '(' + U.esc(f.RequestMethod) + ')' : ''} ${f.Parameter ? '· param ' + U.esc(f.Parameter) : ''}</div>
               ${f.Payload ? `<div style="margin:4px 0"><b>Payload:</b> <span class="mono">${U.esc(f.Payload)}</span></div>` : ''}
               <div class="evidence">${evidenceHtml(f.Evidence || '')}</div>
@@ -807,6 +805,37 @@
   /* Renders stored evidence as escaped text with emphasised section headers. */
   function evidenceHtml(text) {
     return U.esc(text).replace(/^([A-Z][A-Z0-9 /()\-]{2,48}):/gm, '<b>$1:</b>');
+  }
+
+  /* Before/after verification comparison (D2) for re-tested findings. */
+  function beforeAfterHtml(f) {
+    const history = f.Retests || [];
+    const r = history[history.length - 1];
+    const cls = r.Verdict === 'Resolved' ? 'ba-resolved'
+      : r.Verdict === 'Still Detected' ? 'ba-detected' : 'ba-neutral';
+    const badgeCls = r.Verdict === 'Resolved' ? 'confirmed'
+      : r.Verdict === 'Still Detected' ? 'failed' : 'unclassified';
+    const conf = f.Confidence != null ? Math.round(Number(f.Confidence) * 100) + '%' : '–';
+    const retestMeta = [
+      r.Confidence != null ? 'confidence ' + Math.round(Number(r.Confidence) * 100) + '%' : null,
+      r.RequestsIssued != null ? r.RequestsIssued + ' request(s)' : null
+    ].filter(Boolean).join(' · ');
+    return `
+      <div class="ba-grid ${cls}">
+        <div class="ba-col">
+          <div class="ba-title">Original detection</div>
+          <div class="ba-line">${U.esc(f.Classification || '–')} · CVSS ${f.RiskScore != null ? Number(f.RiskScore).toFixed(1) : '–'} · confidence ${conf}</div>
+          <div class="ba-line" style="color:var(--muted)">${U.fmtDT(f.DetectedAt)}${f.Technique ? ' · ' + U.esc(f.Technique) : ''}</div>
+        </div>
+        <div class="ba-arrow">→</div>
+        <div class="ba-col">
+          <div class="ba-title">Latest verification <span style="color:var(--muted);font-weight:400">${U.esc(r.At)}</span></div>
+          <div class="ba-line"><span class="badge ${badgeCls}">${U.esc(r.Verdict)}</span></div>
+          ${retestMeta ? `<div class="ba-line" style="color:var(--muted)">${U.esc(retestMeta)}</div>` : ''}
+          <div class="ba-line" style="color:var(--muted)">${U.esc(r.Message || '')}</div>
+        </div>
+      </div>
+      ${history.length > 1 ? `<div class="ba-history">${history.map(x => `<span class="chip-mini">🔁 ${U.esc(x.At)} · ${U.esc(x.Verdict)}</span>`).join('')}</div>` : ''}`;
   }
 
   function wireFindingRows(box) {

@@ -56,8 +56,10 @@ def build_csv(scan, findings, pages):
         "Finding ID", "Vulnerability", "OWASP Category", "Severity",
         "CVSS Score", "Confidence", "Classification", "Method", "Parameter",
         "Payload", "Status", "URL", "Evidence",
+        "Technique", "CVSS Vector", "Latest Verdict", "Retest Count",
     ])
     for f in findings:
+        retests = f.retest_entries()
         writer.writerow([
             f.FindingID,
             f.vulnerability.Name if f.vulnerability else "",
@@ -72,7 +74,28 @@ def build_csv(scan, findings, pages):
             f.Status,
             f.page.URL if f.page else "",
             (f.Evidence or "").replace("\n", " ")[:1000],
+            f.evidence_technique() or "",
+            f.evidence_vector() or "",
+            retests[-1]["Verdict"] if retests else "",
+            len(retests),
         ])
+    writer.writerow([])
+    writer.writerow(["VERIFICATION (RETESTS)"])
+    writer.writerow([
+        "Finding ID", "Vulnerability", "Parameter", "Checked At", "Verdict",
+        "Confidence", "Requests Issued",
+    ])
+    for f in findings:
+        for r in f.retest_entries():
+            writer.writerow([
+                f.FindingID,
+                f.vulnerability.Name if f.vulnerability else "",
+                f.Parameter or "",
+                r["At"],
+                r["Verdict"],
+                r["Confidence"] if r["Confidence"] is not None else "",
+                r["RequestsIssued"] if r["RequestsIssued"] is not None else "",
+            ])
     return output.getvalue()
 
 
@@ -134,6 +157,107 @@ def build_pdf(scan, findings, pages):
     ]))
     story.append(sum_tbl)
 
+    # --------------------------------------------------------- risk overview
+    story.append(Paragraph("Risk Overview", h2))
+    confirmed = [f for f in findings if f.classification == "Confirmed"]
+    suspected = [f for f in findings if f.classification == "Suspected"]
+    overall = "None"
+    for s in reversed(SEVERITIES):
+        if counts.get(s):
+            overall = s
+            break
+    overview = [
+        f"<b>Overall risk:</b> {overall}",
+        f"<b>Evidence quality:</b> {len(confirmed)} confirmed, "
+        f"{len(suspected)} suspected",
+    ]
+    if findings:
+        top = max(findings, key=lambda f: float(f.RiskScore or 0))
+        overview.append(
+            f"<b>Highest-risk finding:</b> "
+            f"{top.vulnerability.Name if top.vulnerability else 'Finding'} "
+            f"(CVSS {float(top.RiskScore):.1f}) on {top.page.URL if top.page else '-'}"
+        )
+    retested = [f for f in findings if f.retest_entries()]
+    resolved = [f for f in retested if f.retest_entries()[-1]["Verdict"] == "Resolved"]
+    still = [f for f in retested
+             if f.retest_entries()[-1]["Verdict"] == "Still Detected"]
+    if retested:
+        overview.append(
+            f"<b>Verification:</b> {len(retested)} finding(s) re-tested - "
+            f"{len(resolved)} resolved, {len(still)} still detected, "
+            f"{len(retested) - len(resolved) - len(still)} inconclusive/other"
+        )
+    else:
+        overview.append("<b>Verification:</b> no findings have been re-tested yet")
+    for line in overview:
+        story.append(Paragraph(line, small))
+
+    # ------------------------------------------------- methodology & coverage
+    story.append(Paragraph("Methodology and Coverage", h2))
+    profile = scan.scan_profile
+    if profile is not None:
+        story.append(Paragraph(
+            f"<b>Crawl limits:</b> depth up to {profile.MaxDepth}, at most "
+            f"{profile.MaxPages} page(s), at least {profile.RequestDelayMs} ms "
+            "between requests. Only the target's own host is in scope unless "
+            "external links are enabled in the profile.", small))
+    from urllib.parse import parse_qsl, urlparse
+
+    analysed = [p for p in pages if p.HTTPStatus is not None and p.HTTPStatus < 400]
+    skipped = [p for p in pages if p.HTTPStatus is None or p.HTTPStatus >= 400]
+    params = set()
+    for p in analysed:
+        for name, _v in parse_qsl(urlparse(p.URL).query, keep_blank_values=True):
+            params.add(name)
+    story.append(Paragraph(
+        f"<b>Coverage:</b> {len(analysed)} of {len(pages)} discovered page(s) "
+        f"analysed; {len(skipped)} page(s) stored but skipped (non-success "
+        "HTTP status) and not tested.", small))
+    if params:
+        story.append(Paragraph(
+            f"<b>Tested GET query parameters:</b> {', '.join(sorted(params))}", small))
+    techniques = sorted({
+        f.evidence_technique() for f in findings if f.evidence_technique()
+    })
+    if techniques:
+        story.append(Paragraph(
+            f"<b>Detection techniques used:</b> {', '.join(techniques)}", small))
+    story.append(Paragraph("<b>Limitations:</b>", small))
+    for limitation in (
+        "POST/PUT/DELETE request bodies and form submissions are not tested.",
+        "JavaScript is not executed, so script-rendered content is not analysed.",
+        "Authenticated or login-protected pages are not tested.",
+        "Only GET query-string parameters are fuzzed (no headers, cookies or JSON bodies).",
+        "Time-based blind SQL injection runs only when enabled by the operator.",
+    ):
+        story.append(Paragraph(f"- {limitation}", small))
+
+    # --------------------------------------------------------- verification
+    if retested:
+        story.append(Paragraph("Verification (Retests)", h2))
+        vdata = [["Finding", "Parameter", "Verdict", "Checked At",
+                  "Confidence", "Requests"]]
+        for f in retested:
+            for r in f.retest_entries():
+                vdata.append([
+                    f.vulnerability.Name if f.vulnerability else "-",
+                    f.Parameter or "-",
+                    r["Verdict"],
+                    r["At"],
+                    f"{r['Confidence'] * 100:.0f}%" if r["Confidence"] is not None else "-",
+                    r["RequestsIssued"] if r["RequestsIssued"] is not None else "-",
+                ])
+        vt = Table(vdata, colWidths=[45 * mm, 30 * mm, 28 * mm, 32 * mm, 20 * mm, 15 * mm])
+        vt.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0B2447")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+            ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        story.append(vt)
+
     # Findings
     story.append(Paragraph(f"Findings ({len(findings)})", h2))
     if findings:
@@ -180,6 +304,23 @@ def build_pdf(scan, findings, pages):
                 f"<b>Evidence class:</b> {f.classification} "
                 f"(CVSS {risk}, confidence {conf})"
             )
+            if f.evidence_vector():
+                detail.append(f"<b>CVSS Vector:</b> {f.evidence_vector()}")
+            if f.evidence_technique():
+                detail.append(f"<b>Detection technique:</b> {f.evidence_technique()}")
+            for r in f.retest_entries():
+                conf_str = (
+                    f", confidence {r['Confidence'] * 100:.0f}%"
+                    if r["Confidence"] is not None else ""
+                )
+                req_str = (
+                    f", {r['RequestsIssued']} request(s)"
+                    if r["RequestsIssued"] is not None else ""
+                )
+                detail.append(
+                    f"<b>Retest {r['At']}:</b> {r['Verdict']}"
+                    f"{conf_str}{req_str} - {r['Message']}"
+                )
             if f.vulnerability:
                 if f.vulnerability.Description:
                     detail.append(f"<b>Description:</b> {f.vulnerability.Description}")

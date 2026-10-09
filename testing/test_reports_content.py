@@ -37,7 +37,14 @@ def test_csv_contains_real_findings(client, dev_token, target):
 
     # The FINDINGS section must have exactly one row per finding.
     finding_header = next(i for i, r in enumerate(rows) if r and r[0] == "Finding ID")
-    finding_rows = [r for r in rows[finding_header + 1:] if r and r[0].strip().isdigit()]
+    section_start = finding_header + 1
+    section_end = next(
+        (i for i, r in enumerate(rows[section_start:], start=section_start)
+         if r and r[0] == "VERIFICATION (RETESTS)"),
+        len(rows),
+    )
+    finding_rows = [r for r in rows[section_start:section_end]
+                    if r and r[0].strip().isdigit()]
     assert len(finding_rows) == detail["FindingCount"] >= 1
 
     # Real finding content: a vulnerability name and its location appear.
@@ -46,16 +53,61 @@ def test_csv_contains_real_findings(client, dev_token, target):
     assert sample["URL"] in flat
     assert sample["Severity"] in flat
 
-    # CVSS, classification and OWASP category are reported.
+    # CVSS, classification, OWASP category and the enhancement columns.
     header = rows[finding_header]
     assert "CVSS Score" in header
     assert "Classification" in header
     assert "OWASP Category" in header
+    assert "Technique" in header
+    assert "CVSS Vector" in header
+    assert "Latest Verdict" in header
+    assert "Retest Count" in header
     assert sample["Classification"] in flat
     assert str(sample["RiskScore"]) in flat
+    # the enhancement evidence fields are exported per finding
+    assert sample["Technique"] in flat
+    assert sample["CVSSVector"] in flat
 
     # Discovered pages are also reported.
     assert any(p["URL"] in flat for p in detail["Pages"])
+
+    # A verification section exists (empty until a retest happens).
+    assert section_end < len(rows), "VERIFICATION (RETESTS) section missing"
+
+
+def test_reports_include_retest_results(client, dev_token, target):
+    """After a retest, both reports carry the verification outcome (E1/D2)."""
+    scan_id, detail = _run_scan(client, dev_token, target)
+    sqli = next(f for f in detail["Findings"]
+                if f["VulnerabilityName"] == "SQL Injection"
+                and "/product" in f["URL"])
+    retest = client.post(
+        f"/api/scans/{scan_id}/findings/{sqli['FindingID']}/retest",
+        headers=auth(dev_token), json={})
+    assert retest.status_code == 200
+    verdict = retest.get_json()["Retest"]["Verdict"]
+    assert verdict == "Still Detected"
+
+    # CSV: per-finding verdict column + a verification row
+    resp = client.get(f"/api/scans/{scan_id}/report?format=csv", headers=auth(dev_token))
+    rows = list(csv.reader(io.StringIO(resp.data.decode("utf-8-sig"))))
+    vh = next(i for i, r in enumerate(rows) if r and r[0] == "VERIFICATION (RETESTS)")
+    vrows = [r for r in rows[vh + 1:] if r and r[0].strip().isdigit()]
+    assert len(vrows) == 1
+    assert vrows[0][4] == "Still Detected"
+
+    # PDF: verification + methodology sections and the verdict text
+    resp = client.get(f"/api/scans/{scan_id}/report?format=pdf", headers=auth(dev_token))
+    doc = _pdf.open(stream=resp.data, filetype="pdf")
+    try:
+        text = "\n".join(page.get_text() for page in doc)
+    finally:
+        doc.close()
+    assert "Risk Overview" in text
+    assert "Methodology and Coverage" in text
+    assert "Verification (Retests)" in text
+    assert "Still Detected" in text
+    assert "CVSS Vector:" in text
 
 
 def test_pdf_contains_real_scan_data(client, dev_token, target):

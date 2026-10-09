@@ -51,8 +51,14 @@ def test_retest_still_detected(client, dev_token, target):
     assert updated["Status"] == "Open"
     assert "RETEST" in updated["Evidence"]
     assert "re-opened" in updated["Evidence"]
-    # additive API keys expose the verification history
+    # additive API keys expose the verification history (with parsed detail)
     assert updated["Retests"] and updated["Retests"][-1]["Verdict"] == "Still Detected"
+    entry = updated["Retests"][-1]
+    assert entry["At"].endswith("UTC")
+    assert entry["Message"]
+    assert entry["Confidence"] is not None
+    assert entry["RequestsIssued"] > 0
+    assert entry["Technique"]
     assert updated["LatestRetestVerdict"] == "Still Detected"
 
 
