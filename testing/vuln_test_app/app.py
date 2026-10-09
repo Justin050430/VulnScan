@@ -214,6 +214,82 @@ def flaky_error():
     )
 
 
+@app.route("/error_cond")
+def error_cond():
+    """
+    Conditional-error SQLi control: the response fails with a database error
+    ONLY when the injected CASE condition is true (simulates a DB engine
+    evaluating attacker-controlled SQL logic).
+    """
+    idv = request.args.get("id", "")
+    if "and 1=case when 1=1 then 1/0" in idv.lower():
+        return (
+            "<!doctype html><html><head><title>Server error</title></head><body>"
+            "<h1>Application error</h1>"
+            "<p>Divide by zero error encountered.</p>"
+            "</body></html>",
+            500,
+        )
+    safe = _html_escape(idv)
+    return (
+        "<!doctype html><html><head><title>Item lookup</title></head><body>"
+        f"<h1>Item lookup</h1><p>Query: {safe}</p>"
+        "</body></html>"
+    )
+
+
+@app.route("/attr_reflect")
+def attr_reflect():
+    """Reflected XSS: raw echo inside a double-quoted attribute value."""
+    q = request.args.get("q", "")
+    return (
+        "<!doctype html><html><head><title>Attribute reflection</title></head>"
+        "<body><h1>Profile</h1>"
+        f'<input type="text" name="nickname" value="{q}">'
+        "</body></html>"
+    )
+
+
+@app.route("/attr_safe")
+def attr_safe():
+    """Control page: attribute value safely encoded (no XSS)."""
+    q = _html_escape(request.args.get("q", ""))
+    return (
+        "<!doctype html><html><head><title>Attribute reflection</title></head>"
+        "<body><h1>Profile</h1>"
+        f'<input type="text" name="nickname" value="{q}">'
+        "</body></html>"
+    )
+
+
+@app.route("/attr_events")
+def attr_events():
+    """
+    Reflected XSS with angle brackets encoded but quotes raw: the
+    attribute-injection / event-handler payload path must still be detected.
+    """
+    q = request.args.get("q", "")
+    encoded = q.replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        "<!doctype html><html><head><title>Attribute reflection</title></head>"
+        "<body><h1>Profile</h1>"
+        f'<input type="text" name="nickname" value="{encoded}">'
+        "</body></html>"
+    )
+
+
+@app.route("/script_reflect")
+def script_reflect():
+    """Reflected XSS: raw echo inside a <script> string literal."""
+    q = request.args.get("q", "")
+    return (
+        "<!doctype html><html><head><title>Script reflection</title></head>"
+        "<body><h1>Greeting</h1>"
+        f"<script>var greeting = \"{q}\";</script>"
+        "</body></html>"
+    )
+
+
 @app.route("/external-link")
 def external_link():
     """Page containing a link to an out-of-scope host (scope test)."""

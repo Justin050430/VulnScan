@@ -258,3 +258,30 @@ implemented, tested and committed:
   `test_error_based_evidence_contains_reproducibility_and_vector` and
   `test_unreproduced_error_signature_is_suspected` (backed by the new
   controlled endpoint `/flaky_error` in `testing/vuln_test_app`).
+
+### Second increment (A2 + A4) — 2026-10-09
+
+- **Conditional-error SQLi (A2).** A payload pair that triggers a database
+  error only when an injected condition is true (`... AND 1=CASE WHEN 1=1
+  THEN 1/0 ELSE 1 END--` vs the `1=2` variant) proves the database evaluated
+  attacker-controlled SQL logic. Only the true variant may produce a matched
+  error signature (the false variant must not), the error must be absent from
+  the baseline and must reproduce; read-only, no data extraction.
+  Evidence class CONFIRMED (confidence 0.90, CVSS 9.8); runs between the
+  error-based and boolean passes so the strongest available evidence wins.
+- **Context-aware XSS analysis (A4).** New module
+  `backend/app/scanner/html_context.py` parses the response structure
+  (tags, attribute values, raw-text blocks, comments) and classifies every
+  raw reflection: HTML text (executable when it can open markup), attribute
+  values (executable only on a proven breakout, or a `javascript:` URL
+  attribute), `<script>` blocks (executable only with a terminator + new
+  markup; otherwise SUSPECTED 0.55), comments and raw-text elements
+  (inert). Payloads added for attribute/event-handler and script-terminator
+  breakouts. A reflection that cannot be shown to be executable is no longer
+  reported (removes attribute-context false positives).
+- **Controlled endpoints added:** `/error_cond`, `/attr_reflect`,
+  `/attr_safe`, `/attr_events`, `/script_reflect`.
+- **Verification** — 5 new tests (conditional error confirmed; attribute
+  breakout confirmed; event-handler injection confirmed with angle brackets
+  encoded; script terminator breakout confirmed; encoded attribute control
+  stays clean). Full suite: **129 passed**.

@@ -27,6 +27,12 @@ response -> classify):
    pages that merely echo the payload are not reported.  Findings from this
    technique are explicitly labelled SUSPECTED and carry low confidence.
 
+3. **Conditional-error (confirmed, high confidence).**
+   A payload that provokes a database error *only when an injected condition
+   is true* is compared with its logically-false counterpart.  When only the
+   true variant produces a database error (and it reproduces), the database
+   has evaluated the injected condition - direct evidence of SQL execution.
+
 Only safe, read-only payloads are used (no stacked queries, no writes).
 """
 import logging
@@ -45,6 +51,9 @@ CVSS_BOOLEAN_SUSPECTED = "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N"  # 5.9 M
 
 # Detection technique labels (stored with every finding's evidence).
 TECHNIQUE_ERROR_BASED = "error-based (SQL metacharacter triggers a database error)"
+TECHNIQUE_CONDITIONAL_ERROR = (
+    "conditional error (error occurs only when the injected condition is true)"
+)
 TECHNIQUE_BOOLEAN_DIFFERENTIAL = "boolean differential (true/false responses compared)"
 
 REFERENCES = (
@@ -74,6 +83,12 @@ ERROR_PAYLOADS = [
 TRUE_SUFFIX = " AND '1'='1"
 FALSE_SUFFIX = " AND '1'='2"
 
+# Conditional-error payload pair: the true variant evaluates 1/0 (dividing by
+# zero is a database error on Microsoft SQL Server and PostgreSQL), the false
+# variant does not.  Read-only: no data is read, written or returned.
+CONDITIONAL_TRUE_SUFFIX = " AND 1=CASE WHEN 1=1 THEN 1/0 ELSE 1 END--"
+CONDITIONAL_FALSE_SUFFIX = " AND 1=CASE WHEN 1=2 THEN 1/0 ELSE 1 END--"
+
 # Signatures commonly present when a DB engine reports an error.
 SQL_ERROR_SIGNATURES = (
     "sql syntax",
@@ -95,6 +110,8 @@ SQL_ERROR_SIGNATURES = (
     "quoted string not properly terminated",
     "unknown column",
     "at line 1",
+    "divide by zero",
+    "division by zero",
 )
 
 # Differential thresholds (documented, conservative).
@@ -121,6 +138,10 @@ class SQLInjectionModule(DetectionModule):
             confirmed = self._error_based(name, baseline, value)
             if confirmed is not None:
                 results.append(confirmed)
+                continue
+            conditional = self._conditional_error(name, baseline, value)
+            if conditional is not None:
+                results.append(conditional)
                 continue
             suspected = self._boolean_differential(name, value)
             if suspected is not None:
@@ -261,6 +282,79 @@ class SQLInjectionModule(DetectionModule):
             if signature in body_lower:
                 return signature
         return None
+
+    # ---------------------------------------------------------- conditional
+    def _conditional_error(self, param_name, baseline, original_value):
+        true_payload = f"{original_value}{CONDITIONAL_TRUE_SUFFIX}"
+        false_payload = f"{original_value}{CONDITIONAL_FALSE_SUFFIX}"
+        baseline_lower = (baseline.text or "").lower()
+
+        true_resp = self.http.get(self._build_url(param_name, true_payload))
+        if not true_resp.ok:
+            return None
+        signature = self._matched_signature((true_resp.text or "").lower())
+        if not signature or signature in baseline_lower:
+            return None
+
+        false_resp = self.http.get(self._build_url(param_name, false_payload))
+        if not false_resp.ok:
+            return None
+        if self._matched_signature((false_resp.text or "").lower()):
+            return None
+
+        repeat = self.http.get(self._build_url(param_name, true_payload))
+        if (
+            not repeat.ok
+            or self._matched_signature((repeat.text or "").lower()) != signature
+        ):
+            return None
+
+        return self._scored_result(
+            CVSS_ERROR_BASED,
+            0.90,
+            parameter=param_name,
+            payload=true_payload,
+            technique=TECHNIQUE_CONDITIONAL_ERROR,
+            evidence=self._conditional_evidence(
+                param_name, true_payload, false_payload, signature,
+                baseline, true_resp, false_resp,
+            ),
+            detail=(
+                "Conditional-error SQL injection. A database error appeared "
+                "only when the injected condition was true, showing that the "
+                "database evaluated attacker-controlled SQL logic."
+            ),
+        )
+
+    def _conditional_evidence(self, param_name, true_payload, false_payload,
+                              signature, baseline, true_resp, false_resp):
+        return "\n".join([
+            f"CONFIRMED: a database error signature '{signature}' appeared when "
+            f"the injected condition was true, but not when it was false "
+            f"(parameter '{param_name}'); the error reproduced on the repeated "
+            f"true-condition request.",
+            "",
+            f"BASELINE REQUEST: GET {self.page.url} -> HTTP "
+            f"{baseline.status_code}; database-error signature absent",
+            f"TRUE CONDITION: GET {self._build_url(param_name, true_payload)} -> "
+            f"HTTP {true_resp.status_code}; matched signature '{signature}'",
+            f"FALSE CONDITION: GET {self._build_url(param_name, false_payload)} -> "
+            f"HTTP {false_resp.status_code}; no database-error signature",
+            "REPRODUCIBILITY: true-condition error reproduced on 2/2 identical "
+            "requests",
+            "WHY THIS INDICATES SQL INJECTION: the two requests differ only in "
+            "the truth value of an injected SQL condition, and the error is a "
+            "side effect of the database evaluating that condition.",
+            "ALTERNATIVE EXPLANATIONS / LIMITATIONS: only read-only conditions "
+            "are used and no data was extracted; the technique assumes the "
+            "application concatenates the input into a SQL statement; manual "
+            "verification is recommended to confirm exploitability.",
+            "REMEDIATION: use parameterised queries / prepared statements; "
+            "validate and type-check input server-side; apply least-privilege "
+            "database accounts; do not expose database error messages.",
+            f"REFERENCES: {REFERENCES}",
+            "VERIFICATION: Not retested yet.",
+        ])
 
     # ------------------------------------------------------------ evidence
     @staticmethod

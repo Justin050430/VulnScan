@@ -202,3 +202,73 @@ def test_unreproduced_error_signature_is_suspected(client, dev_token, target):
     assert finding["Confidence"] < 0.8
     assert "did NOT reproduce" in finding["Evidence"]
     assert finding["CVSSVector"] == "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+
+
+# --------------------------------------------------------------------------
+# A2 (enhancement): conditional-error SQLi probe
+# --------------------------------------------------------------------------
+def test_conditional_error_sqli_is_confirmed(client, dev_token, target):
+    """An error that occurs only for the true condition proves SQL evaluation."""
+    detail = _scan_target(client, dev_token, target + "error_cond?id=1",
+                          "OWASP Top 10 Full Scan")
+    sqli = [f for f in detail["Findings"]
+            if f["VulnerabilityName"] == "SQL Injection"]
+    assert sqli, "conditional-error SQLi should be detected"
+    finding = sqli[0]
+    assert finding["Classification"] == "Confirmed"
+    assert finding["Confidence"] >= 0.8
+    assert "conditional error" in (finding["Technique"] or "")
+    assert "TRUE CONDITION:" in finding["Evidence"]
+    assert "FALSE CONDITION:" in finding["Evidence"]
+    assert "reproduced on 2/2 identical requests" in finding["Evidence"]
+
+
+# --------------------------------------------------------------------------
+# A4 (enhancement): XSS context-aware reflection analysis
+# --------------------------------------------------------------------------
+def _xss_findings(detail):
+    return [f for f in detail["Findings"]
+            if f["VulnerabilityName"] == "Cross-Site Scripting (XSS)"]
+
+
+def test_attribute_breakout_xss_is_confirmed(client, dev_token, target):
+    """A breakout from a quoted attribute value into markup is executable."""
+    detail = _scan_target(client, dev_token, target + "attr_reflect?q=x",
+                          "Quick Scan")
+    xss = _xss_findings(detail)
+    assert xss, "attribute breakout XSS should be detected"
+    finding = xss[0]
+    assert finding["Classification"] == "Confirmed"
+    assert "attribute" in finding["Evidence"]
+    assert "breaks out" in finding["Evidence"]
+    assert "REFLECTION CONTEXT:" in finding["Evidence"]
+
+
+def test_event_attribute_injection_is_confirmed(client, dev_token, target):
+    """Angle brackets encoded, quotes raw: event-handler injection still works."""
+    detail = _scan_target(client, dev_token, target + "attr_events?q=x",
+                          "Quick Scan")
+    xss = _xss_findings(detail)
+    assert xss, "event-handler attribute injection should be detected"
+    finding = xss[0]
+    assert finding["Classification"] == "Confirmed"
+    assert "event-handler" in finding["Evidence"]
+
+
+def test_script_context_breakout_is_confirmed(client, dev_token, target):
+    """A payload that closes the <script> element and opens markup executes."""
+    detail = _scan_target(client, dev_token, target + "script_reflect?q=x",
+                          "Quick Scan")
+    xss = _xss_findings(detail)
+    assert xss, "script-context breakout should be detected"
+    finding = xss[0]
+    assert finding["Classification"] == "Confirmed"
+    assert "script" in finding["Evidence"]
+
+
+def test_encoded_attribute_value_is_not_flagged(client, dev_token, target):
+    """Encoding both quotes and brackets keeps attribute reflections inert."""
+    detail = _scan_target(client, dev_token, target + "attr_safe?q=x",
+                          "Quick Scan")
+    assert not _xss_findings(detail), \
+        "safely encoded attribute reflection must not be reported"

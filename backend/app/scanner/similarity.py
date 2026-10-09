@@ -48,6 +48,10 @@ _NON_EXECUTABLE_ELEMENTS = ("textarea", "title", "xmp", "noscript", "template")
 
 def is_executable_reflection(body, payload):
     """
+    Superseded by `app.scanner.html_context.classify_reflection`, which
+    performs full context classification (attribute values, script blocks,
+    breakout detection).  Kept for backwards compatibility.
+
     Return True only when the reflected payload sits in an executable HTML
     context.  Un-encoded reflection inside an HTML comment, <textarea>,
     <title>, <xmp>, <noscript> or <template> is not executable and must not
