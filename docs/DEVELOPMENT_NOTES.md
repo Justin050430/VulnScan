@@ -364,3 +364,43 @@ implemented, tested and committed:
   live stage/counters after completion, progress access control, coverage
   fields, and the skip path (a 404 start page is stored, skipped and
   disclosed). Full suite: **138 passed**.
+
+### Sixth increment (C1 + C2) — 2026-10-09
+
+- **Live scan monitor (C1, `static/js/views.js` + `static/css/style.css`).**
+  While a scan runs, the result page polls `GET /api/scans/<id>/progress`
+  every 2.5 s and updates a dedicated panel in place:
+  stage text (`queued → crawling → analysing → finalising`), elapsed time,
+  progress bar (pages analysed / found), findings count, HTTP requests
+  issued and per-module finding counts.  The panel is `aria-live="polite"`.
+  A full page re-render only happens when the visible counts change or the
+  scan reaches a terminal state, so findings filters and expanded rows are
+  no longer torn down on every poll.  Honest fallback: when
+  `LiveAvailable` is false (scan started before a restart / handled by
+  another worker) the panel says so explicitly and never fabricates request
+  counts.
+- **Findings explorer upgrades (C2).** New filters (classification,
+  detection technique - populated from the findings' parsed `Technique`
+  values), search now also matches technique text, and grouping modes
+  (`Group: Vulnerability` / `Group: Page`) render collapsible sections with
+  finding counts, location counts, worst severity and confirmed/suspected
+  tallies.  The finding detail pane now shows the detection-technique badge,
+  the raw CVSS v3.1 vector (from the additive `CVSSVector` key), confidence
+  percentage and detection time; stored evidence is rendered with its
+  section headers bolded (`CONFIRMED:`, `BASELINE REQUEST:`, `WHY ...`,
+  `REMEDIATION:`, `REFERENCES:`, ...) so the proof structure is visible at
+  a glance.
+- No backend or schema changes were needed: this increment consumes the B1
+  progress endpoint, the B2 coverage keys and the parsed evidence fields
+  added by earlier increments.
+- **Verification** — frontend behaviour verified against the local
+  deployment (scan 17 against the controlled vulnerable app): live updates
+  observed as `Queued → Analysing`, counters climbing
+  (`0/0 → 1/9 → 2/9` pages, `5 → 11` findings, `13 → 51` requests), panel
+  replaced by the final render on completion; technique filter lists 4
+  techniques; `Suspected` filter isolates the 1 differential SQLi finding;
+  vulnerability grouping shows
+  `SQL Injection 3 findings · 3 locations · Critical · 2 confirmed · 1 suspected`;
+  detail pane shows the technique badge, `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`
+  and bolded evidence sections. Full test suite: **138 passed** (no Python
+  changes in this increment).

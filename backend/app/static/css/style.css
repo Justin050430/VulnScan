@@ -242,3 +242,24 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .kv .k { color: var(--muted); }
 .chip-mini { padding: 2px 8px; background: #f1f5f9; border-radius: 6px; font-size: 11.5px; color: #475569; }
 .status-select { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); font-size: 12.5px; }
+
+/* Live scan monitor (C1) */
+.live-panel { margin-bottom: 16px; }
+.live-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--blue-600); margin-right: 8px; animation: livepulse 1.2s ease-in-out infinite; }
+@keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+.live-stage { font-weight: 600; margin-top: 10px; font-size: 13.5px; }
+.live-bar { height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin: 10px 0 12px; }
+.live-bar-fill { height: 100%; width: 0; background: var(--blue-600); border-radius: 999px; transition: width .4s ease; }
+.live-counters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.live-counters .val { font-size: 20px; font-weight: 700; }
+.live-counters .lbl { font-size: 11.5px; color: var(--muted); }
+.live-modules { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+.live-errors { margin-top: 8px; font-size: 12.5px; color: var(--red); }
+.live-fallback { margin-top: 10px; font-size: 12.5px; color: #92400e; background: var(--amber-bg); border-radius: 8px; padding: 8px 10px; }
+
+/* Findings explorer grouping (C2) */
+.f-group { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; padding: 0 12px 4px; background: #fff; }
+.f-group > summary { cursor: pointer; padding: 11px 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.f-group > summary .g-title { font-weight: 700; }
+.f-group > summary .g-meta { color: var(--muted); font-size: 12px; }
+.f-group[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 8px; }

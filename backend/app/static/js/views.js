@@ -8,6 +8,9 @@
   const _pollTimers = [];
   let _pollTimer = null;
   let _pollBusy = false;
+  /* Counts currently shown on the scan result page; used by the live poller to
+     decide when a full re-render is actually needed. */
+  let _rendered = { id: null, findings: 0, pages: 0 };
   function clearTimers() {
     _pollTimers.forEach(t => clearInterval(t));
     _pollTimers.length = 0;
@@ -31,6 +34,85 @@
 
   async function apiGetJson(path, params) {
     return await API.get(path, params);
+  }
+
+  /* ---------------------------------------------------------------- live scan
+     monitor (C1): consumes GET /api/scans/<id>/progress and renders only what
+     the server can actually measure - unmeasurable values stay "-". */
+  const TERMINAL_STATUSES = ['Completed', 'Failed', 'Cancelled'];
+  const STAGE_TEXT = {
+    queued: 'Queued — waiting for the scan worker',
+    crawling: 'Crawling the target — discovering pages',
+    analysing: 'Analysing pages — running detection modules',
+    finalising: 'Finalising — persisting results',
+    completed: 'Completed',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+    pending: 'Queued — waiting for the scan worker',
+    running: 'Running'
+  };
+
+  function fmtElapsed(sec) {
+    if (sec === null || sec === undefined) return '–';
+    const s = Math.max(0, Math.floor(Number(sec)));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+    return (h ? h + 'h ' : '') + (h || m ? m + 'm ' : '') + ss + 's';
+  }
+
+  function livePanelHtml(p) {
+    p = p || {};
+    return `
+      <div class="card card-pad live-panel" id="live-panel" aria-live="polite" aria-busy="true">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h3 style="margin:0"><span class="live-dot"></span> Live Scan Progress</h3>
+          <span class="mono" style="color:var(--muted)" data-live="elapsed">${U.esc(fmtElapsed(p.ElapsedSeconds))}</span>
+        </div>
+        <div class="live-stage" data-live="stage">${U.esc(STAGE_TEXT[p.Stage] || 'Starting…')}</div>
+        <div class="live-bar" role="progressbar" aria-label="Pages analysed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="live-bar-fill" data-live="bar-fill"></div></div>
+        <div class="live-counters">
+          <div><div class="val" data-live="pages">–</div><div class="lbl">Pages analysed / found</div></div>
+          <div><div class="val" data-live="findings">–</div><div class="lbl">Findings so far</div></div>
+          <div><div class="val" data-live="requests">–</div><div class="lbl">HTTP requests issued</div></div>
+        </div>
+        <div class="live-modules" data-live="by-module"></div>
+        <div class="live-errors" data-live="errors" style="display:none"></div>
+        <div class="live-fallback" data-live="fallback" style="display:none">
+          ⚠ Live telemetry is unavailable for this scan (started before the last server restart, or handled by another
+          worker). Counters shown are read from the database; request counts cannot be measured retroactively.
+        </div>
+      </div>`;
+  }
+
+  function updateLivePanel(el, p) {
+    if (!p) return;
+    const panel = el.querySelector('#live-panel');
+    if (!panel) return;
+    const set = (key, text) => {
+      const n = panel.querySelector(`[data-live="${key}"]`);
+      if (n) n.textContent = text;
+    };
+    set('stage', STAGE_TEXT[p.Stage] || p.Stage || 'Running');
+    set('elapsed', fmtElapsed(p.ElapsedSeconds));
+    set('pages', (p.PagesAnalysed == null ? '–' : p.PagesAnalysed) + ' / ' + (p.PagesFound == null ? '–' : p.PagesFound));
+    set('findings', p.FindingCount == null ? '–' : String(p.FindingCount));
+    set('requests', p.RequestsIssued == null ? '–' : String(p.RequestsIssued));
+    const byModule = (p.FindingsByModule || []).map(m => U.esc(m.Name) + ': ' + m.Count).join(' · ');
+    set('by-module', byModule ? 'Findings by module — ' + byModule : '');
+    const pct = (p.PagesFound && p.PagesAnalysed != null)
+      ? Math.max(0, Math.min(100, Math.round(p.PagesAnalysed / p.PagesFound * 100))) : 0;
+    const fill = panel.querySelector('[data-live="bar-fill"]');
+    if (fill) fill.style.width = pct + '%';
+    const bar = panel.querySelector('.live-bar');
+    if (bar) bar.setAttribute('aria-valuenow', String(pct));
+    const errs = panel.querySelector('[data-live="errors"]');
+    if (errs) {
+      const list = p.Errors || [];
+      errs.style.display = list.length ? '' : 'none';
+      errs.innerHTML = list.map(e => `<div>⚠ module error: ${U.esc(e)}</div>`).join('');
+    }
+    const fb = panel.querySelector('[data-live="fallback"]');
+    if (fb) fb.style.display = (p.LiveAvailable === false) ? '' : 'none';
+    panel.setAttribute('aria-busy', TERMINAL_STATUSES.includes(p.Status) ? 'false' : 'true');
   }
 
   /* ============================================================ LOGIN */
@@ -395,30 +477,39 @@
 
   /* ============================================================ SCAN RESULT */
   /**
-   * Poll a running scan until it reaches a terminal state.  The poller owns
-   * its own scheduling and survives transient fetch/render errors, so the
-   * result page always refreshes to the final state.
+   * While a scan is running, poll the live progress endpoint (B1) and update
+   * the monitor in place.  A full re-render only happens when the visible
+   * counts change or the scan reaches a terminal state, so the page (and any
+   * active filters) are not torn down on every tick.  Transient fetch or
+   * render errors must never stop the refresh loop.
    */
   function startPolling(el, id) {
     if (_pollTimer) return;
     _pollTimer = setInterval(async () => {
       if (_pollBusy) return;
       _pollBusy = true;
-      let stillRunning = true;
       try {
-        const d = (await apiGetJson('/api/scans/' + id)).Scan;
-        stillRunning = (d.Status === 'Running' || d.Status === 'Pending');
+        let p = null;
+        try {
+          const body = await apiGetJson('/api/scans/' + id + '/progress');
+          p = body && body.Progress;
+        } catch (e) { p = null; }
+        if (p) {
+          updateLivePanel(el, p);
+          const terminal = TERMINAL_STATUSES.includes(p.Status);
+          const countsChanged = (p.FindingCount != null && p.FindingCount !== _rendered.findings)
+            || (p.PageCount != null && p.PageCount !== _rendered.pages);
+          if (terminal || countsChanged) {
+            if (terminal) clearTimers();
+            await scanResult(el, { id: String(id) });
+          }
+        }
       } catch (e) {
-        stillRunning = true; // transient - retry on next tick
+        // transient - retry on next tick
+      } finally {
+        _pollBusy = false;
       }
-      if (!stillRunning) { clearTimers(); }
-      try {
-        await scanResult(el, { id: id });
-      } catch (e) {
-        // A render error must not permanently stop the refresh loop.
-      }
-      _pollBusy = false;
-    }, 3000);
+    }, 2500);
   }
 
   async function scanResult(el, params) {
@@ -440,6 +531,13 @@
     const duration = scanDuration(scan.StartedAt, scan.FinishedAt, scan.Status);
     const isRunning = scan.Status === 'Running' || scan.Status === 'Pending';
     const riskColor = (scan.OverallRisk || 'None').toLowerCase();
+    let progress = null;
+    if (isRunning) {
+      try {
+        const body = await apiGetJson('/api/scans/' + id + '/progress');
+        progress = body && body.Progress;
+      } catch (e) { progress = null; }
+    }
     el.innerHTML = `
       <div class="page-head"><div class="row"><div><h1>Scan Result</h1>
         <div class="sub">${U.esc(scan.ScanName)} &nbsp;|&nbsp; <span class="mono">${U.esc(scan.TargetURL)}</span></div></div>
@@ -448,7 +546,8 @@
           <button class="btn btn-secondary" id="dl-csv">⬇ CSV</button>
           <button class="btn btn-primary" style="width:auto" id="dl-pdf">⬇ Download PDF Report</button>
         </div></div></div>
-      <div class="grid-cards">
+        ${isRunning ? livePanelHtml(progress) : ''}
+        <div class="grid-cards">
         <div class="card stat-card">${ic('🎯', riskColor === 'critical' ? 'ib-red' : riskColor === 'high' ? 'ib-red' : 'ib-amber')}
           <div><div class="val risk-tag">${U.esc(scan.OverallRisk || 'None')}</div><div class="lbl">Overall Risk</div></div></div>
         <div class="card stat-card">${ic('🪲','ib-purple')}
@@ -462,12 +561,15 @@
         <div class="card card-pad">
           <div class="row" style="margin-bottom:8px">
             <h3 style="margin:0">Findings</h3>
-            ${isRunning ? '<span class="badge running">Scanning… refresh to update</span>' : ''}
+            ${isRunning ? '<span class="badge running">Live — updates automatically</span>' : ''}
           </div>
           <div class="toolbar">
-            <input type="search" class="grow" id="f-search" placeholder="Search vulnerability…"/>
+            <input type="search" class="grow" id="f-search" placeholder="Search vulnerability, URL or technique…"/>
             <select id="f-sev"><option value="">Severity: All</option>${SEV_ORDER.slice(1).map(s => `<option>${s}</option>`).join('')}</select>
+            <select id="f-class"><option value="">Classification: All</option><option>Confirmed</option><option>Suspected</option><option>Unclassified</option></select>
+            <select id="f-tech"><option value="">Technique: All</option></select>
             <select id="f-status"><option value="">Status: All</option><option>Open</option><option>Resolved</option><option>False Positive</option></select>
+            <select id="f-group"><option value="">Group: None</option><option value="vuln">Group: Vulnerability</option><option value="page">Group: Page</option></select>
             <button class="btn btn-sm btn-secondary" id="f-reset">Reset</button>
           </div>
           <div id="findings-box">${U.loading()}</div>
@@ -498,29 +600,51 @@
       </div>`;
     drawDonut('sev-canvas', counts);
     bindFindings(el.querySelector('#findings-box'), findings, id, { open, resolved, falsePos });
+    const techSel = el.querySelector('#f-tech');
+    [...new Set(findings.map(f => f.Technique).filter(Boolean))].sort().forEach(t => {
+      const o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      techSel.appendChild(o);
+    });
     el.querySelector('#f-search').addEventListener('input', debounce(() => renderFiltered(), 300));
     el.querySelector('#f-sev').addEventListener('change', renderFiltered);
+    el.querySelector('#f-class').addEventListener('change', renderFiltered);
+    el.querySelector('#f-tech').addEventListener('change', renderFiltered);
     el.querySelector('#f-status').addEventListener('change', renderFiltered);
+    el.querySelector('#f-group').addEventListener('change', renderFiltered);
     el.querySelector('#f-reset').addEventListener('click', () => {
       el.querySelector('#f-search').value = '';
       el.querySelector('#f-sev').value = '';
+      el.querySelector('#f-class').value = '';
+      el.querySelector('#f-tech').value = '';
       el.querySelector('#f-status').value = '';
+      el.querySelector('#f-group').value = '';
       renderFiltered();
     });
     function currentFilters() {
       return {
         q: el.querySelector('#f-search').value.trim().toLowerCase(),
         sev: el.querySelector('#f-sev').value,
-        status: el.querySelector('#f-status').value
+        cls: el.querySelector('#f-class').value,
+        tech: el.querySelector('#f-tech').value,
+        status: el.querySelector('#f-status').value,
+        group: el.querySelector('#f-group').value
       };
     }
     function renderFiltered() {
       const box = el.querySelector('#findings-box');
       const f = currentFilters();
       const filtered = findings.filter(x =>
-        (!f.q || (x.VulnerabilityName || '').toLowerCase().includes(f.q) || (x.URL || '').toLowerCase().includes(f.q)) &&
-        (!f.sev || x.Severity === f.sev) && (!f.status || x.Status === f.status));
-      box.innerHTML = findingsTable(filtered, id, null);
+        (!f.q || (x.VulnerabilityName || '').toLowerCase().includes(f.q) ||
+          (x.URL || '').toLowerCase().includes(f.q) ||
+          (x.Technique || '').toLowerCase().includes(f.q)) &&
+        (!f.sev || x.Severity === f.sev) &&
+        (!f.cls || (x.Classification || '') === f.cls) &&
+        (!f.tech || (x.Technique || '') === f.tech) &&
+        (!f.status || x.Status === f.status));
+      box.innerHTML = f.group
+        ? findingsGrouped(filtered, id, f.group)
+        : findingsTable(filtered, id, null);
       wireFindingRows(box);
     }
     renderFiltered();
@@ -535,7 +659,19 @@
         .catch(e => U.toast(e.message, 'err'));
     });
 
-    // Auto-refresh while the scan is still running (poller owns scheduling).
+    // Seed the live panel (fetch may have raced the first render), remember the
+    // counts this render shows, then start refreshing while the scan runs.
+    if (isRunning) {
+      updateLivePanel(el, progress || {
+        Stage: scan.Status === 'Pending' ? 'queued' : 'running',
+        Status: scan.Status,
+        LiveAvailable: null,
+        PagesFound: null, PagesAnalysed: null,
+        FindingCount: findings.length, RequestsIssued: null,
+        Errors: [], FindingsByModule: []
+      });
+    }
+    _rendered = { id: id, findings: findings.length, pages: (scan.Pages || []).length };
     if (isRunning) startPolling(el, id);
   }
 
@@ -578,15 +714,54 @@
           <td colspan="7">
             <div class="card" style="padding:12px;box-shadow:none;border-color:var(--border)">
               <div style="font-weight:700">${U.esc(f.VulnerabilityName)} · ${U.esc(f.Severity)} · ${U.esc(f.Classification || '')} (CVSS ${f.RiskScore != null ? Number(f.RiskScore).toFixed(1) : '-'})</div>
-              <div class="mono" style="margin:4px 0">${U.esc(f.URL)} ${f.RequestMethod ? '(' + U.esc(f.RequestMethod) + ')' : ''} ${f.Parameter ? '· param ' + U.esc(f.Parameter) : ''}</div>
+              <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
+                ${f.Technique ? `<span class="badge module">⚙ ${U.esc(f.Technique)}</span>` : ''}
+                ${f.CVSSVector ? `<span class="chip-mini mono">${U.esc(f.CVSSVector)}</span>` : ''}
+                <span class="chip-mini">Confidence ${f.Confidence != null ? Math.round(Number(f.Confidence) * 100) + '%' : '–'}</span>
+                <span class="chip-mini">Detected ${U.fmtDT(f.DetectedAt)}</span>
+              </div>
+              <div class="mono" style="margin:6px 0 4px">${U.esc(f.URL)} ${f.RequestMethod ? '(' + U.esc(f.RequestMethod) + ')' : ''} ${f.Parameter ? '· param ' + U.esc(f.Parameter) : ''}</div>
               ${f.Payload ? `<div style="margin:4px 0"><b>Payload:</b> <span class="mono">${U.esc(f.Payload)}</span></div>` : ''}
-              <div class="evidence">${U.esc(f.Evidence || '')}</div>
+              <div class="evidence">${evidenceHtml(f.Evidence || '')}</div>
               ${f.Description ? `<p style="margin-top:8px"><b>Description:</b> ${U.esc(f.Description)}</p>` : ''}
               ${f.Impact ? `<p style="margin-top:6px"><b>Impact:</b> ${U.esc(f.Impact)}</p>` : ''}
               ${f.Recommendation ? `<p style="margin-top:6px"><b>Remediation:</b> ${U.esc(f.Recommendation)}</p>` : ''}
             </div>
           </td>
         </tr>`).join('')}</tbody></table></div>`;
+  }
+
+  /* Groups findings into collapsible sections (C2).  Each group keeps the
+     regular findings table, so detail toggles and status updates are unchanged. */
+  function findingsGrouped(findings, scanId, mode) {
+    if (!findings.length) return U.empty('No findings match your filters.');
+    const groups = new Map();
+    findings.forEach(f => {
+      const key = mode === 'page' ? (f.URL || '(unknown page)') : (f.VulnerabilityName || '(unknown)');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(f);
+    });
+    return [...groups.entries()].map(([name, items]) => {
+      const worst = items.slice().sort((a, b) => SEV_ORDER.indexOf(b.Severity) - SEV_ORDER.indexOf(a.Severity))[0].Severity;
+      const conf = items.filter(i => i.Classification === 'Confirmed').length;
+      const susp = items.filter(i => i.Classification === 'Suspected').length;
+      const locations = new Set(items.map(i => i.URL)).size;
+      return `<details class="f-group" open>
+        <summary>
+          <span class="g-title">${U.esc(name)}</span>
+          <span class="g-meta">${items.length} finding${items.length === 1 ? '' : 's'} · ${locations} location${locations === 1 ? '' : 's'}</span>
+          ${U.sevBadge(worst)}
+          ${conf ? `<span class="badge confirmed">${conf} confirmed</span>` : ''}
+          ${susp ? `<span class="badge suspected">${susp} suspected</span>` : ''}
+        </summary>
+        ${findingsTable(items, scanId, null)}
+      </details>`;
+    }).join('');
+  }
+
+  /* Renders stored evidence as escaped text with emphasised section headers. */
+  function evidenceHtml(text) {
+    return U.esc(text).replace(/^([A-Z][A-Z0-9 /()\-]{2,48}):/gm, '<b>$1:</b>');
   }
 
   function wireFindingRows(box) {
