@@ -479,3 +479,35 @@ implemented, tested and committed:
   retest of finding 253 (scan 16, page pointed at the safe variant) →
   `Resolved` toast, status auto-changed to Resolved, green history chip and
   the RETEST stanza appended to the original evidence.
+
+### Ninth increment (D2 + E1) — 2026-10-09
+
+- **Before/after verification view (D2).** `Finding.retest_entries()` now
+  parses each RETEST stanza - verdict, message, technique, confidence and
+  request count - and `evidence_technique()` / `evidence_vector()` factor the
+  evidence parsing into one place (used by `to_dict` and the reports).  The
+  finding detail pane renders re-tested findings as a colour-bordered
+  **Original detection → Latest verification** comparison (severity/CVSS/
+  confidence/technique vs verdict badge, checked time, requests and the
+  verdict message), with a chip history when there is more than one retest.
+- **Report upgrades (E1).**
+  * CSV: the findings table gains `Technique`, `CVSS Vector`,
+    `Latest Verdict` and `Retest Count` columns, plus a
+    `VERIFICATION (RETESTS)` section listing every retest event (finding,
+    vulnerability, parameter, checked-at, verdict, confidence, requests).
+  * PDF: new **Risk Overview** (overall risk, confirmed/suspected counts,
+    highest-risk finding, verification tally), **Methodology and Coverage**
+    (crawl limits from the profile, analysed vs skipped pages, tested GET
+    parameters, detection techniques used, explicit limitations list) and
+    **Verification (Retests)** table; each finding detail block now also
+    prints its CVSS vector, detection technique and retest history lines.
+- **Verification** — `testing/test_reports_content.py` updated for the new
+  columns/sections and extended with `test_reports_include_retest_results`
+  (retests a SQLi finding, then asserts the CSV verification row and the PDF
+  sections/verdict text); `testing/test_retest.py` now asserts the parsed
+  retest-entry detail (message, technique, confidence, requests).
+  Full suite: **145 passed**.  Browser-verified locally: finding 253 shows
+  the green `ba-resolved` comparison ("Resolved · 19 requests · No
+  detectable signal ..."), the CSV verification row
+  `253,SQL Injection,id,2026-10-09 15:05 UTC,Resolved,,19`, the findings
+  header carries the new columns, and the PDF starts `%PDF-` (68.6 kB).
