@@ -43,8 +43,16 @@ the portal "database" option and the connection is configured manually via the
 **Startup command** (Configuration → General settings):
 
 ```
-gunicorn --bind=0.0.0.0:8000 --timeout 600 --chdir backend wsgi:app
+gunicorn --bind=0.0.0.0:8000 --timeout 600 --workers 2 --threads 4 --chdir backend wsgi:app
 ```
+
+> `--workers 2 --threads 4` matters: the finding **retest** endpoint is
+> synchronous, so retesting a finding whose page is this app's own URL makes
+> the worker wait on a request back into the same worker pool.  With the
+> default single sync worker that self-request can never be served and the
+> retest reports *Unable to Verify — Request timed out*.  Retesting any other
+> target works with the default, so this is only required if you intend to
+> scan/retest the deployment itself.
 
 > Auto-detection does **not** work for this repository: App Service only looks
 > for `app.py` / `application.py` in the site root, or a `wsgi.py` one level
@@ -183,3 +191,4 @@ Pull requests are validated by `.github/workflows/ci.yml`.
 | `NoRegisteredProviderFound ... linkers` | Region lacks Service Connector — create the Web App without the DB option |
 | `InUseSubnetCannotBeDeleted` | Delete the attached Private Endpoint before the subnet/VNet |
 | `InvalidParameterValue ... Login` | SQL admin login uses a reserved/invalid name (§4) |
+| Retest of a finding fails with `Unable to Verify — Request timed out` | The retest is synchronous and the target is the app's own URL, so the single gunicorn sync worker deadlocks on itself. Add `--workers 2 --threads 4` to the startup command (§2). Retests of external targets are unaffected |
