@@ -21,7 +21,25 @@ def register_blueprints(app):
 
     @api.get("/health")
     def health():
-        return {"status": "ok", "service": "vulnscan"}
+        """
+        Liveness + readiness probe.
+
+        The database is pinged so a database outage is reported as
+        `503 degraded` instead of a misleading `200 ok`.
+        """
+        from sqlalchemy import text
+        from app.extensions import db
+
+        try:
+            db.session.execute(text("SELECT 1"))
+        except Exception:
+            db.session.rollback()
+            return {
+                "status": "degraded",
+                "service": "vulnscan",
+                "database": "unavailable",
+            }, 503
+        return {"status": "ok", "service": "vulnscan", "database": "ok"}
 
     # ------------------------------------------------------------ web (UI)
     from flask import render_template

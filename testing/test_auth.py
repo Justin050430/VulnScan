@@ -8,6 +8,47 @@ def test_health(client):
     assert resp.get_json()["status"] == "ok"
 
 
+def test_health_reports_database_readiness(client):
+    """The probe distinguishes liveness from database readiness."""
+    body = client.get("/api/health").get_json()
+    assert body["status"] == "ok"
+    assert body["database"] == "ok"
+
+
+def test_health_reports_degraded_when_database_unavailable(app, client, monkeypatch):
+    """
+    Regression: /api/health must act as a readiness probe.  It used to answer
+    `200 ok` even when the database was unreachable.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    from app.extensions import db as real_db
+
+    class _FailingSession:
+        """Proxy whose execute() always fails; everything else delegates."""
+
+        def execute(self, *args, **kwargs):
+            raise OperationalError("SELECT 1", {}, Exception("down"))
+
+        def __getattr__(self, name):
+            return getattr(real_db.session, name)
+
+    class _DbProxy:
+        session = _FailingSession()
+
+        def __getattr__(self, name):
+            return getattr(real_db, name)
+
+    import app.extensions as extensions
+
+    monkeypatch.setattr(extensions, "db", _DbProxy())
+    resp = client.get("/api/health")
+    assert resp.status_code == 503
+    body = resp.get_json()
+    assert body["status"] == "degraded"
+    assert body["database"] == "unavailable"
+
+
 def test_login_success(client):
     resp = client.post("/api/auth/login", json={
         "email": "developer@vulnscan.local",
