@@ -160,8 +160,11 @@ demonstration workflow.
 **Final automated test result**
 ```
 python -m pytest testing -q
-122 passed
+150 passed
 ```
+(The count recorded here at the time was 122; it has since grown with the
+later increments below. The current authoritative result is the one above,
+re-confirmed during the post-enhancement verification.)
 
 ## Verified vs. not yet verified
 
@@ -176,7 +179,7 @@ python -m pytest testing -q
 | Reports (PDF/CSV content) | Verified |
 | Frontend screens (real API data) | Verified (browser + screenshots) |
 | Concurrent scans (SQLite file + SQL Server) | Verified |
-| Azure deployment / CI deployment pipeline | **Not yet verified** (CI test workflow added; deployment is Chapter 6) |
+| Azure deployment / CI deployment pipeline | **Verified** (deploy + post-deploy smoke workflows green for the deployed SHA; live app serves the matching frontend bundle hash, scans/retests/exports exercised against owner-controlled targets) — see verification round 5 |
 
 ## Documented decisions / interpretations
 
@@ -549,3 +552,77 @@ implemented, tested and committed:
   The MSSQL integration test that previously left an async scan running now
   waits for it so the caps stay deterministic.  Full suite re-run after the
   increment (including the upgraded dependencies).
+
+## Verification round 5 — post-enhancement verification (2026-10-13)
+
+Full re-verification of the enhanced system (evidence kept in the session
+workspace: `verify_e2e.py` / `verify_local_output.txt` / `verify_azure_output.txt`
+and `report_18.*` / `report_19.*`).
+
+- **Test suite.** `python -m pytest testing -q` → **150 passed, 0 failed,
+  0 skipped** (111.6 s) before the fixes below; **154 passed, 0 failed,
+  0 skipped** (110.0 s) once the four regression tests added in this round are
+  included.  SQL Server LocalDB was reachable, so the six MSSQL
+  integration tests executed rather than skipping.
+- **Detection (controlled target).** SQLi Confirmed Critical 9.8 on
+  `/product?id`, Suspected Medium 5.9 on `/blind?id`; XSS Confirmed 6.1 on
+  `/search?q`; per-rule header findings 5.4/4.3/4.2/3.1 and insecure header
+  *values* on `/weak_headers`.  No findings on the safe control pages
+  (`/safe_search`, `/boolean_safe`, `/headers_ok`).
+- **Retest workflow.** Still Detected → genuine same-URL remediation →
+  Resolved (auto-closed) → stable Resolved → Unable to Verify when the target
+  went offline (status unchanged).
+- **Progress/coverage.** Live stage/counter progression matched the database
+  exactly (9/9 pages, 45 findings); an unreachable page is disclosed as
+  skipped, not analysed.
+- **Persistence / isolation / recovery / caps** all re-confirmed, including
+  from-database cap enforcement across two users.
+- **Exports** listed exactly the database findings (45/45) and pages, plus a
+  `VERIFICATION (RETESTS)` section; the PDF identified the scan and classes.
+- **Azure.** Deploy run #14 and the post-deploy smoke check both succeeded for
+  the deployed SHA; the live app serves the matching frontend bundle hash.
+  Two scans were executed from Azure against owner-controlled targets with
+  live progress, a retest and CSV/PDF downloads; the production SSRF guard
+  refuses loopback and link-local targets.
+
+### Defects found and fixed in this round
+
+1. **Over-long target URL returned HTTP 500.** `validate_target_url` had no
+   length guard, so a URL longer than the ERD's `Scan.TargetURL VARCHAR(255)`
+   reached the database and failed as an unhandled truncation error (the same
+   happened on the live Azure deployment).  Fixed with
+   `validate_target_url_length()` in `app/utils/validators.py`, applied to both
+   the raw input and the normalised URL actually stored (normalisation can
+   lengthen a URL).  Regression tests:
+   `test_target_url_length_boundary`, `test_overlong_target_url_rejected_with_400`.
+2. **`/api/health` was liveness-only.** It answered `200 ok` with the database
+   down, which made it useless as the deploy smoke check's readiness signal.
+   It now pings the database and returns `503 {status: degraded}` on failure.
+   Regression tests: `test_health_reports_database_readiness`,
+   `test_health_reports_degraded_when_database_unavailable`.
+3. **Coverage transparency was API-only.** The scan detail view now renders
+   `AnalysedPages`, `TestedParameters`, `CoverageNote` and the
+   `SkippedPages` list instead of exposing them only through the API.
+4. **CD publish-profile fallback.** `deploy.yml` referenced only
+   `AZUREAPPSERVICE_PUBLISHPROFILE`; the portal-generated secret name used by
+   all successful deploys is restored as a final fallback so an unset generic
+   name cannot silently break the pipeline.
+5. **Retesting the app's own URL times out.** The retest is synchronous, so a
+   finding on the app's own App Service URL deadlocks the single gunicorn sync
+   worker.  The recommended startup command now uses more than one worker (see
+   `docs/AZURE_DEPLOYMENT.md` §2/§10); the App Service setting must be updated
+   for the fix to take effect.
+6. **Documentation counts were stale.** The README test count and the
+   "Verified vs. not yet verified" table were corrected (see above).
+
+### Still not verified after this round
+
+- Google sign-in against the **live** Google IdP (no real credentials in the
+  verification environment; the IdP is mocked at the network boundary).
+- SQLi/XSS detection **from Azure** — no controlled target with injectable
+  parameters is reachable from the deployment, so the Azure scans exercised
+  header detection only.
+- Scan records for third-party hosts (`web.tarc.edu.my`, `xn--lecc-epa.yukigoh.com`)
+  exist in the production audit trail.  Those targets are not controlled by
+  the project; ownership/authorisation should be confirmed and the records
+  removed if the scans were not authorised.

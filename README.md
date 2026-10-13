@@ -33,7 +33,7 @@ backend/                  Flask application (application factory)
   config.py  run.py  wsgi.py
 testing/
   vuln_test_app/          controlled intentionally-vulnerable local target
-  test_*.py               pytest suite (122 tests, incl. SQL Server integration)
+  test_*.py               pytest suite (154 tests, incl. SQL Server integration)
 .github/workflows/ci.yml  continuous integration (runs the test suite)
 docs/DEMO_SCRIPT.md       step-by-step FYP demonstration script
 screenshots/              verification evidence (UI screenshots + real reports)
