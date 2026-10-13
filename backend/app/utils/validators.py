@@ -8,6 +8,8 @@ from app.utils.constants import ROLE_ADMINISTRATOR, ROLE_DEVELOPER
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_. -]{3,50}$")
 PASSWORD_MIN_LENGTH = 8
+# The frozen ERD declares Scan.TargetURL as VARCHAR(255).
+TARGET_URL_MAX_LENGTH = 255
 
 
 class ValidationError(ValueError):
@@ -68,6 +70,23 @@ def validate_role(value):
     return value
 
 
+def validate_target_url_length(value):
+    """
+    Guard the ERD column width (`Scan.TargetURL VARCHAR(255)`).
+
+    Without this the database raises a truncation error, which surfaces as an
+    HTTP 500 instead of a validation failure.  Applied both to the raw input
+    and to the normalised URL actually persisted, because normalisation can
+    lengthen a URL (e.g. percent-encoding a query value).
+    """
+    if len(value) > TARGET_URL_MAX_LENGTH:
+        raise ValidationError(
+            f"Target URL must be at most {TARGET_URL_MAX_LENGTH} characters "
+            f"long (received {len(value)})."
+        )
+    return value
+
+
 def validate_target_url(value):
     """Validate a scan target URL. Returns a normalised URL or raises."""
     if not value or not isinstance(value, str):
@@ -82,6 +101,7 @@ def validate_target_url(value):
             raise ValidationError("Target URL must include a valid hostname.")
     if parsed.scheme == "http" and parsed.port == 443:
         raise ValidationError("Invalid target URL.")
+    validate_target_url_length(value)
     return value
 
 

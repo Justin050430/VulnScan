@@ -32,6 +32,43 @@ def test_invalid_target_urls_rejected(client, dev_token, bad_url):
     assert resp.get_json().get("message")
 
 
+def test_target_url_length_boundary():
+    """
+    The guard itself: 255 characters is accepted, 256 is rejected.
+
+    The frozen ERD declares `Scan.TargetURL VARCHAR(255)`.
+    """
+    from app.utils.validators import (
+        TARGET_URL_MAX_LENGTH,
+        ValidationError,
+        validate_target_url_length,
+    )
+
+    validate_target_url_length("a" * TARGET_URL_MAX_LENGTH)
+    with pytest.raises(ValidationError):
+        validate_target_url_length("a" * (TARGET_URL_MAX_LENGTH + 1))
+
+
+def test_overlong_target_url_rejected_with_400(client, dev_token):
+    """
+    Regression: an over-long target used to reach the database and fail as an
+    unhandled SQL Server truncation error (HTTP 500).  It must be a 400.
+    """
+    profiles = client.get("/api/scan-profiles", headers=auth(dev_token)).get_json()["ScanProfiles"]
+    pid = profiles[0]["ScanProfileID"]
+    cases = (
+        "http://example.com/" + "a" * 260,      # raw URL longer than the column
+        "http://example.com/?q=" + "\u00e9" * 50,  # normalisation widens the query
+    )
+    for bad_url in cases:
+        resp = client.post("/api/scans", headers=auth(dev_token), json={
+            "target_url": bad_url, "scan_profile_id": pid,
+            "scan_name": "Too long"})
+        assert resp.status_code == 400, (bad_url, resp.status_code)
+        message = resp.get_json().get("message") or ""
+        assert "255" in message, message
+
+
 # --------------------------------------------------------------------------
 # Missing resources
 # --------------------------------------------------------------------------

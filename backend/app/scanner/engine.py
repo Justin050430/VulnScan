@@ -43,7 +43,11 @@ class ScanValidationError(ValueError):
 
 def validate_scan_request(target_url, profile):
     """Validate a scan request before a Scan row is created/started."""
-    from app.utils.validators import ValidationError, validate_target_url
+    from app.utils.validators import (
+        ValidationError,
+        validate_target_url,
+        validate_target_url_length,
+    )
 
     try:
         validate_target_url(target_url)
@@ -57,7 +61,13 @@ def validate_scan_request(target_url, profile):
         raise ScanValidationError(reason)
     if profile is None:
         raise ScanValidationError("A valid scan profile is required.")
-    return normalize_url(target_url)
+    normalised = normalize_url(target_url)
+    try:
+        # Normalisation can lengthen the URL, so re-check what will be stored.
+        validate_target_url_length(normalised)
+    except ValidationError as exc:
+        raise ScanValidationError(str(exc)) from exc
+    return normalised
 
 
 def make_url_validator(target_url, follow_external, allow_private):
