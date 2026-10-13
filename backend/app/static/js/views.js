@@ -631,9 +631,16 @@
               <span class="k">Started</span><span>${U.fmtDT(scan.StartedAt)}</span>
               <span class="k">Finished</span><span>${U.fmtDT(scan.FinishedAt)}</span>
               <span class="k">Discovered Pages</span><span>${scan.PageCount || 0}</span>
+              <span class="k">Pages Analysed</span><span>${scan.AnalysedPages == null ? '–' : scan.AnalysedPages} of ${scan.PageCount || 0}</span>
+              <span class="k">Tested Parameters</span><span class="mono">${(scan.TestedParameters && scan.TestedParameters.length) ? U.esc(scan.TestedParameters.join(', ')) : '–'}</span>
             </div>
           </div>
         </div>
+      </div>
+      <div class="card card-pad" style="margin-top:16px">
+        <h3>Coverage &amp; Limitations</h3>
+        <p style="color:var(--muted);margin:6px 0 0">${U.esc(scan.CoverageNote || 'Coverage details are not available for this scan.')}</p>
+        ${(scan.SkippedPages || []).length ? `<div style="margin-top:10px"><div class="k">Stored but not analysed (${scan.SkippedPages.length})</div><div class="kv">${scan.SkippedPages.map(p => `<span class="k mono">${U.esc(p.URL)}</span><span>HTTP ${p.HTTPStatus == null ? '–' : p.HTTPStatus}</span>`).join('')}</div></div>` : ''}
       </div>
       <div class="card card-pad" style="margin-top:16px">
         <h3>Discovered Pages (${scan.Pages ? scan.Pages.length : 0})</h3>
