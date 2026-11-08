@@ -81,18 +81,19 @@ def register_asset(actor, access, hostname, scheme="https", ip_address=None):
         CreatedByUserID=actor.UserID,
     )
     db.session.add(asset)
-    audit.record(
-        EVENT_ASSET_REGISTERED,
-        organisation_id=access.organisation_id,
-        project_id=access.project_id,
-        actor=actor,
-        entity_type="TrustAsset",
-        entity_id=0,
-        metadata={"hostname": host, "scheme": scheme},
-        ip_address=ip_address,
-        commit=False,
-    )
     try:
+        db.session.flush()
+        audit.record(
+            EVENT_ASSET_REGISTERED,
+            organisation_id=access.organisation_id,
+            project_id=access.project_id,
+            actor=actor,
+            entity_type="TrustAsset",
+            entity_id=asset.AssetID,
+            metadata={"hostname": host, "scheme": scheme},
+            ip_address=ip_address,
+            commit=False,
+        )
         db.session.commit()
     except IntegrityError:
         db.session.rollback()

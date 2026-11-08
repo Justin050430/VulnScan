@@ -188,3 +188,75 @@ def test_concurrent_scans_on_sql_server(mssql_app, mssql_client, target):
     for detail in details.values():
         assert detail["Status"] == "Completed"
         assert detail["FindingCount"] >= 1
+
+# --------------------------------------------------------------- Trust Boundary
+def test_trust_credit_concurrent_double_spend_on_sql_server(mssql_app):
+    """Two concurrent reservations of one credit: exactly one must win."""
+    import threading
+    from datetime import datetime, timedelta
+
+    from app.models import (
+        TrustOrganisation, TrustProject, TrustScanCredit, TrustPaymentTransaction,
+        TrustOrganisationMembership, User,
+    )
+    from app.services import credit_service
+
+    with mssql_app.app_context():
+        user = User.query.filter_by(Email="developer@vulnscan.local").first()
+        org = TrustOrganisation(Name="Race Org", Slug="race-org",
+                                CreatedByUserID=user.UserID)
+        _db.session.add(org)
+        _db.session.flush()
+        project = TrustProject(OrganisationID=org.OrganisationID, Name="Race",
+                               Slug="race", CreatedByUserID=user.UserID)
+        _db.session.add(project)
+        _db.session.flush()
+        _db.session.add(TrustOrganisationMembership(
+            OrganisationID=org.OrganisationID, UserID=user.UserID,
+            Role="ORG_OWNER", Status="Active", AcceptedAt=datetime.utcnow()))
+        payment = TrustPaymentTransaction(
+            PaymentUUID="race-payment-uuid", OrganisationID=org.OrganisationID,
+            ProjectID=project.ProjectID, PurchasedByUserID=user.UserID,
+            IdempotencyKey="race-payment-key", ProductCode="SCAN_CREDIT_1",
+            Quantity=1, AmountMinor=1000, Currency="MYR", Status="PaymentVerified")
+        _db.session.add(payment)
+        _db.session.flush()
+        credit = TrustScanCredit(
+            CreditUUID="race-credit-uuid", OrganisationID=org.OrganisationID,
+            ProjectID=project.ProjectID,
+            PaymentTransactionID=payment.PaymentTransactionID,
+            CreditSequence=1, ProductCode="SCAN_CREDIT_1", Status="Available",
+            ExpiresAt=datetime.utcnow() + timedelta(days=30),
+            PurchasePriceMinor=1000, Currency="MYR")
+        _db.session.add(credit)
+        _db.session.commit()
+        credit_id = credit.CreditID
+
+    outcomes = []
+    barrier = threading.Barrier(2)
+
+    def attempt():
+        with mssql_app.app_context():
+            barrier.wait(timeout=15)
+            try:
+                row = _db.session.get(TrustScanCredit, credit_id)
+                user = User.query.filter_by(Email="developer@vulnscan.local").first()
+                credit_service.reserve_credit(row.CreditID, user)
+                _db.session.commit()
+                outcomes.append("reserved")
+            except Exception:
+                _db.session.rollback()
+                outcomes.append("rejected")
+            finally:
+                _db.session.remove()
+
+    threads = [threading.Thread(target=attempt) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=60)
+
+    assert sorted(outcomes) == ["rejected", "reserved"]
+    with mssql_app.app_context():
+        row = _db.session.get(TrustScanCredit, credit_id)
+        assert row.Status == "Reserved"

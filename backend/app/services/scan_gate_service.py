@@ -171,6 +171,28 @@ def start_gated_scan(access, actor, *, asset, scan_profile_id, scan_name=None,
     if asset is None or asset.ProjectID != access.project_id:
         raise TrustError("Asset not found.", ERR_NOT_FOUND, 404)
 
+    # Idempotent replay is resolved before the mutable gate checks so a client
+    # retry after a successful start returns the original scan instead of an
+    # "active scan exists" error.
+    idempotency_key = str(idempotency_key or uuid.uuid4())[:64]
+    replay = TrustCreditRedemption.query.filter_by(
+        IdempotencyKey=idempotency_key
+    ).first()
+    if replay is not None:
+        if replay.ProjectID != access.project_id:
+            raise TrustError(
+                "This idempotency key was used in another project.",
+                ERR_IDEMPOTENCY_CONFLICT,
+                409,
+            )
+        replay_scan = db.session.get(Scan, replay.ScanID) if replay.ScanID else None
+        return {
+            "Scan": replay_scan,
+            "Credit": db.session.get(TrustScanCredit, replay.CreditID),
+            "Redemption": replay,
+            "IdempotentReplay": True,
+        }
+
     ensure_verified(asset)
 
     attestation = attestation_service.resolve_valid(asset, attestation_id)
@@ -227,25 +249,6 @@ def start_gated_scan(access, actor, *, asset, scan_profile_id, scan_name=None,
             metadata={"scan_id": active.ScanID},
             ip_address=ip_address,
         )
-
-    idempotency_key = str(idempotency_key or uuid.uuid4())[:64]
-    replay = TrustCreditRedemption.query.filter_by(
-        IdempotencyKey=idempotency_key
-    ).first()
-    if replay is not None:
-        if replay.ProjectID != access.project_id:
-            raise TrustError(
-                "This idempotency key was used in another project.",
-                ERR_IDEMPOTENCY_CONFLICT,
-                409,
-            )
-        replay_scan = db.session.get(Scan, replay.ScanID) if replay.ScanID else None
-        return {
-            "Scan": replay_scan,
-            "Credit": db.session.get(TrustScanCredit, replay.CreditID),
-            "Redemption": replay,
-            "IdempotentReplay": True,
-        }
 
     scan = Scan(
         ScanName=(_scan_name(scan_name, normalised_target)),
