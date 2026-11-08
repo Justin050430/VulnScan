@@ -97,6 +97,44 @@ class Config:
     SCAN_MAX_ACTIVE_PER_USER = int(os.getenv("SCAN_MAX_ACTIVE_PER_USER", "3"))
     SCAN_MAX_ACTIVE_GLOBAL = int(os.getenv("SCAN_MAX_ACTIVE_GLOBAL", "5"))
 
+    # ---------------------------------------------------------------- Trust Boundary
+    # "enforce"  - project-scoped, trust-gated scan creation only (default)
+    # "legacy"   - keeps the historical POST /api/scans available.  Local
+    #              compatibility and regression tests only; never a production
+    #              default (ProductionConfig forces "enforce").
+    TRUST_BOUNDARY_MODE = os.getenv("TRUST_BOUNDARY_MODE", "enforce").strip().lower()
+    # Days a verified asset stays verified before re-verification is required.
+    TRUST_ASSET_VERIFICATION_DAYS = int(
+        os.getenv("TRUST_ASSET_VERIFICATION_DAYS", "90")
+    )
+    # Minutes a DNS/file challenge token stays valid.
+    TRUST_VERIFICATION_TOKEN_MINUTES = int(
+        os.getenv("TRUST_VERIFICATION_TOKEN_MINUTES", "30")
+    )
+    # Attestation lifetime (days) and the maximum a caller may request.
+    TRUST_ATTESTATION_DEFAULT_DAYS = int(
+        os.getenv("TRUST_ATTESTATION_DEFAULT_DAYS", "30")
+    )
+    TRUST_ATTESTATION_MAX_DAYS = int(
+        os.getenv("TRUST_ATTESTATION_MAX_DAYS", "90")
+    )
+    # Days a purchased scan credit stays usable.
+    TRUST_CREDIT_VALIDITY_DAYS = int(
+        os.getenv("TRUST_CREDIT_VALIDITY_DAYS", "180")
+    )
+    # Minutes a reserved credit may wait for the worker to start.
+    TRUST_CREDIT_RESERVATION_MINUTES = int(
+        os.getenv("TRUST_CREDIT_RESERVATION_MINUTES", "15")
+    )
+    # Mock payment provider only.  No real gateway is implemented.
+    TRUST_PAYMENT_PROVIDER = os.getenv("TRUST_PAYMENT_PROVIDER", "MOCK")
+    TRUST_MOCK_PAYMENT_SECRET = os.getenv(
+        "TRUST_MOCK_PAYMENT_SECRET", "mock-provider-not-a-real-secret"
+    )
+    # Web-file verification limits.
+    TRUST_WEBFILE_TIMEOUT = float(os.getenv("TRUST_WEBFILE_TIMEOUT", "8"))
+    TRUST_WEBFILE_MAX_BYTES = int(os.getenv("TRUST_WEBFILE_MAX_BYTES", "4096"))
+
     # ---------------------------------------------------------------- Misc
     AUDIT_LOG_ENABLED = True
     JSON_SORT_KEYS = False
@@ -116,6 +154,8 @@ class TestingConfig(Config):
     # Run scans synchronously so tests are deterministic.
     SCAN_ASYNC = False
     SCANNER_ALLOW_PRIVATE_TARGETS = True
+    # The suite exercises both modes; the default mirrors production.
+    TRUST_BOUNDARY_MODE = os.getenv("TRUST_BOUNDARY_MODE", "enforce").strip().lower()
     # Tests must be hermetic: never pick up real Google credentials from a
     # developer's .env. Tests that need them (e.g. the OAuth flow tests) set
     # them explicitly on the app fixture.
@@ -130,6 +170,8 @@ class ProductionConfig(Config):
     REQUIRE_SECRET = True
     SECRET_KEY = os.environ.get("SECRET_KEY", "")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "") or SECRET_KEY
+    # The legacy scan endpoint is never available in production.
+    TRUST_BOUNDARY_MODE = "enforce"
 
 
 config_by_name = {
