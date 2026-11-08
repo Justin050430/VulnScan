@@ -293,3 +293,23 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .ba-line { font-size: 12.5px; margin-top: 2px; }
 .ba-arrow { align-self: center; color: var(--muted); font-weight: 700; font-size: 16px; }
 .ba-history { margin-top: 5px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---------------------------------------------- Trust Boundary Extension */
+.badge.verified { background: var(--green-bg); color: var(--green); }
+.badge.unverified { background: #e2e8f0; color: #475569; }
+.badge.pendingverification { background: var(--amber-bg); color: var(--amber); }
+.badge.expired { background: var(--amber-bg); color: var(--amber); }
+.badge.revoked { background: var(--red-bg); color: var(--red); }
+.badge.invited { background: var(--blue-bg); color: #1d4ed8; }
+.badge.available { background: var(--green-bg); color: var(--green); }
+.badge.reserved { background: var(--blue-bg); color: #1d4ed8; }
+.badge.consumed { background: #e2e8f0; color: #475569; }
+.badge.success { background: var(--green-bg); color: var(--green); }
+.badge.denied { background: var(--amber-bg); color: var(--amber); }
+.badge.failure { background: var(--red-bg); color: var(--red); }
+.badge.paymentverified { background: var(--green-bg); color: var(--green); }
+.badge.pendingpayment { background: var(--amber-bg); color: var(--amber); }
+.trust-notice {
+  background: #fff4e5; border: 1px solid #f0b429; border-radius: 8px;
+  padding: 10px 12px; font-size: 13px; font-weight: 600; margin-bottom: 12px;
+}

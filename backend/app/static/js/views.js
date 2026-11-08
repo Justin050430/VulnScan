@@ -364,6 +364,10 @@
     el.innerHTML = `
       <div class="page-head"><div class="row"><div><h1>Create New Scan</h1>
         <div class="sub">Configure scan settings and start a new vulnerability assessment.</div></div></div></div>
+      <div class="trust-notice">Trust-gated scanning: use
+        <b>Organisations → Project → Start scan</b> to scan a verified asset with an active
+        attestation and a scan credit. This legacy form only works when the server runs in
+        legacy mode.</div>
       <div class="grid-2">
         <div class="card card-pad">
           <h3>Scan Configuration</h3>
@@ -449,7 +453,17 @@
         U.toast('Scan started - it will run in the background.', 'ok');
         location.hash = '#/scans/' + data.Scan.ScanID;
       } catch (err) {
-        U.toast(err.message, 'err'); btn.disabled = false; btn.textContent = 'Start Scan';
+        btn.disabled = false; btn.textContent = 'Start Scan';
+        if (err.code === 'LEGACY_SCAN_ENDPOINT_DISABLED') {
+          U.modal('Trust-gated scanning is enabled',
+            `<p>This legacy form is disabled. Scans must start from a project with a
+               verified asset, an active attestation and a scan credit.</p>
+             <p style="margin-top:8px"><a class="btn btn-primary" style="width:auto"
+               href="#/organisations" onclick="U.closeModal()">Go to organisations</a></p>`,
+            `<button class="btn btn-secondary" onclick="U.closeModal()">Close</button>`);
+          return;
+        }
+        U.toast(err.message, 'err');
       }
     }
   }

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const API = window.API, U = window.U, VIEWS = window.VIEWS;
+  const API = window.API, U = window.U, VIEWS = window.VIEWS, TRUST = window.TRUST_VIEWS;
 
   function parseQuery(q) {
     const out = {};
@@ -17,6 +17,7 @@
     if (role === 'Administrator') {
       return [
         { label: 'Dashboard', href: '#/dashboard', icon: '🏠', active: h => h === 'dashboard' },
+        { label: 'Organisations', href: '#/organisations', icon: '🏢', active: h => h === 'organisations' },
         { label: 'Users', href: '#/admin/users', icon: '👥', active: h => h === 'admin/users' },
         { label: 'Scan Profiles', href: '#/admin/profiles', icon: '📄', active: h => h === 'admin/profiles' },
         { label: 'Vulnerabilities', href: '#/admin/vulnerabilities', icon: '🪲', active: h => h === 'admin/vulnerabilities' },
@@ -27,6 +28,7 @@
     }
     return [
       { label: 'Dashboard', href: '#/dashboard', icon: '🏠', active: h => h === 'dashboard' },
+      { label: 'Organisations', href: '#/organisations', icon: '🏢', active: h => h === 'organisations' },
       { label: 'New Scan', href: '#/scans/new', icon: '➕', active: h => h === 'scans/new' },
       { label: 'My Scans', href: '#/scans', icon: '🕵️', active: h => h === 'scans' },
       { label: 'Knowledge Base', href: '#/knowledge-base', icon: '📚', active: h => h === 'knowledge-base' }
@@ -84,6 +86,8 @@
   function hashKeyOf(segments) {
     if (!segments.length) return '#/dashboard';
     if (segments[0] === 'admin') return '#/admin/' + (segments[1] || '');
+    if (segments[0] === 'organisations') return '#/organisations';
+    if (segments[0] === 'projects') return '#/organisations';
     if (segments[0] === 'scans') return segments[1] === 'new' ? '#/scans/new' : (segments[1] ? '#/scans' : '#/scans');
     return '#/' + segments[0];
   }
@@ -137,6 +141,15 @@
       crumbParts.push('Administration', labels[segments[1]] || '');
     } else if (segments[0] === 'scans') {
       crumbParts.push(segments[1] === 'new' ? 'New Scan' : (segments[1] ? 'Scan Result' : 'Scans'));
+    } else if (segments[0] === 'organisations') {
+      crumbParts.push('Organisations');
+      if (segments[1]) crumbParts.push('Organisation #' + segments[1]);
+    } else if (segments[0] === 'projects') {
+      crumbParts.push('Projects');
+      if (segments[1]) crumbParts.push('Project #' + segments[1]);
+      if (segments[2]) crumbParts.push(segments[2]);
+    } else if (segments[0] === 'invitations') {
+      crumbParts.push('Invitation');
     } else {
       const labels = { dashboard: 'Dashboard', 'knowledge-base': 'Knowledge Base', profile: 'Profile' };
       crumbParts.push(labels[segments[0]] || segments[0]);
@@ -158,6 +171,9 @@
       if (key === '/admin/profiles') return await VIEWS.adminProfiles(content, params);
       if (key === '/admin/vulnerabilities') return await VIEWS.adminVulns(content, params);
       if (key === '/admin/audit-logs') return await VIEWS.adminAudit(content, params);
+      if (segments[0] === 'organisations' || segments[0] === 'projects' || segments[0] === 'invitations') {
+        return await TRUST.route(content, segments, params);
+      }
       // fallback
       content.innerHTML = U.empty('Page not found.');
     } catch (err) {
