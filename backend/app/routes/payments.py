@@ -1,7 +1,6 @@
 """Product catalogue, mock checkout, credits and provider callbacks."""
 from flask import Blueprint, jsonify, request
 
-from app.extensions import db
 from app.models import TrustPaymentTransaction
 from app.services import credit_service, payment_service
 from app.trust.constants import (

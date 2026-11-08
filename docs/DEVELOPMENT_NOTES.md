@@ -626,3 +626,76 @@ and `report_18.*` / `report_19.*`).
   exist in the production audit trail.  Those targets are not controlled by
   the project; ownership/authorisation should be confirmed and the records
   removed if the scans were not authorised.
+
+## Enhancement round 6 — Trust Boundary Extension (2026-11-08)
+
+Implements the approved FYP vertical slice that turns VulnScan from an
+unrestricted scanner into a **trust-gated, project-scoped** assessment
+platform, without modifying the frozen eight-entity ERD.
+
+**Additive schema (migration `aaf9e35de1fe`)**
+Eleven `Trust*` tables: organisation, project, organisation/project membership,
+asset, attestation, payment transaction, scan credit, credit redemption, scan
+context and append-only audit event. Composite tenant foreign keys, filtered
+unique indexes for "one active attestation per asset" and "one active
+redemption per credit", and a bridge table (`TrustScanContext`) instead of new
+`Scan` columns.
+
+**Authorisation and roles**
+Server-side permission matrix for `ORG_OWNER`, `PROJECT_OWNER`,
+`SCAN_OPERATOR`, `ANALYST` and `VIEWER`. `scan.start` is deliberately separate
+from read access: viewers and analysts cannot start scans, and organisation
+ownership never implies scan permission. Platform administrators do not bypass
+project isolation. Cross-tenant resources return 404.
+
+**Asset ownership**
+Exact-hostname registration only (IP literals and wildcards rejected), DNS TXT
+and `/.well-known/vulnscan.txt` verification, hashed challenge tokens, strict
+timeouts/size limits, no redirects and no cookies, and SSRF/private-address
+guards reused from the scanner. Verification expires after 90 days; revoked or
+expired assets block scanning.
+
+**Attestation**
+Explicit, versioned authorisation statement per asset stored with its SHA-256,
+attesting user, timestamp, expiry, optional reference, IP and user-agent hash.
+Revocation blocks later scans immediately.
+
+**Mock payments and single-use credits**
+Server-side product catalogue (MYR minor units), HMAC-signed mock provider,
+idempotent checkout and callback handling, duplicate-callback protection,
+project-scoped credits and an immutable redemption ledger.
+
+**Atomic gated scan start**
+Permission + verified asset + active attestation + available credit + exact host
+match + no active scan. The credit is reserved with a conditional UPDATE and
+consumed only when the engine transitions the scan to `Running`; it is released
+if the worker cannot start or the reservation times out. `POST /api/scans` is
+disabled in `enforce` mode with `LEGACY_SCAN_ENDPOINT_DISABLED`.
+
+**Audit**
+`TrustAuditEvent` is insert-only, redacts token/secret/payment keys and carries a
+hash chain. Membership, verification, attestation, payment, credit, scan-denial,
+scan-start, consumption and release events are recorded.
+
+**UI**
+New SPA screens for organisations, projects, asset verification, attestation,
+credits/mock checkout, gated scan readiness and the trust audit. Actions are
+hidden without the matching server-side permission.
+
+**Tests**
+`test_trust_permissions`, `test_trust_assets`, `test_trust_attestations`,
+`test_trust_payments`, `test_trust_credits`, `test_trust_scan_gating`,
+`test_trust_audit`, `test_trust_migration`, `test_trust_regression`, plus a real
+two-thread double-spend race in `test_sqlserver_integration.py`.
+Full suite: **238 passed**.
+
+**Deviations from the proposal (documented)**
+- Invitations require the invitee to already have a VulnScan account and the
+  one-time link is shown to the inviter (no email delivery).
+- `TRUST_WEBFILE_PORT` is a test/ops escape hatch because assets have no port
+  column; non-default ports must be given as an explicit scan `target_url`.
+- No platform-administrator break-glass access to customer evidence.
+- Migration is not yet wired into `deploy.yml`; the manual runbook is in
+  `docs/MIGRATION_TRUST.md`.
+- HttpOnly/CSRF/CSP session hardening, durable workers and egress control remain
+  future work.

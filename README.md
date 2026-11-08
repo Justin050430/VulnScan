@@ -6,6 +6,31 @@ A web-based vulnerability scanner built for the TAR UMT Final Year Project (OOI 
 
 The implementation follows the approved **Chapters 1–4** of `Assignment/FYP.docx` (the specification): the documented five-layer architecture, the eight-entity ERD, the Table 4.2 REST API blueprint, and the approved UI design.
 
+## Trust Boundary Extension (FYP vertical slice)
+
+VulnScan is **not** a "scan any website" service. Scan creation is gated by an additive
+**Trust Boundary Extension** around the frozen eight-entity core ERD:
+
+- **Organisation → Project → Membership** with server-side roles
+  (`ORG_OWNER`, `PROJECT_OWNER`, `SCAN_OPERATOR`, `ANALYST`, `VIEWER`).
+- **Verified assets only**: exact hostnames, proven by a DNS TXT
+  (`_vulnscan-challenge.<host>`) or `/.well-known/vulnscan.txt` challenge.
+  Wildcards, IP literals and sub-domain scanning are rejected.
+- **Authorisation attestation** per asset before any active scan, revocable and expiring.
+- **Single-use scan credits** issued only by a server-side verified **mock** payment
+  (no real money, no card data, no real gateway).
+- **Atomic gated scan start**: permission + verified asset + active attestation +
+  available credit + exact host match + no conflicting active scan.
+- **Append-only trust audit** of membership, verification, attestation, payment,
+  credit, scan-denial and scan-start actions.
+
+`TRUST_BOUNDARY_MODE=enforce` (default, and forced in production) disables the legacy
+`POST /api/scans` with `LEGACY_SCAN_ENDPOINT_DISABLED`. The legacy endpoint exists only
+for local compatibility and the pre-existing regression suite (`legacy` mode).
+
+See [docs/TRUST_BOUNDARY.md](docs/TRUST_BOUNDARY.md), [docs/API_TRUST.md](docs/API_TRUST.md)
+and [docs/MIGRATION_TRUST.md](docs/MIGRATION_TRUST.md).
+
 ## Technology stack
 
 | Layer | Technology |
@@ -23,18 +48,24 @@ The implementation follows the approved **Chapters 1–4** of `Assignment/FYP.do
 ```
 backend/                  Flask application (application factory)
   app/
-    models/               8 entities (User, Scan, ScanProfile, ProfileModule,
-                          Vulnerability, DiscoveredPage, Finding, SecurityAuditLog)
-    routes/               REST API blueprints (/api/*)
-    services/             business logic (auth, users, scans, reports, audit...)
+    models/               Frozen 8 core entities + 11 additive Trust* entities
+    trust/                permissions, hostname rules, attestation statements
+    payments/             payment provider interface + mock provider
+    routes/               REST API blueprints (/api/* and /api/v1/*)
+    services/             business logic (auth, users, scans, reports, audit,
+                          trust, verification, attestation, payments, credits)
     scanner/              crawler + SQLi / XSS / HTTP-header modules + engine
     static/  templates/   frontend SPA
   migrations/             Alembic migrations (flask db upgrade)
   config.py  run.py  wsgi.py
 testing/
   vuln_test_app/          controlled intentionally-vulnerable local target
-  test_*.py               pytest suite (154 tests, incl. SQL Server integration)
+  test_*.py               pytest suite (238 tests, incl. SQL Server integration)
+  trust_helpers.py        shared Trust Boundary test fixtures
 .github/workflows/ci.yml  continuous integration (runs the test suite)
+docs/TRUST_BOUNDARY.md    Trust Boundary design, roles and limits
+docs/API_TRUST.md         /api/v1 contracts and error codes
+docs/MIGRATION_TRUST.md   additive migration / backup / rollback runbook
 docs/DEMO_SCRIPT.md       step-by-step FYP demonstration script
 screenshots/              verification evidence (UI screenshots + real reports)
 ```
@@ -74,19 +105,32 @@ Default accounts (override via `backend/.env`):
 | Administrator | `admin@vulnscan.local` | `Admin@VulnScan2025` |
 | Developer | `developer@vulnscan.local` | `Developer@VulnScan2025` |
 
-### Trying a real scan
+### Trying a real scan (Trust Boundary flow)
 
 1. Start the controlled (intentionally vulnerable) target:
    ```powershell
    cd testing\vuln_test_app
    python run.py            # http://127.0.0.1:5001  (local only)
    ```
-2. Sign in to VulnScan as the Developer, choose **New Scan**, set the target URL to
-   `http://127.0.0.1:5001/`, pick the **OWASP Top 10 Full Scan** profile and start the scan.
-3. Open the scan result to review findings and download the PDF/CSV report.
+2. Sign in to VulnScan as the Developer and open **Organisations**.
+3. Create an organisation, then a project.
+4. Register the asset hostname `localhost` (scheme `http`) — IP addresses are rejected.
+5. Run **Verify**: choose `WEB_FILE` and publish the shown
+   `/.well-known/vulnscan.txt` content on the target. For the bundled test target,
+   set `WELL_KNOWN["content"]` (in `testing/vuln_test_app/app.py`) or point the
+   verification at your own host. For a real host use the DNS TXT challenge instead.
+6. Create an **attestation** for the asset (1–90 days).
+7. Buy a credit through the clearly labelled **mock** checkout (no real money), then
+   press **Pay (mock)**.
+8. Open **Project → Start scan**, confirm the readiness panel is green, and start the
+   scan. The target URL host must match the verified asset exactly.
+9. Review findings and download the PDF/CSV report as before.
 
 The scanner only ever requests pages **within the target's own scope** and never
 contacts arbitrary third-party websites.
+
+> For local development only, `TRUST_BOUNDARY_MODE=legacy` restores the historical
+> **New Scan** form. Production always runs in `enforce` mode.
 
 ## Google Sign-In
 
@@ -101,7 +145,7 @@ clear message (no fake authentication is used).
 ## Running the tests
 
 ```powershell
-python -m pytest testing -q          # run everything (SQL Server tests skip if unavailable)
+python -m pytest testing -q          # 238 tests; SQL Server tests skip if unavailable
 ```
 
 The suite uses an in-memory SQLite database, a local controlled target and a
@@ -113,6 +157,12 @@ with false-positive controls, CVSS scoring, report content, audit events, error
 handling, timeout handling and concurrent scans.  The `test_sqlserver_integration`
 module additionally runs against a **real SQL Server** instance when one is
 reachable (it creates a `VulnScanTest` database and is skipped otherwise).
+
+The Trust Boundary suite (`test_trust_*.py`) adds role-matrix denial, cross-tenant
+isolation, DNS/file asset verification, attestation expiry/revocation, mock-payment
+idempotency and duplicate callbacks, single-use credit reservation (including a real
+two-thread double-spend race on SQL Server), gated scan denial reasons, append-only
+audit and scanner/export/retest/progress regression.
 
 ### Continuous integration
 

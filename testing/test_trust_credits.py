@@ -1,6 +1,6 @@
 """Scan-credit lifecycle, atomic reservation and double-spend protection."""
-import threading
 from datetime import datetime, timedelta
+
 import pytest
 
 from app.extensions import db

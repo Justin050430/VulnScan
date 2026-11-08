@@ -38,17 +38,54 @@ python run.py                       # http://127.0.0.1:5001
 findings) and the Recent Scans table. Nothing on screen is hard-coded — every
 value comes from `GET /api/scans`.
 
-## 3. Create and configure a scan
+## 2b. Trust Boundary setup (required before any scan)
 
-1. **New Scan** → enter:
-   - Target URL: `http://127.0.0.1:5001/`
-   - Scan Name: `Test Shop (demo)`
-   - Scan Profile: **OWASP Top 10 Full Scan**
-2. *Show:* the profile panel lists the modules that will run
-   (SQL Injection, XSS, HTTP Security Headers) and the crawl limits.
-3. Click **Start Scan**.
-   - *Show:* the scan is created and (for a slow target) shows
-     **Pending → Running → Completed**; the result page auto-refreshes.
+Scanning is **project-scoped and gated**. Point out that this is what prevents
+VulnScan from being an unsafe public scanner.
+
+1. **Organisations → + New Organisation** → e.g. `Demo Org`.
+2. Inside the organisation: **+ New Project** → `Test Shop`.
+3. **+ Register asset** → hostname `localhost`, scheme `http`.
+   - *Show:* IP addresses and wildcards are rejected (`HOSTNAME_INVALID`).
+4. **Verify** the asset:
+   - choose `WEB_FILE`;
+   - copy the one-time challenge (expires in 30 minutes);
+   - for the bundled target, publish it as `/.well-known/vulnscan.txt`
+     (set `WELL_KNOWN["content"]` in `testing/vuln_test_app/app.py` and restart it,
+     or use the `TRUST_WEBFILE_PORT` setting used by the tests);
+   - click **Check now** → status becomes **Verified (90 days)**.
+   - *Show:* the plaintext token is shown once and is never stored in evidence.
+5. **Attest** the asset:
+   - read the authorisation statement;
+   - set 30 days and an optional reference such as `CHG-1234`;
+   - **Create attestation**.
+   - *Show:* revoking it immediately blocks scanning.
+6. **Buy credit**:
+   - the checkout is labelled **No real money — mock provider**;
+   - click **Pay (mock)** to complete the server-side mock callback;
+   - one **Available** credit appears.
+   - *Show:* simply returning from checkout without the callback issues nothing.
+7. Optionally invite a teammate with the **VIEWER** or **ANALYST** role and show
+   that the **Start scan** action is absent for them.
+
+## 3. Create and configure a scan (gated)
+
+1. Project → **Start scan**.
+2. *Show:* the readiness panel lists Permission, Asset, Attestation, Credit and
+   Active scan; it is green only when every gate passes.
+3. Choose profile **OWASP Top 10 Full Scan**, confirm the target URL host matches
+   the verified asset, and click **Start Scan**.
+   - *Show:* the scan is created, the credit becomes **Reserved** then
+     **Consumed**, and the result page auto-refreshes.
+4. *Show the denial path:* clear the target to another host → `TARGET_HOST_MISMATCH`;
+   revoke the attestation → `ATTESTATION_REQUIRED`; spend the credit → the next
+   start returns `CREDIT_NOT_AVAILABLE`.
+5. *Show the audit view:* Project → **Audit** lists the verification, attestation,
+   payment, credit and scan events.
+
+> The legacy **New Scan** form now displays a notice and is rejected by the API
+> with `LEGACY_SCAN_ENDPOINT_DISABLED` unless the server runs in `legacy` mode
+> (local compatibility only).
 
 ## 4. Scanner behaviour (what to point out)
 

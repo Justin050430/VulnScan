@@ -24,21 +24,18 @@ from app.trust.constants import (
     EVENT_ORG_MEMBER_ACCEPTED,
     EVENT_ORG_MEMBER_INVITED,
     EVENT_ORG_MEMBER_REVOKED,
-    EVENT_ORG_MEMBER_ROLE_CHANGED,
     EVENT_PROJECT_CREATED,
     EVENT_PROJECT_MEMBER_ACCEPTED,
     EVENT_PROJECT_MEMBER_INVITED,
     EVENT_PROJECT_MEMBER_REVOKED,
-    EVENT_PROJECT_MEMBER_ROLE_CHANGED,
     MEMBERSHIP_ACTIVE,
     MEMBERSHIP_INVITED,
     MEMBERSHIP_REVOKED,
     ORG_ROLE_OWNER,
     PROJECT_ROLE_VIEWER,
     PROJECT_ROLES,
-    OUTCOME_DENIED,
 )
-from app.trust.permissions import TrustError, active_org_membership, resolve_project
+from app.trust.permissions import TrustError, resolve_project
 
 INVITE_TTL_HOURS = 72
 
@@ -445,7 +442,7 @@ def revoke_organisation_member(organisation_id, membership, actor, ip_address=No
         if remaining == 0:
             raise TrustError(
                 "The last active organisation owner cannot be removed.",
-                OUTCOME_DENIED,
+                "LAST_ORG_OWNER",
                 400,
             )
     membership.Status = MEMBERSHIP_REVOKED
