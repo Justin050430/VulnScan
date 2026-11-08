@@ -28,6 +28,7 @@ from app.utils.constants import (
     AUDIT_CATEGORY_SCAN,
     AUDIT_STATUS_FAILURE,
     FINDING_STATUS_OPEN,
+    SCAN_STATUS_CANCELLED,
     SCAN_STATUS_COMPLETED,
     SCAN_STATUS_FAILED,
     SCAN_STATUS_RUNNING,
@@ -35,6 +36,20 @@ from app.utils.constants import (
 from app.utils.urls import normalize_url
 
 logger = logging.getLogger("vulnscan.engine")
+
+
+def _is_cancelled(scan_id):
+    """Cheap cancellation check used between pages."""
+    try:
+        status = (
+            db.session.query(Scan.Status)
+            .filter(Scan.ScanID == int(scan_id))
+            .scalar()
+        )
+        return status == SCAN_STATUS_CANCELLED
+    except Exception:
+        logger.debug("Cancellation check failed for scan %s", scan_id, exc_info=True)
+        return False
 
 
 class ScanValidationError(ValueError):
@@ -108,6 +123,13 @@ def run_scan(scan_id):
     scan.Status = SCAN_STATUS_RUNNING
     scan.StartedAt = datetime.utcnow()
     db.session.commit()
+    # The scan really started, so the reserved credit becomes consumed.
+    try:
+        from app.services.scan_gate_service import consume_credit_for_scan
+
+        consume_credit_for_scan(scan.ScanID)
+    except Exception:
+        logger.exception("Credit consumption failed for scan %s", scan.ScanID)
     write_audit(
         category=AUDIT_CATEGORY_SCAN,
         action="SCAN_STARTED",
@@ -186,7 +208,11 @@ def run_scan(scan_id):
 
         pages_done = 0
         findings_total = 0
+        cancelled = False
         for page, page_row in page_rows:
+            if _is_cancelled(scan_id):
+                cancelled = True
+                break
             pages_done += 1
             if page_row.HTTPStatus is None or page_row.HTTPStatus >= 400:
                 progress.update(scan_id, pages_done=pages_done,
@@ -215,6 +241,24 @@ def run_scan(scan_id):
                 findings=findings_total,
                 requests=http.request_count,
             )
+
+        if cancelled:
+            scan.Status = SCAN_STATUS_CANCELLED
+            scan.FinishedAt = datetime.utcnow()
+            db.session.commit()
+            write_audit(
+                category=AUDIT_CATEGORY_SCAN,
+                action="SCAN_CANCELLED",
+                description=f"Vulnerability scan '{scan.ScanName}' was cancelled.",
+                user_id=scan.UserID,
+                entity_type="Scan",
+                entity_id=scan.ScanID,
+                status=AUDIT_STATUS_FAILURE,
+                commit=True,
+            )
+            progress.finish(scan_id, "cancelled")
+            logger.info("Scan %s cancelled by request", scan_id)
+            return
 
         progress.update(scan_id, stage="finalising")
         scan.Status = SCAN_STATUS_COMPLETED

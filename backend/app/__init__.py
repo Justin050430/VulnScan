@@ -127,6 +127,12 @@ def _register_jwt_handlers(app):
 def _register_error_handlers(app):
     from werkzeug.exceptions import HTTPException
 
+    from app.trust.permissions import TrustError
+
+    @app.errorhandler(TrustError)
+    def handle_trust_error(error):
+        return error.to_response()
+
     @app.errorhandler(HTTPException)
     def handle_http_exception(error):
         payload = {"message": error.description or error.name}

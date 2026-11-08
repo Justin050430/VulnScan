@@ -25,6 +25,21 @@ def _page():
 @scans_bp.post("")
 @roles_required("Developer")
 def start_scan():
+    from app.trust.constants import ERR_LEGACY_DISABLED
+    from app.trust.permissions import is_enforced
+
+    if is_enforced():
+        # No production bypass: scans must go through the project-scoped,
+        # trust-gated endpoint (POST /api/v1/projects/<id>/scans).
+        return jsonify({
+            "message": (
+                "The legacy scan endpoint is disabled. Start scans through "
+                "POST /api/v1/projects/<project_id>/scans with a verified "
+                "asset, an active attestation and a scan credit."
+            ),
+            "code": ERR_LEGACY_DISABLED,
+        }), 410
+
     user = get_current_user()
     data = request.get_json(silent=True) or {}
     target_url = data.get("target_url")
@@ -117,7 +132,9 @@ def update_finding_status(scan_id, finding_id):
     ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr
     try:
         scan = scan_service.get_scan(scan_id)
-        scan_service.ensure_scan_accessible(user, scan)
+        scan_service.ensure_scan_permission(
+            user, scan, "scan.retest"
+        )
         finding = scan_service.update_finding_status(
             scan, finding_id, status, user, ip_address=ip
         )
@@ -144,7 +161,7 @@ def retest_finding(scan_id, finding_id):
     ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr
     try:
         scan = scan_service.get_scan(scan_id)
-        scan_service.ensure_scan_accessible(user, scan)
+        scan_service.ensure_scan_permission(user, scan, "scan.retest")
         finding, result = scan_service.retest_finding(
             scan, finding_id, user, ip_address=ip
         )

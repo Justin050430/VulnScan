@@ -13,7 +13,15 @@ from flask import current_app
 from sqlalchemy import func
 
 from app.extensions import db
-from app.models import DiscoveredPage, Finding, Scan, ScanProfile, Vulnerability
+from app.models import (
+    DiscoveredPage,
+    Finding,
+    Scan,
+    ScanProfile,
+    TrustProjectMembership,
+    TrustScanContext,
+    Vulnerability,
+)
 from app.services.audit_service import write_audit
 from app.scanner.engine import ScanValidationError, run_scan, validate_scan_request
 from app.utils.constants import (
@@ -125,7 +133,19 @@ def recover_orphan_scans():
             commit=False,
         )
         db.session.commit()
+        _release_orphaned_credits(recovered)
     return recovered
+
+
+def _release_orphaned_credits(scan_ids):
+    """Return credits reserved for scans that were orphaned before starting."""
+    try:
+        from app.services.scan_gate_service import release_if_never_started
+
+        for scan_id in scan_ids:
+            release_if_never_started(scan_id, "Scan was orphaned before starting")
+    except Exception:
+        logger.exception("Failed to release credits for orphaned scans")
 
 
 def start_scan(user, target_url, scan_profile_id, scan_name=None, ip_address=None,
@@ -191,6 +211,16 @@ def _spawn_scan_worker(scan_id):
     thread.start()
 
 
+def spawn_scan_worker(scan_id):
+    """Public entry point used by the Trust Boundary scan gate."""
+    _spawn_scan_worker(scan_id)
+
+
+def execute_scan_sync(scan_id):
+    """Run a scan synchronously (tests / synchronous deployments)."""
+    _execute_in_context(scan_id)
+
+
 def _execute_in_context(scan_id, app=None):
     app = app or current_app._get_current_object()
     try:
@@ -250,7 +280,23 @@ def _finding_stats(scan_ids):
 
 def list_scans(user, include_all=False, search=None, status=None, page=1, per_page=20):
     query = Scan.query
-    if not include_all and not user.is_administrator:
+    if include_all and user.is_administrator:
+        # Administrators see legacy scans plus only the trust-scoped scans of
+        # projects they belong to (no cross-tenant exposure).
+        accessible = _accessible_project_ids(user)
+        accessible_scan_ids = db.session.query(TrustScanContext.ScanID).filter(
+            TrustScanContext.ProjectID.in_(accessible)
+        )
+        trust_scan_ids = db.session.query(TrustScanContext.ScanID)
+        query = query.filter(
+            db.or_(
+                ~Scan.ScanID.in_(trust_scan_ids),
+                Scan.ScanID.in_(accessible_scan_ids),
+            )
+        )
+    elif not include_all and not user.is_administrator:
+        query = query.filter_by(UserID=user.UserID)
+    elif not include_all:
         query = query.filter_by(UserID=user.UserID)
     if status and status in SCAN_STATUSES:
         query = query.filter_by(Status=status)
@@ -420,12 +466,63 @@ def get_scan_progress(scan):
 
 
 def ensure_scan_accessible(user, scan):
-    """Admins may view any scan; developers only their own."""
+    """Admins may view any legacy scan; developers only their own.
+
+    Trust-scoped scans are additionally protected by project membership and
+    tenant isolation: a platform administrator without membership is denied.
+    """
     if scan is None:
         raise ScanNotFoundError("Scan not found.")
+    context = db.session.get(TrustScanContext, scan.ScanID)
+    if context is not None:
+        from app.trust.constants import PERM_SCAN_READ
+        from app.trust.permissions import TrustError, resolve_project
+
+        try:
+            access = resolve_project(user, context.ProjectID)
+        except TrustError:
+            raise ScanAccessError("You do not have access to this scan.") from None
+        if access.has(PERM_SCAN_READ) or scan.UserID == user.UserID:
+            return True
+        raise ScanAccessError("You do not have access to this scan.")
     if user.is_administrator or scan.UserID == user.UserID:
         return True
     raise ScanAccessError("You do not have access to this scan.")
+
+
+def ensure_scan_permission(user, scan, permission):
+    """Enforce a specific project permission for a trust-scoped scan.
+
+    Legacy (non-trust) scans keep the historical owner/administrator rule.
+    """
+    if scan is None:
+        raise ScanNotFoundError("Scan not found.")
+    context = db.session.get(TrustScanContext, scan.ScanID)
+    if context is None:
+        if user.is_administrator or scan.UserID == user.UserID:
+            return True
+        raise ScanAccessError("You do not have access to this scan.")
+
+    from app.trust.permissions import TrustError, resolve_project
+
+    try:
+        access = resolve_project(user, context.ProjectID)
+    except TrustError:
+        raise ScanAccessError("You do not have access to this scan.") from None
+    if access.has(permission):
+        return True
+    raise ScanAccessError(
+        "You do not have permission to perform this action on this scan."
+    )
+
+
+def _accessible_project_ids(user):
+    return [
+        row.ProjectID
+        for row in TrustProjectMembership.query.filter_by(
+            UserID=user.UserID, Status="Active"
+        ).all()
+    ]
 
 
 def update_finding_status(scan, finding_id, status, user, ip_address=None):

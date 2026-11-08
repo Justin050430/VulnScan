@@ -98,14 +98,32 @@ def external_server():
 
 
 @pytest.fixture(scope="session")
-def target(external_server):
-    """The controlled intentionally-vulnerable target (localhost only)."""
+def vuln_target_module(external_server):
+    """Import the controlled vulnerable target module (not yet served)."""
     os.environ["VULN_TEST_EXTERNAL_URL"] = EXTERNAL_URL
     spec = importlib.util.spec_from_file_location("test_vuln_target", str(VULN_APP_PATH))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    server = make_server("127.0.0.1", 5199, mod.app)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
+    return mod
+
+
+@pytest.fixture(scope="session")
+def target(vuln_target_module):
+    """The controlled intentionally-vulnerable target (loopback only).
+
+    Bound on both IPv4 and IPv6 loopback so hostname-based requests to
+    ``localhost`` resolve immediately instead of paying an IPv6 fallback
+    penalty on every request.
+    """
+    servers = []
+    for host in ("127.0.0.1", "::1"):
+        try:
+            server = make_server(host, 5199, vuln_target_module.app)
+        except OSError:
+            continue
+        servers.append(server)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    assert servers, "could not start the controlled target"
     yield TARGET_URL
-    server.shutdown()
+    for server in servers:
+        server.shutdown()

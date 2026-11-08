@@ -18,6 +18,10 @@ from flask import Flask, Response, request
 
 app = Flask(__name__)
 
+#: Trust Boundary web-file verification content.  Tests set this to the
+#: one-time challenge value returned by POST .../verification.
+WELL_KNOWN = {"content": "no challenge configured\n"}
+
 HOME = """
 <!doctype html><html><head><title>VulnScan Test Shop</title></head><body>
 <h1>Welcome to the VulnScan Test Shop</h1>
@@ -52,6 +56,12 @@ def home():
 @app.route("/about")
 def about():
     return "<!doctype html><html><head><title>About</title></head><body><h1>About</h1></body></html>"
+
+
+@app.route("/.well-known/vulnscan.txt")
+def well_known_vulnscan():
+    """Trust Boundary ownership-verification file (test target only)."""
+    return Response(WELL_KNOWN["content"], mimetype="text/plain")
 
 
 @app.route("/search")

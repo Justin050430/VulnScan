@@ -154,8 +154,9 @@ class TestingConfig(Config):
     # Run scans synchronously so tests are deterministic.
     SCAN_ASYNC = False
     SCANNER_ALLOW_PRIVATE_TARGETS = True
-    # The suite exercises both modes; the default mirrors production.
-    TRUST_BOUNDARY_MODE = os.getenv("TRUST_BOUNDARY_MODE", "enforce").strip().lower()
+    # The suite keeps the historical scan endpoint available by default so the
+    # existing regression tests run unchanged; trust tests switch to "enforce".
+    TRUST_BOUNDARY_MODE = os.getenv("TRUST_BOUNDARY_MODE", "legacy").strip().lower()
     # Tests must be hermetic: never pick up real Google credentials from a
     # developer's .env. Tests that need them (e.g. the OAuth flow tests) set
     # them explicitly on the app fixture.

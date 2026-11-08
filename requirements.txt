@@ -23,6 +23,9 @@ python-dotenv==1.2.2
 # Validation
 email-validator==2.2.0
 
+# DNS TXT asset-ownership verification (Trust Boundary Extension)
+dnspython==2.8.0
+
 # PDF report generation
 reportlab==4.4.0
 
