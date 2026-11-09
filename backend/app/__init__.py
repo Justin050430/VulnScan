@@ -58,6 +58,15 @@ def _recover_orphan_scans(app):
         return
     try:
         with app.app_context():
+            from sqlalchemy import inspect as _inspect
+
+            from app.extensions import db as _db
+
+            # Before the first migration there is nothing to recover; skip
+            # quietly instead of logging a stack trace on a fresh database.
+            if "Scan" not in _inspect(_db.engine).get_table_names():
+                return
+
             from app.services.scan_service import recover_orphan_scans
 
             recovered = recover_orphan_scans()
