@@ -149,6 +149,26 @@ contacts arbitrary third-party websites. Do not scan public sites you do not own
 > For local development only, `TRUST_BOUNDARY_MODE=legacy` restores the historical
 > **New Scan** form. Production always runs in `enforce` mode.
 
+### Troubleshooting the Trust Boundary
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Organisations tab shows **"An internal server error occurred"** (older build) or **503 `TRUST_BOUNDARY_UNAVAILABLE`** | Database still at the core migration; the 11 `Trust*` tables do not exist | `cd backend` then `python -m flask --app run.py db upgrade`, restart the server |
+| Verification returns `VERIFICATION_MISMATCH ... Connection error` | `/.well-known` was fetched on port 80/443 but the target listens on 5001/5003 | Start VulnScan with `TRUST_WEBFILE_PORT=5001` (or `5003`) |
+| `HOSTNAME_INVALID` when registering an asset | IP literal, wildcard, scheme/port or path supplied | Register the exact hostname only, e.g. `localhost` |
+| `TARGET_HOST_MISMATCH` on scan start | Target URL host differs from the verified asset | Use the same host, e.g. `http://localhost:5001/` |
+| `CREDIT_REQUIRED` / `CREDIT_NOT_AVAILABLE` | No available credit, or the credit was already consumed | Buy another credit (one per scan) |
+| `ATTESTATION_REQUIRED` / `ATTESTATION_EXPIRED` | No active attestation for the asset | Create a new attestation (1–90 days) |
+
+Check the schema state at any time:
+
+```powershell
+cd backend
+python -m flask --app run.py db current
+```
+
+The Trust Boundary revision is `aaf9e35de1fe`.
+
 ## Google Sign-In
 
 To enable **Sign in with Google**, create an OAuth 2.0 Client ID in Google Cloud

@@ -83,3 +83,25 @@ def test_one_active_redemption_per_credit_index(app):
         inspector = inspect(db.engine)
         indexes = {i["name"] for i in inspector.get_indexes("TrustCreditRedemption")}
         assert "ux_trust_redemption_active_credit" in indexes
+
+
+def test_missing_trust_schema_fails_closed(app, client, admin_token):
+    """An un-migrated database must answer 503, never a generic 500."""
+    from testing.trust_helpers import bearer
+
+    with app.app_context():
+        db.drop_all()
+
+    response = client.get("/api/v1/organisations", headers=bearer(admin_token))
+    assert response.status_code == 503
+    body = response.get_json()
+    assert body["code"] == "TRUST_BOUNDARY_UNAVAILABLE"
+    assert "flask --app run.py db upgrade" in body["message"]
+    assert body["details"]["missing_migration"] == "aaf9e35de1fe_trust_boundary_extension"
+
+
+def test_trust_schema_available_after_migration(app):
+    from app.trust.schema import available
+
+    with app.app_context():
+        assert available() is True

@@ -29,6 +29,19 @@ def register_blueprints(app):
 
     # Trust Boundary Extension - additive /api/v1 surface.
     v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
+
+    from flask import jsonify
+
+    from app.trust.schema import available, missing_schema_response
+
+    @v1.before_request
+    def _require_trust_schema():
+        """Fail closed with an actionable error when the schema is missing."""
+        if not available():
+            payload, status = missing_schema_response()
+            return jsonify(payload), status
+        return None
+
     v1.register_blueprint(organisations_bp)
     v1.register_blueprint(projects_bp)
     v1.register_blueprint(invitations_bp)
