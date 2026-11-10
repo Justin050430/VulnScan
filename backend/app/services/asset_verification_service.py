@@ -292,7 +292,18 @@ def check_verification(actor, access, asset, ip_address=None):
             reason = error or "file not retrievable"
         else:
             matched = _token_matches(body, stored_hash)
-            reason = "file content did not match the challenge"
+            if matched:
+                reason = None
+            elif "no challenge configured" in (body or ""):
+                reason = (
+                    "the target is still serving its placeholder content - "
+                    "publish the challenge value first"
+                )
+            else:
+                reason = (
+                    "the file is reachable but its content does not match the "
+                    "challenge - publish the exact value shown, not the URL"
+                )
         evidence = (
             f"{WEB_FILE_PATH} matched on {asset.Hostname}" if matched else None
         )

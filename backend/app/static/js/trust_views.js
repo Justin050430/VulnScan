@@ -289,20 +289,57 @@
         const method = el.querySelector('#v-method').value;
         const data = await API.post(`/api/v1/projects/${projectId}/assets/${assetId}/verification`, { method });
         const c = data.Challenge;
-        challengeBox.innerHTML = c.RecordName ? `
-          <div class="kv" style="grid-template-columns:120px 1fr">
-            <span class="k">Record</span><span class="mono">${U.esc(c.RecordName)}</span>
+      const isLocal = /^(localhost|127\.|::1$)/i.test(asset.Hostname);
+      if (c.RecordName) {
+        challengeBox.innerHTML = `
+          <div class="trust-notice">Step 1 — create this DNS TXT record on your domain.</div>
+          <div class="kv" style="grid-template-columns:130px 1fr">
+            <span class="k">Record name</span><span class="mono" style="word-break:break-all">${U.esc(c.RecordName)}</span>
             <span class="k">Type</span><span>${U.esc(c.RecordType)}</span>
-            <span class="k">Value</span><span class="mono" style="word-break:break-all">${U.esc(c.RecordValue)}</span>
+            <span class="k">Value to publish</span><span class="mono" style="word-break:break-all" id="v-value">${U.esc(c.RecordValue)}</span>
             <span class="k">Expires</span><span>${U.fmtDT(c.ExpiresAt)}</span>
-          </div>` : `
-          <div class="kv" style="grid-template-columns:120px 1fr">
-            <span class="k">File URL</span><span class="mono">${U.esc(c.FileURL)}</span>
-            <span class="k">Content</span><span class="mono" style="word-break:break-all">${U.esc(c.FileContent)}</span>
+          </div>
+          <div class="row" style="margin-top:10px;gap:8px">
+            <button class="btn btn-sm btn-secondary" id="v-copy">Copy value</button>
+          </div>
+          <p class="hint" style="margin-top:10px">Step 2 — wait for DNS to propagate (seconds to minutes), then click
+            <b>Check now</b> on the right. Do not paste this value into a browser; it is a record, not a link.</p>`;
+      } else {
+        const helper = isLocal
+          ? `<p class="hint" style="margin-top:10px">Step 1b (bundled local target only) — open
+               <a href="${U.esc(c.FileURL.replace('/.well-known/vulnscan.txt', '/__test__/verification'))}" target="_blank" rel="noopener">the challenge page</a>,
+               paste the value above, and press <b>Publish</b>.</p>`
+          : `<p class="hint" style="margin-top:10px">Step 1b — create this file on your web server so the URL below returns exactly that text.</p>`;
+        challengeBox.innerHTML = `
+          <div class="trust-notice">Step 1 — publish this exact text as a file on your site.</div>
+          <div class="kv" style="grid-template-columns:130px 1fr">
+            <span class="k">Text to publish</span><span class="mono" style="word-break:break-all" id="v-value">${U.esc(c.FileContent)}</span>
             <span class="k">Expires</span><span>${U.fmtDT(c.ExpiresAt)}</span>
-          </div>`;
-        U.toast('Challenge generated. Publish it, then run the check.', 'info');
-      } catch (e) { err(e.message); }
+          </div>
+          <div class="row" style="margin-top:10px;gap:8px">
+            <button class="btn btn-sm btn-secondary" id="v-copy">Copy text</button>
+            <a class="btn btn-sm btn-secondary" href="${U.esc(c.FileURL)}" target="_blank" rel="noopener">Open file URL</a>
+          </div>
+          <p class="hint" style="margin-top:10px">Step 2 — the file must then be readable at
+            <span class="mono">${U.esc(c.FileURL)}</span>. The URL is only where VulnScan reads from;
+            publishing the <b>text</b> above is what proves ownership.</p>
+          ${helper}
+          <p class="hint">Step 3 — press <b>Check now</b> on the right.</p>`;
+      }
+      const copyBtn = challengeBox.querySelector('#v-copy');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', async () => {
+          const value = challengeBox.querySelector('#v-value').textContent;
+          try {
+            await navigator.clipboard.writeText(value);
+            U.toast('Challenge value copied.', 'ok');
+          } catch (e) {
+            U.toast('Copy failed — select the value manually.', 'err');
+          }
+        });
+      }
+      U.toast('Challenge generated. Publish the value, then run the check.', 'info');
+    } catch (e) { err(e.message); }
     });
     el.querySelector('#v-check').addEventListener('click', async () => {
       try {
