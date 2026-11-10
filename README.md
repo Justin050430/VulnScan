@@ -107,27 +107,44 @@ Default accounts (override via `backend/.env`):
 
 ### Trying a real scan (Trust Boundary flow)
 
-1. Start the controlled (intentionally vulnerable) target:
-   ```powershell
-   cd testing\vuln_test_app
-   python run.py            # http://127.0.0.1:5001  (local only)
-   ```
-2. Sign in to VulnScan as the Developer and open **Organisations**.
-3. Create an organisation, then a project.
-4. Register the asset hostname `localhost` (scheme `http`) — IP addresses are rejected.
-5. Run **Verify**: choose `WEB_FILE` and publish the shown
-   `/.well-known/vulnscan.txt` content on the target. For the bundled test target,
-   set `WELL_KNOWN["content"]` (in `testing/vuln_test_app/app.py`) or point the
-   verification at your own host. For a real host use the DNS TXT challenge instead.
-6. Create an **attestation** for the asset (1–90 days).
-7. Buy a credit through the clearly labelled **mock** checkout (no real money), then
+Two **project-owned** targets ship with the repository. Both are intentionally
+vulnerable and loopback-only — never deploy them.
+
+| Target | Start | Port | Typical findings |
+| --- | --- | --- | --- |
+| **Test shop** (`testing/vuln_test_app`) | `python run.py` | 5001 | SQLi (Critical 9.8), reflected XSS (6.1), header findings, plus *safe* control pages |
+| **SQLi attack lab** (`testing/sqli_lab`) | `python app.py` | 5003 | Error-based SQLi on `/search?q=` and `/orders?ref=`, header findings |
+
+```powershell
+# Terminal 1 — VulnScan (asset verification fetches the target's port)
+cd backend
+$env:TRUST_WEBFILE_PORT = "5001"      # 5003 when demoing the SQLi lab
+python -m flask --app run.py run --port 5000
+
+# Terminal 2 — controlled target
+cd testing\vuln_test_app ; python run.py       # http://localhost:5001
+```
+
+1. Sign in as the Developer and open **Organisations**.
+2. Create an organisation, then a project.
+3. Register the asset hostname **`localhost`** (scheme `http`) — IP addresses are rejected.
+4. Run **Verify** → `WEB_FILE`. VulnScan shows a one-time challenge value and the
+   exact file URL (`http://localhost:5001/.well-known/vulnscan.txt`).
+5. Publish it without editing code: open
+   `http://localhost:5001/__test__/verification`, paste the challenge, submit.
+6. Click **Check now** → status becomes **Verified** (90 days).
+7. Create an **attestation** for the asset (1–90 days).
+8. Buy a credit through the clearly labelled **mock** checkout (no real money), then
    press **Pay (mock)**.
-8. Open **Project → Start scan**, confirm the readiness panel is green, and start the
-   scan. The target URL host must match the verified asset exactly.
-9. Review findings and download the PDF/CSV report as before.
+9. Open **Project → Start scan**, confirm the readiness panel is green, and start the
+   scan. The target URL host must match the verified asset exactly
+   (`http://localhost:5001/`).
+10. Review findings and download the PDF/CSV report as before.
+
+A full 9-page / 45-finding scan of the test shop completes in roughly 20 seconds.
 
 The scanner only ever requests pages **within the target's own scope** and never
-contacts arbitrary third-party websites.
+contacts arbitrary third-party websites. Do not scan public sites you do not own.
 
 > For local development only, `TRUST_BOUNDARY_MODE=legacy` restores the historical
 > **New Scan** form. Production always runs in `enforce` mode.

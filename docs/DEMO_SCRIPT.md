@@ -9,11 +9,16 @@ public third-party websites.
 ```powershell
 # Terminal 1 — VulnScan
 cd c:\FYP\VulnScan\backend
+$env:TRUST_WEBFILE_PORT = "5001"    # 5003 when demonstrating the SQLi lab
 python run.py                       # http://127.0.0.1:5000
 
-# Terminal 2 — controlled vulnerable target
+# Terminal 2 — controlled vulnerable target (test shop)
 cd c:\FYP\VulnScan\testing\vuln_test_app
-python run.py                       # http://127.0.0.1:5001
+python run.py                       # http://localhost:5001
+
+# Optional Terminal 3 — SQLi attack lab (SQLi-focused target)
+cd c:\FYP\VulnScan\testing\sqli_lab
+python app.py                       # http://localhost:5003
 ```
 
 | Role | Email | Password |
@@ -50,11 +55,12 @@ VulnScan from being an unsafe public scanner.
 4. **Verify** the asset:
    - choose `WEB_FILE`;
    - copy the one-time challenge (expires in 30 minutes);
-   - for the bundled target, publish it as `/.well-known/vulnscan.txt`
-     (set `WELL_KNOWN["content"]` in `testing/vuln_test_app/app.py` and restart it,
-     or use the `TRUST_WEBFILE_PORT` setting used by the tests);
+   - publish it on the target: open `http://localhost:5001/__test__/verification`
+     and paste the challenge (no code edit, no restart needed);
    - click **Check now** → status becomes **Verified (90 days)**.
    - *Show:* the plaintext token is shown once and is never stored in evidence.
+   - *Note:* run VulnScan with `TRUST_WEBFILE_PORT=5001` (or `5003` for the SQLi
+     lab) so the verifier fetches the same port the target listens on.
 5. **Attest** the asset:
    - read the authorisation statement;
    - set 30 days and an optional reference such as `CHG-1234`;

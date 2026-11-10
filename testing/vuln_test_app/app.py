@@ -14,13 +14,18 @@ scanner does not raise false positives:
   * /safe_search   - safely escaped echo
   * /headers_ok    - all recommended security headers present
 """
+import os
+
 from flask import Flask, Response, request
 
 app = Flask(__name__)
 
 #: Trust Boundary web-file verification content.  Tests set this to the
-#: one-time challenge value returned by POST .../verification.
-WELL_KNOWN = {"content": "no challenge configured\n"}
+#: one-time challenge value returned by POST .../verification.  For a manual
+#: local demonstration, paste the value at http://localhost:5001/__test__/verification
+#: (localhost-only helper page) or start the target with
+#: VULNSCAN_WELL_KNOWN="vulnscan-verify=..." already set.
+WELL_KNOWN = {"content": os.getenv("VULNSCAN_WELL_KNOWN", "no challenge configured\n")}
 
 HOME = """
 <!doctype html><html><head><title>VulnScan Test Shop</title></head><body>
@@ -62,6 +67,38 @@ def about():
 def well_known_vulnscan():
     """Trust Boundary ownership-verification file (test target only)."""
     return Response(WELL_KNOWN["content"], mimetype="text/plain")
+
+
+@app.route("/__test__/verification", methods=["GET", "POST"])
+def publish_verification_challenge():
+    """Local-only helper: publish the Trust Boundary challenge value.
+
+    VulnScan generates the challenge at runtime; this page lets a manual local
+    demonstration paste it without editing this file or restarting the target.
+    Only reachable from loopback.
+    """
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        return Response("localhost only\n", status=403, mimetype="text/plain")
+    if request.method == "POST":
+        WELL_KNOWN["content"] = (request.form.get("content") or "").strip() + "\n"
+    current = WELL_KNOWN["content"].strip() or "(empty)"
+    return Response(
+        f"""<!doctype html><html><head><meta charset="utf-8">
+<title>Publish verification challenge</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:640px;margin:40px auto}}
+input[type=text]{{width:100%;padding:8px}}code{{word-break:break-all}}</style>
+</head><body>
+<h2>Publish /.well-known/vulnscan.txt</h2>
+<p>Paste the challenge value shown by VulnScan, then submit.</p>
+<form method="post">
+  <input type="text" name="content" value="{current}">
+  <p><button type="submit">Publish</button></p>
+</form>
+<p>Currently served: <code>{current}</code></p>
+<p><a href="/">Back to the shop</a></p>
+</body></html>""",
+        mimetype="text/html",
+    )
 
 
 @app.route("/search")

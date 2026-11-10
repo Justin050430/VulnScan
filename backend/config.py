@@ -134,6 +134,10 @@ class Config:
     # Web-file verification limits.
     TRUST_WEBFILE_TIMEOUT = float(os.getenv("TRUST_WEBFILE_TIMEOUT", "8"))
     TRUST_WEBFILE_MAX_BYTES = int(os.getenv("TRUST_WEBFILE_MAX_BYTES", "4096"))
+    # Assets store a hostname only (no port), so local demonstrations that run
+    # the controlled target on a non-default port set this to that port.
+    # 0 = use the URL default port (80/443).  Production leaves this at 0.
+    TRUST_WEBFILE_PORT = int(os.getenv("TRUST_WEBFILE_PORT", "0") or 0)
 
     # ---------------------------------------------------------------- Misc
     AUDIT_LOG_ENABLED = True

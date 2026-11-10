@@ -499,12 +499,33 @@ def reset():
 
 
 if __name__ == "__main__":
+    import threading
+
+    from werkzeug.serving import make_server
+
     reset_db()
     print()
     print("=" * 66)
-    print("  SQLi Attack Lab   ->   http://127.0.0.1:5003/")
+    print(f"  SQLi Attack Lab   ->   http://localhost:{PORT}/")
     print("  INTENTIONALLY VULNERABLE. Local training only.")
     print("  Missions: login bypass -> UNION extraction -> steal the flag")
     print("=" * 66)
     print()
-    app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)
+    # Bind both loopback stacks so the exact hostname "localhost" is fast.
+    servers = []
+    for host in ("127.0.0.1", "::1"):
+        try:
+            servers.append(make_server(host, PORT, app, threaded=True))
+        except OSError:
+            continue
+    if not servers:
+        raise SystemExit(f"could not bind 127.0.0.1/::1 on port {PORT}")
+    for server in servers[1:]:
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        servers[0].serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for server in servers:
+            server.shutdown()

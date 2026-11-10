@@ -121,7 +121,7 @@ def test_web_file_verification_success(trust_app, client, dev_token, project,
     )
     assert started.status_code == 200
     challenge = started.get_json()["Challenge"]
-    assert challenge["FileURL"] == "http://localhost/.well-known/vulnscan.txt"
+    assert challenge["FileURL"] == "http://localhost:5199/.well-known/vulnscan.txt"
 
     vuln_target_module.WELL_KNOWN["content"] = challenge["FileContent"] + "\n"
     checked = client.post(
@@ -170,6 +170,49 @@ def test_verification_challenge_expiry_blocks_check(trust_app, client, dev_token
     )
     assert checked.status_code == 409
     assert checked.get_json()["code"] == "VERIFICATION_TOKEN_EXPIRED"
+
+
+def test_web_file_url_includes_configured_port(trust_app, client, dev_token,
+                                              project):
+    """Assets hold a hostname only; the verification port is configurable."""
+    trust_app.config["TRUST_WEBFILE_PORT"] = 5001
+    asset = register_asset(client, dev_token, project["ProjectID"],
+                           hostname="localhost", scheme="http")
+    started = client.post(
+        f"/api/v1/projects/{project['ProjectID']}/assets/{asset['AssetID']}/verification",
+        json={"method": "WEB_FILE"}, headers=bearer(dev_token),
+    )
+    assert started.status_code == 200
+    assert started.get_json()["Challenge"]["FileURL"] == \
+        "http://localhost:5001/.well-known/vulnscan.txt"
+
+
+def test_local_helper_page_publishes_challenge(trust_app, client, dev_token,
+                                               project, target):
+    """The local-only helper page can publish the runtime challenge value."""
+    import requests
+
+    trust_app.config["TRUST_WEBFILE_PORT"] = 5199
+    asset = register_asset(client, dev_token, project["ProjectID"],
+                           hostname="localhost", scheme="http")
+    started = client.post(
+        f"/api/v1/projects/{project['ProjectID']}/assets/{asset['AssetID']}/verification",
+        json={"method": "WEB_FILE"}, headers=bearer(dev_token),
+    )
+    challenge = started.get_json()["Challenge"]
+    published = requests.post(
+        "http://localhost:5199/__test__/verification",
+        data={"content": challenge["FileContent"]}, timeout=10,
+    )
+    assert published.status_code == 200
+
+    checked = client.post(
+        f"/api/v1/projects/{project['ProjectID']}/assets/{asset['AssetID']}"
+        "/verification/check",
+        json={}, headers=bearer(dev_token),
+    )
+    assert checked.status_code == 200, checked.get_json()
+    assert checked.get_json()["Asset"]["VerificationStatus"] == "Verified"
 
 
 def _scan_body(scenario_asset, profile, credit):

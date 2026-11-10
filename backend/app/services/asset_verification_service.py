@@ -190,9 +190,11 @@ def start_verification(actor, access, asset, method, ip_address=None):
         }
     else:
         scheme = asset.Scheme or "https"
+        port = int(current_app.config.get("TRUST_WEBFILE_PORT", 0) or 0)
+        netloc = f"{asset.Hostname}:{port}" if port else asset.Hostname
         challenge = {
             "Method": method,
-            "FileURL": f"{scheme}://{asset.Hostname}{WEB_FILE_PATH}",
+            "FileURL": f"{scheme}://{netloc}{WEB_FILE_PATH}",
             "FileContent": challenge_value,
             "ExpiresAt": asset.VerificationTokenExpiresAt.isoformat(),
         }

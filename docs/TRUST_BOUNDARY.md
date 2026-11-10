@@ -222,9 +222,9 @@ falling back to the legacy path.
 - Invitations require the invitee to already have a VulnScan account; the one-time
   link is shown to the inviter (no email delivery).
 - No sub-domain or wildcard assets; each hostname is verified separately.
-- Assets have no port field: non-default ports must be supplied explicitly as the scan
-  `target_url` (host must still match). Tests use `TRUST_WEBFILE_PORT` for the local
-  target.
+- Assets have no port field: non-default ports must be supplied explicitly as the
+  scan `target_url` (host must still match), and `TRUST_WEBFILE_PORT` tells the
+  verifier which port to fetch `/.well-known/vulnscan.txt` from (0 = URL default).
 - The mock checksum secret is a configuration value, not a real gateway secret.
 - Credit consumption happens at worker start, so a scan that crashes immediately after
   starting still consumes its credit (refunds are future work).
