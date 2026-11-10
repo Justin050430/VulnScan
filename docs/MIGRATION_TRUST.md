@@ -56,6 +56,28 @@ LocalDB, including the new tables and constraints.
 > No Azure or production database was touched. The following must be approved and
 > executed by the operator with a database reviewer.
 
+### 3a. Automated runbook (requires Azure CLI + `az login`)
+
+`scripts/azure_trust_migration.ps1` performs the whole procedure and stops at the
+first failure:
+
+```powershell
+az login
+.\scripts\azure_trust_migration.ps1 -DryRun     # show the plan, change nothing
+.\scripts\azure_trust_migration.ps1             # backup -> migrate -> secret -> verify
+```
+
+It resolves the database from the `DATABASE_URL` App Service setting (the string is
+never printed), creates a `VulnScan-backup-<timestamp>` database copy as the rollback
+point, applies the migration, sets a random `TRUST_MOCK_PAYMENT_SECRET`, restarts the
+app and then expects `/api/health` → `200` and `/api/v1/products` → `401`
+(`401` proves the trust tables now exist; an un-migrated app answers `503`).
+
+Useful switches: `-SkipSecret`, `-ResourceGroup`, `-WebAppName`, `-SqlServer`,
+`-Database`, `-AppBaseUrl`.
+
+### 3b. Manual procedure
+
 1. **Backup** — take an Azure SQL restore point / full backup and record the LSN.
 2. **Review** — DBA reviews the DDL (filtered indexes, composite FKs, collation).
 3. **Staging restore** — restore the production backup into a staging database.
