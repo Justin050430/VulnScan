@@ -78,14 +78,39 @@ Useful switches: `-SkipSecret`, `-ResourceGroup`, `-WebAppName`, `-SqlServer`,
 
 ### 3b. Manual procedure
 
-1. **Backup** — take an Azure SQL restore point / full backup and record the LSN.
+1. **Backup** — create a database copy (Portal → SQL database → **Copy**) or a
+   restore point, and record its name.
 2. **Review** — DBA reviews the DDL (filtered indexes, composite FKs, collation).
-3. **Staging restore** — restore the production backup into a staging database.
-4. **Apply to staging** — run `flask db upgrade` against staging.
-5. **Verify** — run `python -m pytest testing -q` plus a staging smoke check
+3. **Get the connection string** — App Service → **Configuration → Application
+   settings** → copy `DATABASE_URL`.
+4. **Allow your IP** — SQL server → **Networking** → add the current client IP.
+5. **Check the ODBC driver** — the App Service setting usually uses
+   `ODBC Driver 18 for SQL Server`, while a local Windows machine may only have 17:
+
+   ```powershell
+   Get-OdbcDriver | Where-Object { $_.Name -match 'SQL Server' } | Select-Object -ExpandProperty Name -Unique
+   ```
+
+   | Installed | Action |
+   | --- | --- |
+   | `ODBC Driver 18 for SQL Server` | use the string unchanged |
+   | only `ODBC Driver 17 for SQL Server` | replace `ODBC+Driver+18+for+SQL+Server` with `ODBC+Driver+17+for+SQL+Server` in the pasted value |
+   | neither | install one (e.g. `winget install Microsoft.msodbcsql.18`) |
+
+   `scripts/azure_trust_migration.ps1` performs this substitution automatically.
+6. **Apply the migration** from `backend/` with the venv python. Use **single quotes**
+   so a `$` in the password is not interpolated by PowerShell:
+
+   ```powershell
+   cd backend
+   $env:DATABASE_URL = 'mssql+pyodbc:///?odbc_connect=...'
+   ..\.venv\Scripts\python.exe -m flask --app run.py db upgrade
+   ..\.venv\Scripts\python.exe -m flask --app run.py db current
+   ```
+7. **Verify** — run `python -m pytest testing -q` plus a staging smoke check
    (`/api/health`, login, project creation, mock payment, gated scan against a
    controlled target).
-6. **Deploy application code** with `TRUST_BOUNDARY_MODE=legacy` if a staged rollout is
+8. **Deploy application code** with `TRUST_BOUNDARY_MODE=legacy` if a staged rollout is
    required — the new tables exist but are unused. No core column changes, so the old
    code keeps working.
 7. **Enable enforcement** by setting `TRUST_BOUNDARY_MODE=enforce` during a maintenance
