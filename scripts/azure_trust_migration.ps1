@@ -99,22 +99,6 @@ if (-not $conn) {
 }
 Write-Host "Connection string retrieved ($($conn.Length) characters, not printed)."
 
-# Local Windows machines often only have ODBC Driver 17 installed while the
-# Azure App Service setting uses Driver 18. Swap it so `flask db upgrade`
-# can connect from here (the app keeps using its own setting).
-$installedDrivers = (Get-OdbcDriver | Where-Object { $_.Name -match 'SQL Server' } | Select-Object -ExpandProperty Name)
-if (($conn -match 'Driver\+18\+' -or $conn -match 'Driver%2018%20' -or $conn -match 'Driver 18 for') -and ($installedDrivers -notcontains 'ODBC Driver 18 for SQL Server')) {
-    if ($installedDrivers -contains 'ODBC Driver 17 for SQL Server') {
-        Write-Host "Driver 18 not installed locally; using Driver 17 for this run only." -ForegroundColor Yellow
-        $conn = $conn -replace 'ODBC\+Driver\+18\+for\+SQL\+Server', 'ODBC+Driver+17+for+SQL+Server'
-        $conn = $conn -replace 'ODBC%20Driver%2018%20for%20SQL%20Server', 'ODBC%20Driver%2017%20for%20SQL%20Server'
-        $conn = $conn -replace 'ODBC Driver 18 for SQL Server', 'ODBC Driver 17 for SQL Server'
-    } else {
-        Write-Host "ERROR: neither ODBC Driver 18 nor 17 for SQL Server is installed." -ForegroundColor Red
-        exit 1
-    }
-}
-
 # ---------------------------------------------------------------- 3 & 4
 Step 3 "Current schema revision"
 $env:DATABASE_URL = $conn

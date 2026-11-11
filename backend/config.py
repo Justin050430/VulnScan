@@ -177,6 +177,11 @@ class ProductionConfig(Config):
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "") or SECRET_KEY
     # The legacy scan endpoint is never available in production.
     TRUST_BOUNDARY_MODE = "enforce"
+    # Fail closed: if the setting is absent, do not let the scanner reach
+    # loopback/private/metadata addresses.
+    SCANNER_ALLOW_PRIVATE_TARGETS = _as_bool(
+        os.getenv("SCANNER_ALLOW_PRIVATE_TARGETS", "false")
+    )
 
 
 config_by_name = {
