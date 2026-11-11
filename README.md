@@ -31,6 +31,10 @@ for local compatibility and the pre-existing regression suite (`legacy` mode).
 See [docs/TRUST_BOUNDARY.md](docs/TRUST_BOUNDARY.md), [docs/API_TRUST.md](docs/API_TRUST.md)
 and [docs/MIGRATION_TRUST.md](docs/MIGRATION_TRUST.md).
 
+To exercise the whole flow locally against targets that ship with the repository
+(no third-party systems, no legal risk) follow
+[docs/LOCAL_ENVIRONMENT.md](docs/LOCAL_ENVIRONMENT.md).
+
 ## Technology stack
 
 | Layer | Technology |
@@ -67,6 +71,7 @@ docs/TRUST_BOUNDARY.md    Trust Boundary design, roles and limits
 docs/API_TRUST.md         /api/v1 contracts and error codes
 docs/MIGRATION_TRUST.md   additive migration / backup / rollback runbook
 docs/DEMO_SCRIPT.md       step-by-step FYP demonstration script
+docs/LOCAL_ENVIRONMENT.md local full-flow environment (parity with Azure)
 screenshots/              verification evidence (UI screenshots + real reports)
 ```
 
