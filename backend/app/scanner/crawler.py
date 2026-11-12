@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 from app.scanner.base import PageInfo
 from app.scanner.client import ScanResponse
+from app.scanner.forms import form_signature, parse_forms
 from app.utils.urls import extract_links, is_static_resource, normalize_url
 
 logger = logging.getLogger("vulnscan.crawler")
@@ -31,6 +32,20 @@ class Crawler:
         self.skip_url_contains = tuple(
             token.lower() for token in (skip_url_contains or ())
         )
+        # Site-wide forms appear on many pages; only the first instance is
+        # attached to a page so its fields are tested once per scan.
+        self._seen_form_signatures = set()
+
+    def dedupe_forms(self, forms):
+        """Drop forms already seen on an earlier page of this crawl."""
+        unique = []
+        for form in forms:
+            signature = form_signature(form)
+            if signature in self._seen_form_signatures:
+                continue
+            self._seen_form_signatures.add(signature)
+            unique.append(form)
+        return tuple(unique)
 
     def in_scope(self, url, base_parsed):
         """Return True when url is within the target's scan scope."""
@@ -72,6 +87,7 @@ class Crawler:
             url, depth = queue.popleft()
             response = self.http.get(url)
             order += 1
+            is_html = response.ok and self.http.is_html(response)
             page = PageInfo(
                 url=url,
                 depth=depth,
@@ -79,6 +95,13 @@ class Crawler:
                 http_status=response.status_code,
                 title=_extract_title(response.text),
                 error=response.error,
+                forms=(
+                    self.dedupe_forms(
+                        parse_forms(response.final_url or url, response.text)
+                    )
+                    if is_html
+                    else ()
+                ),
             )
             if response.ok:
                 pages.append(page)

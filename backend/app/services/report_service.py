@@ -244,10 +244,12 @@ def build_pdf(scan, findings, pages):
             f"<b>Detection techniques used:</b> {', '.join(techniques)}", small))
     story.append(Paragraph("<b>Limitations:</b>", small))
     for limitation in (
-        "POST/PUT/DELETE request bodies and form submissions are not tested.",
+        "GET and POST HTML forms are submitted with read-only payloads; "
+        "password, file-upload and destructive forms are skipped.",
+        "PUT/PATCH/DELETE bodies, JSON/XML payloads, headers and cookies are not tested.",
         "JavaScript is not executed, so script-rendered content is not analysed.",
         "Authenticated or login-protected pages are not tested.",
-        "Only GET query-string parameters are fuzzed (no headers, cookies or JSON bodies).",
+        "Query-string parameters and HTML form fields are fuzzed (no headers, cookies or JSON bodies).",
         "Time-based blind SQL injection runs only when enabled by the operator.",
     ):
         story.append(Paragraph(f"- {limitation}", small))

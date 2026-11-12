@@ -389,12 +389,26 @@ def get_scan_detail(scan_id):
         )
     data["CoverageNote"] = (
         f"{len(analysed_pages)} of {len(scan.pages)} discovered page(s) were "
-        f"analysed. {auth_note} Only GET query-string parameters are tested "
-        "(no POST bodies, form submission or JavaScript-rendered content). "
+        f"analysed. {auth_note} {_testing_scope_note()} "
         "Pages skipped due to a non-success HTTP status are listed in "
         "SkippedPages and were not tested."
     )
     return data
+
+
+def _testing_scope_note():
+    """Explain which injection points the detection modules actually tested."""
+    if current_app.config.get("SCANNER_ENABLE_FORM_TESTING", True):
+        return (
+            "Query-string parameters and HTML form fields (GET and POST) are "
+            "tested; forms containing password or file inputs, and forms with "
+            "destructive actions, are skipped. JavaScript-rendered content is "
+            "not executed."
+        )
+    return (
+        "Only GET query-string parameters are tested (form-field testing is "
+        "disabled on this server). JavaScript-rendered content is not executed."
+    )
 
 
 def _overall_risk(findings):

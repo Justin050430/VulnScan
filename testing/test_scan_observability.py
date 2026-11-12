@@ -62,7 +62,7 @@ def test_scan_detail_reports_coverage(client, dev_token, target):
     assert detail["SkippedPages"] == []
     assert "q" in detail["TestedParameters"]
     assert "id" in detail["TestedParameters"]
-    assert "Only GET query-string parameters are tested" in detail["CoverageNote"]
+    assert "HTML form fields (GET and POST) are tested" in detail["CoverageNote"]
     assert "non-success HTTP status" in detail["CoverageNote"]
 
 

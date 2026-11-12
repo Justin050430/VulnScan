@@ -33,6 +33,15 @@ VulnScan is **not** a "scan any website" service. Scan creation is gated by an a
 `POST /api/scans` with `LEGACY_SCAN_ENDPOINT_DISABLED`. The legacy endpoint exists only
 for local compatibility and the pre-existing regression suite (`legacy` mode).
 
+### Injection coverage
+
+The SQLi and XSS modules test every query-string parameter **and every field of the
+HTML forms the crawler discovers** (GET and POST). Forms are screened before use:
+password/file-upload forms and forms with destructive actions (delete, payment,
+logout, …) are never submitted, and hidden fields keep the values the page served so
+CSRF tokens stay valid. `SCANNER_ENABLE_FORM_TESTING=false` restores query-string-only
+behaviour.
+
 See [docs/TRUST_BOUNDARY.md](docs/TRUST_BOUNDARY.md), [docs/API_TRUST.md](docs/API_TRUST.md)
 and [docs/MIGRATION_TRUST.md](docs/MIGRATION_TRUST.md).
 
@@ -49,7 +58,7 @@ To exercise the whole flow locally against targets that ship with the repository
 | ORM / Migrations | SQLAlchemy, Flask-SQLAlchemy, Flask-Migrate (Alembic) |
 | Authentication | Flask-JWT-Extended (JWT bearer), Google OAuth 2.0 single sign-on |
 | Database | Microsoft SQL Server (Azure SQL / SQL Server LocalDB) |
-| Scanner | Built-in Web Crawler + modular detection engine (`requests`) |
+| Scanner | Built-in Web Crawler + modular detection engine (`requests`); tests query-string parameters and HTML form fields (GET/POST) |
 | Reports | PDF (ReportLab) and CSV export |
 
 ## Repository layout
@@ -69,9 +78,11 @@ backend/                  Flask application (application factory)
   config.py  run.py  wsgi.py
 testing/
   vuln_test_app/          controlled intentionally-vulnerable local target
-  test_*.py               pytest suite (238 tests, incl. SQL Server integration)
+  test_*.py               pytest suite (272 tests, incl. SQL Server integration)
   trust_helpers.py        shared Trust Boundary test fixtures
 .github/workflows/ci.yml  continuous integration (runs the test suite)
+scripts/start-local.ps1   starts/stops the complete local environment
+scripts/local_smoke_test.py  end-to-end Trust Boundary + detection-quality check
 docs/TRUST_BOUNDARY.md    Trust Boundary design, roles and limits
 docs/API_TRUST.md         /api/v1 contracts and error codes
 docs/MIGRATION_TRUST.md   additive migration / backup / rollback runbook
@@ -115,6 +126,23 @@ Default accounts (override via `backend/.env`):
 | Administrator | `admin@vulnscan.local` | `Admin@VulnScan2025` |
 | Developer | `developer@vulnscan.local` | `Developer@VulnScan2025` |
 
+### One-command local environment
+
+```powershell
+.\scripts\start-local.ps1              # starts the target (5001) and VulnScan (5000)
+.\scripts\start-local.ps1 -Action status
+.\scripts\start-local.ps1 -Action stop
+```
+
+The script checks the schema, reseeds reference data, waits until both services
+answer, and prints every credential you need (including the test-shop account used
+for authenticated scans). To drive the whole Trust Boundary flow and print a
+detection-quality summary automatically:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\local_smoke_test.py
+```
+
 ### Trying a real scan (Trust Boundary flow)
 
 Two **project-owned** targets ship with the repository. Both are intentionally
@@ -124,6 +152,20 @@ vulnerable and loopback-only — never deploy them.
 | --- | --- | --- | --- |
 | **Test shop** (`testing/vuln_test_app`) | `python run.py` | 5001 | SQLi (Critical 9.8), reflected XSS (6.1), header findings, plus *safe* control pages |
 | **SQLi attack lab** (`testing/sqli_lab`) | `python app.py` | 5003 | Error-based SQLi on `/search?q=` and `/orders?ref=`, header findings |
+
+Credentials used by the local demo:
+
+| Account | Purpose |
+| --- | --- |
+| `developer@vulnscan.local` / `Developer@VulnScan2025` | VulnScan Developer (creates the org, project, scans) |
+| `admin@vulnscan.local` / `Admin@VulnScan2025` | VulnScan Administrator (users, KB, audit logs) |
+| `pentester@example.test` / `Temporary!Pass123` | Test-shop login for **authenticated** scans (single-use credential) |
+
+The test shop also exposes POST forms that are vulnerable to reflected XSS
+(`/feedback` → `message`) and SQL injection (`/feedback` → `order`), so you can
+see that form fields — not just query strings — are tested. `/feedback_safe` is
+the escaped control page, and the same page renders a password form and a
+`POST /account/delete` form that the scanner must never submit.
 
 ```powershell
 # Terminal 1 — VulnScan (asset verification fetches the target's port)
@@ -197,7 +239,7 @@ clear message (no fake authentication is used).
 ## Running the tests
 
 ```powershell
-python -m pytest testing -q          # 238 tests; SQL Server tests skip if unavailable
+python -m pytest testing -q          # 272 tests; SQL Server tests skip if unavailable
 ```
 
 The suite uses an in-memory SQLite database, a local controlled target and a

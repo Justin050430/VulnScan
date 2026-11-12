@@ -38,6 +38,22 @@ def _retest(client, token, sid, fid):
                        headers=auth(token), json={})
 
 
+def test_retest_post_form_finding_is_still_detected(client, dev_token, target):
+    """A POST form-field finding can be re-verified like a GET one."""
+    sid, detail = _full_scan(client, dev_token, target)
+    finding = next(
+        f for f in detail["Findings"]
+        if f["VulnerabilityName"] == "SQL Injection"
+        and f["RequestMethod"] == "POST"
+        and f["Parameter"] == "order"
+    )
+    resp = _retest(client, dev_token, sid, finding["FindingID"])
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["Retest"]["Verdict"] == "Still Detected", body["Retest"]["Message"]
+    assert body["Finding"]["Status"] == "Open"
+
+
 def test_retest_still_detected(client, dev_token, target):
     """An unfixed page re-detects the same parameter -> Still Detected."""
     sid, detail = _full_scan(client, dev_token, target)

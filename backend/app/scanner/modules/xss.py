@@ -11,7 +11,6 @@ executable attribute or a script breakout - see
 """
 import logging
 import re
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from app.scanner.base import DetectionModule
 from app.scanner.html_context import classify_reflection
@@ -62,20 +61,16 @@ class XSSModule(DetectionModule):
 
     def detect(self):
         results = []
-        parameters = self.page.parameters
-        if not parameters:
-            return results
-
-        for name in parameters:
-            result = self._test_parameter(name)
+        for point in self.page.injection_points():
+            result = self._test_point(point)
             if result is not None:
                 results.append(result)
         return results
 
-    def _test_parameter(self, param_name):
+    def _test_point(self, point):
         best_suspected = None
         for payload in PAYLOADS:
-            response = self.http.get(self._build_url(param_name, payload))
+            response = self.send(point, payload)
             if not response.ok:
                 continue
             content_type = (response.headers.get("Content-Type") or "").lower()
@@ -91,23 +86,24 @@ class XSSModule(DetectionModule):
             if ctx is None:
                 continue
             if ctx.executable:
-                return self._confirmed_result(param_name, payload, body, ctx)
+                return self._confirmed_result(point, payload, body, ctx)
             if ctx.suspected and best_suspected is None:
                 best_suspected = self._suspected_result(
-                    param_name, payload, body, ctx
+                    point, payload, body, ctx
                 )
         return best_suspected
 
-    def _confirmed_result(self, param_name, payload, body, ctx):
+    def _confirmed_result(self, point, payload, body, ctx):
         evidence = (
             f"CONFIRMED: the raw XSS payload {payload!r} was reflected "
             f"byte-for-byte (unencoded) in an executable HTML context for "
-            f"parameter '{param_name}'."
-        ) + "\n\n" + self._context_block(payload, body, ctx)
+            f"{point.describe()}."
+        ) + "\n\n" + self._context_block(point, payload, body, ctx)
         return self._scored_result(
             CVSS_XSS_REFLECTED,
             0.92,
-            parameter=param_name,
+            method=point.method,
+            parameter=point.name,
             payload=payload,
             technique=TECHNIQUE_CONFIRMED,
             evidence=evidence,
@@ -119,17 +115,18 @@ class XSSModule(DetectionModule):
             ),
         )
 
-    def _suspected_result(self, param_name, payload, body, ctx):
+    def _suspected_result(self, point, payload, body, ctx):
         evidence = (
             f"SUSPECTED (script context): the raw XSS payload {payload!r} was "
             f"reflected byte-for-byte (unencoded) inside a <script> block for "
-            f"parameter '{param_name}', but the response does not prove a "
+            f"{point.describe()}, but the response does not prove a "
             f"breakout from the surrounding JavaScript."
-        ) + "\n\n" + self._context_block(payload, body, ctx)
+        ) + "\n\n" + self._context_block(point, payload, body, ctx)
         return self._scored_result(
             CVSS_XSS_REFLECTED,
             0.55,
-            parameter=param_name,
+            method=point.method,
+            parameter=point.name,
             payload=payload,
             technique=TECHNIQUE_SUSPECTED,
             evidence=evidence,
@@ -141,7 +138,7 @@ class XSSModule(DetectionModule):
             ),
         )
 
-    def _context_block(self, payload, body, ctx):
+    def _context_block(self, point, payload, body, ctx):
         index = body.find(payload)
         start = max(0, index - 60)
         end = min(len(body), index + len(payload) + 60)
@@ -152,6 +149,7 @@ class XSSModule(DetectionModule):
             else ("unproven" if ctx.suspected else "not executable")
         )
         return "\n".join([
+            f"INJECTION POINT: {point.describe()}",
             f"REFLECTION CONTEXT: {ctx.description}",
             f"REFLECTION POSITION: {position}",
             "ENCODING: raw (payload echoed byte-for-byte; no HTML-encoding "
@@ -170,13 +168,3 @@ class XSSModule(DetectionModule):
             f"REFERENCES: {REFERENCES}",
             "VERIFICATION: Not retested yet.",
         ])
-
-    def _build_url(self, param_name, new_value):
-        parsed = urlparse(self.page.url)
-        query = urlencode(
-            [(k, v) if k != param_name else (k, new_value)
-             for k, v in parse_qsl(parsed.query, keep_blank_values=True)]
-        )
-        return urlunparse(
-            (parsed.scheme, parsed.netloc, parsed.path, parsed.params, query, "")
-        )

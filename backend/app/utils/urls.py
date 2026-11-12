@@ -32,6 +32,29 @@ def is_static_resource(url):
     return any(path.endswith(ext) for ext in static_exts)
 
 
+def set_query_parameter(url, name, value):
+    """Return `url` with the existing query parameter `name` replaced."""
+    parsed = urlparse(url)
+    query = urlencode(
+        [(k, v) if k != name else (k, value)
+         for k, v in parse_qsl(parsed.query, keep_blank_values=True)]
+    )
+    return urlunparse(
+        (parsed.scheme, parsed.netloc, parsed.path, parsed.params, query, "")
+    )
+
+
+def merge_query_parameters(url, params):
+    """Return `url` with `params` added to (or replacing) its query string."""
+    parsed = urlparse(url)
+    merged = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    merged.update({k: v for k, v in params.items() if v is not None})
+    query = urlencode(list(merged.items()))
+    return urlunparse(
+        (parsed.scheme, parsed.netloc, parsed.path, parsed.params, query, "")
+    )
+
+
 def extract_links(base_url, html):
     """Extract absolute http(s) links from an HTML document."""
     from html.parser import HTMLParser

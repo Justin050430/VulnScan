@@ -45,7 +45,6 @@ Only safe, read-only payloads are used (no writes, no data extraction).
 import logging
 import re
 import time
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from app.scanner.base import DetectionModule
 from app.scanner.similarity import mask_reflection, token_similarity
@@ -147,39 +146,39 @@ class SQLInjectionModule(DetectionModule):
 
     def detect(self):
         results = []
-        parameters = self.page.parameters
-        if not parameters:
+        points = self.page.injection_points()
+        if not points:
             return results
 
-        baseline = self.http.get(self.page.url)
-        if not baseline.ok:
-            return results
-
-        for name, value in parameters.items():
-            confirmed = self._error_based(name, baseline, value)
+        for point in points:
+            baseline = self.baseline(point)
+            if not baseline.ok:
+                continue
+            confirmed = self._error_based(point, baseline)
             if confirmed is not None:
                 results.append(confirmed)
                 continue
-            conditional = self._conditional_error(name, baseline, value)
+            conditional = self._conditional_error(point, baseline)
             if conditional is not None:
                 results.append(conditional)
                 continue
-            suspected = self._boolean_differential(name, value)
+            suspected = self._boolean_differential(point, baseline)
             if suspected is not None:
                 results.append(suspected)
                 continue
-            timed = self._time_based(name, value)
+            timed = self._time_based(point)
             if timed is not None:
                 results.append(timed)
         return results
 
     # ---------------------------------------------------------------- error
-    def _error_based(self, param_name, baseline, original_value):
+    def _error_based(self, point, baseline):
+        param_name = point.name
         baseline_text = baseline.text or ""
         baseline_lower = baseline_text.lower()
         inconclusive = None
-        for payload in self._ordered_payloads(original_value):
-            response = self.http.get(self._build_url(param_name, payload))
+        for payload in self._ordered_payloads(point.value):
+            response = self.send(point, payload)
             if not response.ok:
                 continue
             body = response.text or ""
@@ -189,7 +188,7 @@ class SQLInjectionModule(DetectionModule):
 
             # Reproduce the observation: a transient error page must not be
             # reported with confirmed evidence.
-            repeat = self.http.get(self._build_url(param_name, payload))
+            repeat = self.send(point, payload)
             reproduced = bool(
                 repeat.ok
                 and self._matched_signature((repeat.text or "").lower()) == signature
@@ -198,11 +197,12 @@ class SQLInjectionModule(DetectionModule):
                 return self._scored_result(
                     CVSS_ERROR_BASED,
                     0.92,
+                    method=point.method,
                     parameter=param_name,
                     payload=payload,
                     technique=TECHNIQUE_ERROR_BASED,
                     evidence=self._error_evidence(
-                        param_name, payload, signature, baseline, response,
+                        point, payload, signature, baseline, response,
                         repeated=True,
                     ),
                     detail=(
@@ -215,11 +215,12 @@ class SQLInjectionModule(DetectionModule):
                 inconclusive = self._scored_result(
                     CVSS_ERROR_BASED,
                     0.65,
+                    method=point.method,
                     parameter=param_name,
                     payload=payload,
                     technique=TECHNIQUE_ERROR_BASED,
                     evidence=self._error_evidence(
-                        param_name, payload, signature, baseline, response,
+                        point, payload, signature, baseline, response,
                         repeated=False,
                     ),
                     detail=(
@@ -232,19 +233,16 @@ class SQLInjectionModule(DetectionModule):
         return inconclusive
 
     # ------------------------------------------------------------ boolean
-    def _boolean_differential(self, param_name, original_value):
-        true_payload = f"{original_value}{TRUE_SUFFIX}"
-        false_payload = f"{original_value}{FALSE_SUFFIX}"
+    def _boolean_differential(self, point, baseline):
+        param_name = point.name
+        true_payload = f"{point.value}{TRUE_SUFFIX}"
+        false_payload = f"{point.value}{FALSE_SUFFIX}"
 
-        t1 = self.http.get(self._build_url(param_name, true_payload))
-        t2 = self.http.get(self._build_url(param_name, true_payload))
-        f1 = self.http.get(self._build_url(param_name, false_payload))
-        f2 = self.http.get(self._build_url(param_name, false_payload))
+        t1 = self.send(point, true_payload)
+        t2 = self.send(point, true_payload)
+        f1 = self.send(point, false_payload)
+        f2 = self.send(point, false_payload)
         if not all(r.ok for r in (t1, t2, f1, f2)):
-            return None
-
-        baseline = self.http.get(self.page.url)
-        if not baseline.ok:
             return None
 
         # Mask the injected payload from the injected responses; the baseline is
@@ -271,11 +269,12 @@ class SQLInjectionModule(DetectionModule):
             return self._scored_result(
                 CVSS_BOOLEAN_SUSPECTED,
                 0.60,
+                method=point.method,
                 parameter=param_name,
                 payload=true_payload,
                 technique=TECHNIQUE_BOOLEAN_DIFFERENTIAL,
                 evidence=self._boolean_evidence(
-                    param_name, true_payload, false_payload,
+                    point, true_payload, false_payload,
                     baseline=baseline, t1=t1, f1=f1,
                     base_vs_true=base_vs_true, base_vs_false=base_vs_false,
                     true_vs_false=true_vs_false,
@@ -291,16 +290,6 @@ class SQLInjectionModule(DetectionModule):
         return None
 
     # ---------------------------------------------------------------- utils
-    def _build_url(self, param_name, new_value):
-        parsed = urlparse(self.page.url)
-        query = urlencode(
-            [(k, v) if k != param_name else (k, new_value)
-             for k, v in parse_qsl(parsed.query, keep_blank_values=True)]
-        )
-        return urlunparse(
-            (parsed.scheme, parsed.netloc, parsed.path, parsed.params, query, "")
-        )
-
     @staticmethod
     def _matched_signature(body_lower):
         for signature in SQL_ERROR_SIGNATURES:
@@ -309,25 +298,26 @@ class SQLInjectionModule(DetectionModule):
         return None
 
     # ---------------------------------------------------------- conditional
-    def _conditional_error(self, param_name, baseline, original_value):
-        true_payload = f"{original_value}{CONDITIONAL_TRUE_SUFFIX}"
-        false_payload = f"{original_value}{CONDITIONAL_FALSE_SUFFIX}"
+    def _conditional_error(self, point, baseline):
+        param_name = point.name
+        true_payload = f"{point.value}{CONDITIONAL_TRUE_SUFFIX}"
+        false_payload = f"{point.value}{CONDITIONAL_FALSE_SUFFIX}"
         baseline_lower = (baseline.text or "").lower()
 
-        true_resp = self.http.get(self._build_url(param_name, true_payload))
+        true_resp = self.send(point, true_payload)
         if not true_resp.ok:
             return None
         signature = self._matched_signature((true_resp.text or "").lower())
         if not signature or signature in baseline_lower:
             return None
 
-        false_resp = self.http.get(self._build_url(param_name, false_payload))
+        false_resp = self.send(point, false_payload)
         if not false_resp.ok:
             return None
         if self._matched_signature((false_resp.text or "").lower()):
             return None
 
-        repeat = self.http.get(self._build_url(param_name, true_payload))
+        repeat = self.send(point, true_payload)
         if (
             not repeat.ok
             or self._matched_signature((repeat.text or "").lower()) != signature
@@ -337,11 +327,12 @@ class SQLInjectionModule(DetectionModule):
         return self._scored_result(
             CVSS_ERROR_BASED,
             0.90,
+            method=point.method,
             parameter=param_name,
             payload=true_payload,
             technique=TECHNIQUE_CONDITIONAL_ERROR,
             evidence=self._conditional_evidence(
-                param_name, true_payload, false_payload, signature,
+                point, true_payload, false_payload, signature,
                 baseline, true_resp, false_resp,
             ),
             detail=(
@@ -351,19 +342,20 @@ class SQLInjectionModule(DetectionModule):
             ),
         )
 
-    def _conditional_evidence(self, param_name, true_payload, false_payload,
+    def _conditional_evidence(self, point, true_payload, false_payload,
                               signature, baseline, true_resp, false_resp):
+        param_name = point.name
         return "\n".join([
             f"CONFIRMED: a database error signature '{signature}' appeared when "
             f"the injected condition was true, but not when it was false "
             f"(parameter '{param_name}'); the error reproduced on the repeated "
             f"true-condition request.",
             "",
-            f"BASELINE REQUEST: GET {self.page.url} -> HTTP "
+            f"BASELINE REQUEST: {point.describe()} -> HTTP "
             f"{baseline.status_code}; database-error signature absent",
-            f"TRUE CONDITION: GET {self._build_url(param_name, true_payload)} -> "
+            f"TRUE CONDITION: {point.describe()} with value {true_payload!r} -> "
             f"HTTP {true_resp.status_code}; matched signature '{signature}'",
-            f"FALSE CONDITION: GET {self._build_url(param_name, false_payload)} -> "
+            f"FALSE CONDITION: {point.describe()} with value {false_payload!r} -> "
             f"HTTP {false_resp.status_code}; no database-error signature",
             "REPRODUCIBILITY: true-condition error reproduced on 2/2 identical "
             "requests",
@@ -382,14 +374,14 @@ class SQLInjectionModule(DetectionModule):
         ])
 
     # ------------------------------------------------------------ time-based
-    def _time_based(self, param_name, original_value):
+    def _time_based(self, point):
         from flask import current_app
 
         if not current_app.config.get("SCANNER_ENABLE_TIME_BASED", False):
             return None
 
-        control_a = self._timed_get(self.page.url)
-        control_b = self._timed_get(self.page.url)
+        control_a = self._timed(point)
+        control_b = self._timed(point)
         if control_a is None or control_b is None:
             return None
         base_max = max(control_a, control_b)
@@ -398,21 +390,22 @@ class SQLInjectionModule(DetectionModule):
             return None
 
         for suffix in TIME_BASED_SUFFIXES:
-            payload = f"{original_value}{suffix}"
-            first = self._timed_get(self._build_url(param_name, payload))
+            payload = f"{point.value}{suffix}"
+            first = self._timed(point, payload)
             if first is None or first < base_max + TIME_BASED_MIN_DELTA:
                 continue
-            second = self._timed_get(self._build_url(param_name, payload))
+            second = self._timed(point, payload)
             if second is None or second < base_max + TIME_BASED_MIN_DELTA:
                 continue
             return self._scored_result(
                 CVSS_ERROR_BASED,
                 0.85,
-                parameter=param_name,
+                method=point.method,
+                parameter=point.name,
                 payload=payload,
                 technique=TECHNIQUE_TIME_BASED,
                 evidence=self._time_evidence(
-                    param_name, payload, control_a, control_b, first, second),
+                    point, payload, control_a, control_b, first, second),
                 detail=(
                     "Time-based (blind) SQL injection. The response was "
                     "reproducibly delayed only when a controlled database-wait "
@@ -422,26 +415,26 @@ class SQLInjectionModule(DetectionModule):
             )
         return None
 
-    def _timed_get(self, url):
-        """GET the URL and return its wall-clock duration in seconds."""
+    def _timed(self, point, value=None):
+        """Send the (optionally injected) request and return its duration."""
         start = time.monotonic()
-        response = self.http.get(url)
+        response = self.baseline(point) if value is None else self.send(point, value)
         elapsed = time.monotonic() - start
         if not response.ok:
             return None
         return elapsed
 
-    def _time_evidence(self, param_name, payload, control_a, control_b,
+    def _time_evidence(self, point, payload, control_a, control_b,
                        first, second):
         return "\n".join([
             f"CONFIRMED: a controlled database-wait payload caused a "
-            f"reproducible response delay for parameter '{param_name}' "
+            f"reproducible response delay for {point.describe()} "
             f"({first:.2f}s and {second:.2f}s vs control requests "
             f"{control_a:.2f}s / {control_b:.2f}s).",
             "",
-            f"BASELINE REQUEST (control x2): GET {self.page.url} -> "
+            f"BASELINE REQUEST (control x2): {point.describe()} -> "
             f"{control_a:.2f}s / {control_b:.2f}s",
-            f"TEST REQUEST: GET {self._build_url(param_name, payload)} -> "
+            f"TEST REQUEST: {point.describe()} with value {payload!r} -> "
             f"{first:.2f}s (first attempt), {second:.2f}s (repeat)",
             f"DIFFERENTIAL: both test delays exceeded the slowest control "
             f"request by >= {TIME_BASED_MIN_DELTA}s on two consecutive attempts "
@@ -472,8 +465,9 @@ class SQLInjectionModule(DetectionModule):
         others = [p for p in ERROR_PAYLOADS if not p.startswith("1")]
         return numeric_first + others
 
-    def _error_evidence(self, param_name, payload, signature, baseline, response,
+    def _error_evidence(self, point, payload, signature, baseline, response,
                         repeated):
+        param_name = point.name
         baseline_status = (
             baseline.status_code if baseline.status_code is not None else "no response"
         )
@@ -501,10 +495,11 @@ class SQLInjectionModule(DetectionModule):
             )
         return "\n".join([
             verdict,
+            f"INJECTION POINT: {point.describe()}",
             "",
-            f"BASELINE REQUEST: GET {self.page.url} -> HTTP {baseline_status}; "
+            f"BASELINE REQUEST: {point.describe()} -> HTTP {baseline_status}; "
             f"database-error signature absent",
-            f"TEST REQUEST: GET {self._build_url(param_name, payload)} -> "
+            f"TEST REQUEST: {point.describe()} with value {payload!r} -> "
             f"HTTP {test_status}; matched signature '{signature}'",
             f"REPRODUCIBILITY: {reproducibility}",
             "WHY THIS INDICATES SQL INJECTION: the response changed from a normal "
@@ -522,7 +517,7 @@ class SQLInjectionModule(DetectionModule):
             "VERIFICATION: Not retested yet.",
         ])
 
-    def _boolean_evidence(self, param_name, true_payload, false_payload, *,
+    def _boolean_evidence(self, point, true_payload, false_payload, *,
                           baseline, t1, f1, base_vs_true, base_vs_false,
                           true_vs_false, stability_true, stability_false):
         return "\n".join([
@@ -532,11 +527,12 @@ class SQLInjectionModule(DetectionModule):
             f"did ({base_vs_false:.2f}); the two responses differed from each "
             f"other (similarity {true_vs_false:.2f}) and each was stable across "
             "repeated identical requests.",
+            f"INJECTION POINT: {point.describe()}",
             "",
-            f"BASELINE REQUEST: GET {self.page.url} -> HTTP {baseline.status_code}",
-            f"TRUE CONDITION: GET {self._build_url(param_name, true_payload)} -> "
+            f"BASELINE REQUEST: {point.describe()} -> HTTP {baseline.status_code}",
+            f"TRUE CONDITION: {point.describe()} with value {true_payload!r} -> "
             f"HTTP {t1.status_code}",
-            f"FALSE CONDITION: GET {self._build_url(param_name, false_payload)} -> "
+            f"FALSE CONDITION: {point.describe()} with value {false_payload!r} -> "
             f"HTTP {f1.status_code}",
             f"DIFFERENTIAL METRICS: repeat stability {stability_true:.2f} / "
             f"{stability_false:.2f} (required >= {MIN_STABILITY}); true-vs-false "

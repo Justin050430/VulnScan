@@ -87,6 +87,12 @@ class Config:
     SCANNER_ALLOW_PRIVATE_TARGETS = _as_bool(os.getenv("SCANNER_ALLOW_PRIVATE_TARGETS", "true"))
     # Opt-in, bounded time-based SQLi probes (slow; off by default).
     SCANNER_ENABLE_TIME_BASED = _as_bool(os.getenv("SCANNER_ENABLE_TIME_BASED", "false"))
+    # Test HTML form fields (GET and POST forms) in addition to query-string
+    # parameters.  Forms with password/file inputs or destructive actions are
+    # always skipped; see app/scanner/forms.py.
+    SCANNER_ENABLE_FORM_TESTING = _as_bool(
+        os.getenv("SCANNER_ENABLE_FORM_TESTING", "true")
+    )
     # Run scans in a background worker thread (async). Set false for tests.
     SCAN_ASYNC = _as_bool(os.getenv("SCAN_ASYNC", "true"))
     # Startup recovery: fail scans orphaned by a previous process (F1).

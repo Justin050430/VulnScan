@@ -25,6 +25,7 @@ from flask import current_app
 from app.scanner.base import PageInfo
 from app.scanner.client import HttpClient
 from app.scanner.engine import make_url_validator
+from app.scanner.forms import parse_forms
 from app.scanner.registry import get_module_class
 from app.utils.constants import FINDING_STATUS_OPEN, FINDING_STATUS_RESOLVED
 
@@ -131,7 +132,11 @@ def retest_finding(finding):
             )
 
         try:
-            module = module_class(http=http, page=PageInfo(url=page.URL))
+            forms = ()
+            if current_app.config.get("SCANNER_ENABLE_FORM_TESTING", True):
+                forms = parse_forms(probe.final_url or page.URL, probe.text)
+            page_info = PageInfo(url=page.URL, forms=forms)
+            module = module_class(http=http, page=page_info)
             results = module.detect()
         except Exception as exc:
             logger.exception(
@@ -154,6 +159,16 @@ def retest_finding(finding):
                     "RequestsIssued": http.request_count,
                 },
                 f"The original parameter '{finding.Parameter}' was re-detected.",
+            )
+        injectable = {p.name for p in page_info.injection_points()}
+        if finding.Parameter and finding.Parameter not in injectable:
+            # The page no longer exposes the input (e.g. the form was removed),
+            # so absence of a signal is not evidence that it was fixed.
+            return _finish(
+                finding, checked_at, VERDICT_INCONCLUSIVE,
+                {"RequestsIssued": http.request_count},
+                f"The parameter '{finding.Parameter}' could not be located on "
+                "the page any more, so the vulnerability could not be tested.",
             )
         return _finish(
             finding, checked_at, VERDICT_RESOLVED,

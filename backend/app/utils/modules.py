@@ -54,9 +54,11 @@ MODULE_TECHNIQUES = {
         "conditional-error differential",
         "boolean differential analysis",
         "time-based blind (only when enabled by the server operator)",
+        "query-string and HTML form fields (GET/POST) as injection points",
     ],
     MODULE_XSS: [
         "executable-context reflection analysis",
+        "query-string and HTML form fields (GET/POST) as injection points",
     ],
     MODULE_HTTP_HEADERS: [
         "HTTP security header policy evaluation (per rule)",

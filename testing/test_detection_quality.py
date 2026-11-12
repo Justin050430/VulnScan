@@ -111,6 +111,85 @@ def test_reflected_xss_confirmed_and_control_pages_clean(full_scan):
     assert not _by_url(xss, "/boolean_safe")
 
 
+# --------------------------------------------------------------------------
+# HTML form fields as injection points (POST, not only the query string)
+# --------------------------------------------------------------------------
+def test_post_form_sqli_is_confirmed(full_scan):
+    """A form field submission must be tested like a query parameter."""
+    sqli = _by_url(
+        [f for f in full_scan["Findings"]
+         if f["VulnerabilityName"] == "SQL Injection"],
+        "/feedback",
+    )
+    finding = next((f for f in sqli if f["Parameter"] == "order"), None)
+    assert finding, [f["Parameter"] for f in sqli]
+    assert finding["RequestMethod"] == "POST"
+    assert finding["Classification"] == "Confirmed"
+    assert finding["RiskScore"] == 9.8
+    assert "form field 'order'" in finding["Evidence"]
+
+
+def test_post_form_xss_is_confirmed(full_scan):
+    """Reflected XSS delivered through a POST form field is detected."""
+    xss = _by_url(
+        [f for f in full_scan["Findings"]
+         if f["VulnerabilityName"] == "Cross-Site Scripting (XSS)"],
+        "/feedback",
+    )
+    finding = next((f for f in xss if f["Parameter"] == "message"), None)
+    assert finding, [f["Parameter"] for f in xss]
+    assert finding["RequestMethod"] == "POST"
+    assert finding["Classification"] == "Confirmed"
+    assert finding["RiskScore"] == 6.1
+    assert "form field 'message'" in finding["Evidence"]
+
+
+def test_safe_post_form_is_not_flagged(full_scan):
+    """The escaped control form must not produce form-field findings."""
+    for name in ("SQL Injection", "Cross-Site Scripting (XSS)"):
+        flagged = [
+            f for f in _by_url(full_scan["Findings"], "/feedback_safe")
+            if f["VulnerabilityName"] == name
+        ]
+        assert not flagged, f"false positive {name} on /feedback_safe"
+
+
+def test_password_and_destructive_forms_are_not_submitted(full_scan):
+    """Credential and destructive forms rendered on the page are skipped."""
+    tested = {f["Parameter"] for f in full_scan["Findings"]}
+    assert not tested.intersection({"password", "email", "reason"})
+
+
+def test_form_field_testing_can_be_disabled(app, client, dev_token, target):
+    """Operators can turn form-field testing off; findings must then vanish."""
+    app.config["SCANNER_ENABLE_FORM_TESTING"] = False
+    try:
+        profiles = client.get(
+            "/api/scan-profiles", headers=auth(dev_token)
+        ).get_json()["ScanProfiles"]
+        pid = next(
+            p for p in profiles if p["Name"] == "OWASP Top 10 Full Scan"
+        )["ScanProfileID"]
+        resp = client.post("/api/scans", headers=auth(dev_token), json={
+            "target_url": target, "scan_profile_id": pid,
+            "scan_name": "Form testing disabled",
+        })
+        scan_id = resp.get_json()["Scan"]["ScanID"]
+        detail = client.get(
+            f"/api/scans/{scan_id}", headers=auth(dev_token)
+        ).get_json()["Scan"]
+    finally:
+        app.config["SCANNER_ENABLE_FORM_TESTING"] = True
+
+    assert detail["Status"] == "Completed"
+    post_findings = [
+        f for f in detail["Findings"]
+        if "/feedback" in f["URL"] and f["RequestMethod"] == "POST"
+    ]
+    assert not post_findings, [f["Parameter"] for f in post_findings]
+    assert "form-field testing is disabled" in detail["CoverageNote"]
+
+
 def test_header_detection_confirmed_with_control_page(full_scan):
     headers = [f for f in full_scan["Findings"]
                if f["VulnerabilityName"] == "Missing HTTP Security Headers"]

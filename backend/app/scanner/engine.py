@@ -267,6 +267,9 @@ def run_scan(scan_id):
         pages_done = 0
         findings_total = 0
         cancelled = False
+        test_form_fields = bool(
+            current_app.config.get("SCANNER_ENABLE_FORM_TESTING", True)
+        )
         for page, page_row in page_rows:
             if auth_session is not None:
                 usable, reason = credential_service.scan_credential_usable(scan_id)
@@ -283,9 +286,12 @@ def run_scan(scan_id):
                 progress.update(scan_id, pages_done=pages_done,
                                 requests=http.request_count)
                 continue
+            forms = page.forms if test_form_fields else ()
             for module_class, vuln in module_specs:
                 try:
-                    module = module_class(http=http, page=PageInfo(url=page_row.URL))
+                    module = module_class(
+                        http=http, page=PageInfo(url=page_row.URL, forms=forms)
+                    )
                     results = module.detect()
                 except Exception:
                     logger.exception(

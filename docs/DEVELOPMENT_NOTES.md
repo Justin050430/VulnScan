@@ -699,3 +699,44 @@ Full suite: **238 passed**.
   `docs/MIGRATION_TRUST.md`.
 - HttpOnly/CSRF/CSP session hardening, durable workers and egress control remain
   future work.
+
+---
+
+## Enhancement round 7 - form-field injection coverage (2026-11-12)
+
+Real applications accept input through HTML forms at least as often as through the
+query string. Before this round the SQLi and XSS modules only fuzzed GET
+parameters, so every POST-only input was invisible to the scanner.
+
+**What changed**
+- `app/scanner/forms.py` discovers forms while crawling (method, action, controls
+  with their page-served values) and screens them before use.
+- `PageInfo.injection_points()` returns query-string parameters followed by form
+  fields; `DetectionModule.send()/baseline()` issue the matching GET or POST
+  request, and findings record `RequestMethod` = POST.
+- `SCANNER_ENABLE_FORM_TESTING` (default true) restores the previous behaviour.
+- Site-wide forms are deduplicated across pages so a header search box is not
+  re-tested on every crawled page.
+- Retests re-parse the page's forms; a POST finding whose field disappeared is
+  reported as *Inconclusive* rather than incorrectly *Resolved*.
+- The scan coverage note, PDF limitations and module technique list were updated
+  to the new, accurate scope.
+
+**Safety screening (deliberate and documented)**
+A form is never submitted when it contains a password or file input, or when its
+action/control names match destructive tokens (delete, payment, logout, ...).
+Hidden inputs keep the page-served values, so CSRF tokens and record ids stay
+valid. Bounds: 5 forms x 12 fields per page and 10 injection points per page.
+
+**Detection evidence**
+The controlled target gained `/feedback` (POST XSS via `message`, POST SQLi via
+`order`) and `/feedback_safe` (escaped control), plus a password form and a
+`POST /account/delete` form that must never be submitted. A local run detects the
+POST XSS (6.1 Medium) and POST SQLi (9.8 Critical) with the same evidence standard
+as the GET findings, and no finding on `/feedback_safe`.
+
+**Tests**
+`test_detection_quality.py` (POST SQLi/XSS confirmed, safe form clean, password and
+destructive forms skipped, feature flag), `test_scanner_robustness.py` (form parser
+safety and cross-page deduplication), `test_retest.py` (POST finding re-verified),
+`test_scan_observability.py` (coverage note). Full suite: **272 passed**.

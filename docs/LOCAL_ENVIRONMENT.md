@@ -6,7 +6,44 @@ own machine, against targets that ship with the repository. No third-party syste
 ever contacted, so there is no authorisation question.
 
 Everything below was executed and verified on Windows against commit
-`2018ab0`+ (schema `aaf9e35de1fe`).
+`2018ab0`+ (schema `aaf9e35de1fe`) and again against the working tree of
+2026-11-12, which adds form-field (GET/POST) injection testing.
+
+---
+
+## 0. Quick start (one command)
+
+```powershell
+cd C:\FYP\VulnScan
+.\scripts\start-local.ps1            # target on 5001 + VulnScan on 5000
+.\scripts\start-local.ps1 -Action status
+.\scripts\start-local.ps1 -Action stop
+```
+
+The script verifies the virtualenv and schema head, reseeds reference data, starts
+both processes (logs in `.local-logs/`), waits for both HTTP endpoints and prints
+the credentials below. Then run the automated end-to-end check:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\local_smoke_test.py
+```
+
+It signs in, creates the organisation/project/verified asset/attestation, buys a
+mock credit, starts a gated scan against the test shop, and prints a
+detection-quality summary (pages, findings by vulnerability/severity/method,
+every injection point with its confirmation evidence).
+
+### Credentials cheat sheet
+
+| Account | Where | Password | Used for |
+| --- | --- | --- | --- |
+| `admin@vulnscan.local` | VulnScan | `Admin@VulnScan2025` | Administrator: users, scan profiles, KB, audit logs |
+| `developer@vulnscan.local` | VulnScan | `Developer@VulnScan2025` | Developer: organisations, projects, assets, scans |
+| `pentester@example.test` | Test shop | `Temporary!Pass123` | The single-use **scan credential** for authenticated scans |
+
+Override the seeded VulnScan accounts with `SEED_ADMIN_*` / `SEED_DEVELOPER_*` in
+`backend/.env`. The test-shop account is fixed in `testing/vuln_test_app/app.py`
+(`TEST_EMAIL` / `TEST_PASSWORD`) and must never become a real account.
 
 ---
 
@@ -109,6 +146,24 @@ Open <http://localhost:5003/>. This lab has no `/.well-known/vulnscan.txt` endpo
 so the trust gate cannot verify it; use it to practise manual SQL injection, or scan
 it through the gate after adding that route.
 
+### What the test shop exposes
+
+| Page | Injection point | Expected result |
+| --- | --- | --- |
+| `/search?q=` | query string | reflected XSS (Confirmed 6.1) |
+| `/product?id=` | query string | error-based SQLi (Confirmed 9.8) |
+| `/blind?id=` | query string | blind SQLi (Suspected 5.9) |
+| `/feedback` | **POST form field `message`** | reflected XSS (Confirmed 6.1) |
+| `/feedback` | **POST form field `order`** | error-based SQLi (Confirmed 9.8) |
+| `/feedback_safe` | POST form (escaped) | no XSS/SQLi finding (control) |
+| `/dashboard`, `/dashboard/search` | authenticated pages | reached only with the scan credential |
+| every page except `/headers_ok` | response headers | missing-header findings |
+| `/feedback` also renders | password form, `POST /account/delete` | never submitted (safety screen) |
+
+Form-field testing is controlled by `SCANNER_ENABLE_FORM_TESTING` (default `true`).
+Set it to `false` in `backend/.env` to confirm the scan then only tests query
+strings; the scan's `CoverageNote` states which mode was used.
+
 ---
 
 ## 5. The full flow, click by click
@@ -129,7 +184,7 @@ Sign in with the seeded developer account. Read the credentials from
 | 9 | Project → **New scan** | Pick the verified asset, profile **OWASP Top 10 Full Scan**, the credit | Readiness panel shows all five checks green |
 | 10 | **Start scan** | — | Scan created, credit `Reserved` → `Consumed` |
 | 10a | *(Optional)* authenticated scan | Asset → **Credentials** → create with login URL `http://localhost:5001/login`, account `pentester@example.test` / `Temporary!Pass123`, success URL `/dashboard`; invite a second `PROJECT_OWNER`, log in as them and **Approve**; **Test login**; start the scan at `http://localhost:5001/dashboard` and select the credential | Protected pages (`/dashboard`, `/dashboard/search`, `/dashboard/reports`) are discovered; the XSS on `/dashboard/search` is reported; the credential becomes `Used` and the report shows the authentication context without the password |
-| 11 | Scan detail | Watch progress | ~9 pages, 45 findings, **Critical**, SQLi 9.8 confirmed, XSS, header gaps |
+| 11 | Scan detail | Watch progress | ~11 pages, ~58 findings, **Critical**, SQLi 9.8 confirmed (query string **and** the `order` form field), XSS, header gaps |
 | 12 | Scan detail | **CSV** / **PDF** | 57 KB CSV, 68 KB PDF |
 | 13 | Project → **Audit** | — | `ASSET_REGISTERED`, `ASSET_VERIFIED`, `ATTESTATION_CREATED`, `PAYMENT_*`, `CREDIT_ISSUED`, `CREDIT_RESERVED`, `SCAN_STARTED`, `CREDIT_CONSUMED`, `SCAN_DENIED` (hash-chained) |
 
@@ -200,6 +255,8 @@ challenge lives in memory) — or just publish the new value again.
 | `410 LEGACY_SCAN_ENDPOINT_DISABLED` | correct behaviour in `enforce` mode | use project → New scan |
 | Everything takes ~2 s per page | a target bound only to `127.0.0.1` while `localhost` resolves to `::1` | the bundled targets already bind both stacks; keep them that way |
 | `Can't open lib 'ODBC Driver 18 for SQL Server'` | driver 18 missing | use Driver 17 in `MSSQL_DRIVER` / `DATABASE_URL` |
+| `start-local.ps1` says *"Port 5000 is already in use"* | another VulnScan/dev server is running | stop it, or start with `-AppPort 5050` and pass `--app-url http://127.0.0.1:5050` to the smoke test |
+| A scan never shows POST/form findings | `SCANNER_ENABLE_FORM_TESTING=false`, the form holds a password/file input, or it looks destructive | check the scan's `CoverageNote`; only screened forms are submitted |
 
 ---
 

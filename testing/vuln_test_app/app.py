@@ -8,11 +8,16 @@ never be deployed or exposed to the internet.
 Vulnerabilities (documented VulnScan scope):
   * /search        - reflected Cross-Site Scripting (unsafe echo)
   * /product?id=   - SQL Injection (simulated DB error + boolean behaviour)
+  * /feedback      - POST form: reflected XSS via `message` and SQL Injection
+                     via `order` (form-field injection points, not query string)
   * /             - pages served without security headers
 Control pages (no vulnerability) are provided too so tests can confirm the
 scanner does not raise false positives:
   * /safe_search   - safely escaped echo
+  * /feedback_safe - safely escaped POST form echo with no SQL behaviour
   * /headers_ok    - all recommended security headers present
+The /feedback page also renders a password form and a destructive form
+(POST /account/delete) that the scanner must never submit.
 """
 import os
 import secrets
@@ -40,6 +45,8 @@ HOME = """
   <li><a href="/">Home</a></li>
   <li><a href="/search?q=laptop">Search products</a></li>
   <li><a href="/safe_search?q=laptop">Search (safe)</a></li>
+  <li><a href="/feedback">Send feedback</a></li>
+  <li><a href="/feedback_safe">Send feedback (safe)</a></li>
   <li><a href="/product?id=1">Product 1</a></li>
   <li><a href="/product?id=2">Product 2</a></li>
   <li><a href="/blind?id=1">Product lookup</a></li>
@@ -235,6 +242,76 @@ def safe_search():
         "<!doctype html><html><head><title>Safe Search</title></head><body>"
         "<h1>Safe search results</h1>"
         f"<p>{q}</p>"
+        "</body></html>"
+    )
+
+
+def _feedback_form(action="/feedback", message="", order="1001", extra=""):
+    return f"""<!doctype html><html><head><title>Feedback</title></head><body>
+<h1>Send us feedback</h1>
+<form method="post" action="{action}">
+  <p><label>Message <input type="text" name="message" value="{message}"></label></p>
+  <p><label>Order number <input type="text" name="order" value="{order}"></label></p>
+  <p><button type="submit" name="action" value="send">Send feedback</button></p>
+</form>
+{extra}
+</body></html>"""
+
+
+#: Rendered on the feedback page but never submitted by the scanner: one form
+#: holds a password input, the other posts to a destructive action.
+UNSAFE_FORMS = """
+<form method="post" action="/login">
+  <input type="email" name="email">
+  <input type="password" name="password">
+</form>
+<form method="post" action="/account/delete">
+  <input type="hidden" name="id" value="1">
+  <input type="text" name="reason">
+</form>"""
+
+
+@app.route("/feedback", methods=["GET", "POST"])
+def feedback():
+    """POST-only web vulnerability: raw echo (XSS) and unsafe SQL (SQLi)."""
+    if request.method == "GET":
+        return _feedback_form(extra=UNSAFE_FORMS)
+
+    message = request.form.get("message", "")
+    order = request.form.get("order", "")
+    if any(token in order for token in ("'", '"', "--", ";")):
+        return (
+            "<!doctype html><html><head><title>Feedback - Error</title></head><body>"
+            "<h1>Database error</h1>"
+            "<p>Unclosed quotation mark after the character string '1001'. "
+            "Incorrect syntax near '1'.</p>"
+            "</body></html>",
+            500,
+        )
+    # Deliberately unescaped echo of a submitted form field.
+    return (
+        "<!doctype html><html><head><title>Feedback sent</title></head><body>"
+        "<h1>Thank you</h1>"
+        f"<p>Your feedback: {message}</p>"
+        f"<p>Order reference: {order}</p>"
+        "</body></html>"
+    )
+
+
+@app.route("/feedback_safe", methods=["GET", "POST"])
+def feedback_safe():
+    """Control page: same form, safely escaped and no SQL behaviour."""
+    import html as _html
+
+    if request.method == "GET":
+        return _feedback_form(action="/feedback_safe")
+    message = _html.escape(request.form.get("message", ""), quote=True)
+    order = _html.escape(request.form.get("order", ""), quote=True)
+    return (
+        "<!doctype html><html><head><title>Feedback sent</title></head><body>"
+        "<h1>Thank you</h1>"
+        f"<p>Your feedback: {message}</p>"
+        f"<p>Order reference: {order}</p>"
         "</body></html>"
     )
 
