@@ -24,7 +24,8 @@ python-dotenv==1.2.2
 email-validator==2.2.0
 
 # DNS TXT asset-ownership verification (Trust Boundary Extension)
-dnspython==2.8.0
+# 2.9.0+ fixes CVE-2026-114605 (reported by pip-audit).
+dnspython==2.9.2
 
 # PDF report generation
 reportlab==4.4.0
