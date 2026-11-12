@@ -73,6 +73,16 @@ VulnScan from being an unsafe public scanner.
    - *Show:* simply returning from checkout without the callback issues nothing.
 7. Optionally invite a teammate with the **VIEWER** or **ANALYST** role and show
    that the **Start scan** action is absent for them.
+8. *(Optional) authenticated scan:* the bundled test target has a dedicated test
+   account (`pentester@example.test` / `Temporary!Pass123`). On the verified asset open
+   **Credentials → + New credential**, set the login URL to
+   `http://localhost:5001/login`, the success URL to `/dashboard`, and save. Invite a
+   second user as **PROJECT_OWNER**, sign in as them, and **Approve** the credential
+   (the creator cannot approve their own). Use **Test login** first; it does not consume
+   a credit. Start the scan with target `http://localhost:5001/dashboard` and select the
+   credential. Point out that protected pages such as `/dashboard/search` are now
+   discovered and tested, the credential is bound to exactly one scan, and the report
+   shows the authentication context without the password.
 
 ## 3. Create and configure a scan (gated)
 

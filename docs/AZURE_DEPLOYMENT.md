@@ -77,6 +77,9 @@ git-ignored and is **not** deployed, so every value must be set here.
 | `GOOGLE_REDIRECT_URI` | `https://vulnscan-erehf4djeqg8dvbe.malaysiawest-01.azurewebsites.net/api/auth/google/callback` |
 | `WEBSITE_HTTPLOGGING_RETENTION_DAYS` | `1` |
 | `SCANNER_ALLOW_PRIVATE_TARGETS` | `false` (production SSRF protection) |
+| `TRUST_CREDENTIAL_KEY` | Fernet key for encrypting temporary scan credentials; generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `TRUST_CREDENTIAL_KEY_OLD` | optional previous key during rotation |
+| `TRUST_CREDENTIAL_ALLOW_SELF_APPROVAL` | `false` (keep maker-checker) |
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | `1` (enables the Oryx `pip install` build) |
 
 `ProductionConfig` sets `REQUIRE_SECRET = True`, so the app **refuses to start**

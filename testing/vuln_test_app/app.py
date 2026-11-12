@@ -15,10 +15,16 @@ scanner does not raise false positives:
   * /headers_ok    - all recommended security headers present
 """
 import os
+import secrets
 
-from flask import Flask, Response, request
+from flask import Flask, Response, redirect, request, session
 
 app = Flask(__name__)
+app.secret_key = os.getenv("VULN_TEST_SECRET", "vulnscan-test-target-secret")
+
+#: Dedicated test account for the authenticated-scan tests (never a real one).
+TEST_EMAIL = "pentester@example.test"
+TEST_PASSWORD = "Temporary!Pass123"
 
 #: Trust Boundary web-file verification content.  Tests set this to the
 #: one-time challenge value returned by POST .../verification.  For a manual
@@ -98,6 +104,112 @@ input[type=text]{{width:100%;padding:8px}}code{{word-break:break-all}}</style>
 <p><a href="/">Back to the shop</a></p>
 </body></html>""",
         mimetype="text/html",
+    )
+
+
+def _login_form(error=""):
+    token = session.get("csrf") or secrets.token_urlsafe(16)
+    session["csrf"] = token
+    banner = f'<p style="color:#b00020">{error}</p>' if error else ""
+    return f"""<!doctype html><html><head><title>Sign in</title></head><body>
+<h1>Sign in to the test shop</h1>{banner}
+<form method="post" action="/login">
+  <input type="hidden" name="_token" value="{token}">
+  <p><label>Email <input type="email" name="email"></label></p>
+  <p><label>Password <input type="password" name="password"></label></p>
+  <p><button type="submit" name="submit" value="1">Sign in</button></p>
+</form>
+</body></html>"""
+
+
+def _login_required(view):
+    from functools import wraps
+
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("user"):
+            return redirect("/login")
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "GET":
+        return _login_form()
+    if request.form.get("_token") != session.get("csrf"):
+        return Response("Invalid CSRF token\n", status=400, mimetype="text/plain")
+    email = (request.form.get("email") or "").strip()
+    password = request.form.get("password") or ""
+    if email == TEST_EMAIL and password == TEST_PASSWORD:
+        session.clear()
+        session["user"] = email
+        return redirect("/dashboard")
+    return _login_form("Invalid email or password.")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+
+@app.route("/dashboard")
+@_login_required
+def dashboard():
+    return f"""<!doctype html><html><head><title>Dashboard</title></head><body>
+<h1>Signed in as {session.get('user')}</h1>
+<ul>
+  <li><a href="/dashboard/search?q=laptop">Search my orders</a></li>
+  <li><a href="/dashboard/reports">Reports</a></li>
+  <li><a href="/logout">Sign out</a></li>
+</ul>
+</body></html>"""
+
+
+@app.route("/dashboard/search")
+@_login_required
+def dashboard_search():
+    """Authenticated reflected XSS (only reachable with a session)."""
+    q = request.args.get("q", "")
+    return (
+        "<!doctype html><html><head><title>Order search</title></head><body>"
+        "<h1>Order search results for:</h1>"
+        f"<p>{q}</p>"
+        '<p><a href="/dashboard">Back to dashboard</a></p>'
+        "</body></html>"
+    )
+
+
+#: One-shot session-loss switch used by the re-authentication test.
+EXPIRE_ONCE = {"armed": False}
+
+
+@app.route("/dashboard/expire")
+@_login_required
+def dashboard_expire_once():
+    """Simulate a session dropped mid-scan exactly once."""
+    if EXPIRE_ONCE["armed"]:
+        EXPIRE_ONCE["armed"] = False
+        session.clear()
+        return redirect("/login")
+    return (
+        "<!doctype html><html><head><title>Expiring session</title></head><body>"
+        "<h1>Session check</h1><p>The session is valid.</p>"
+        '<p><a href="/dashboard">Back to dashboard</a></p>'
+        "</body></html>"
+    )
+
+
+@app.route("/dashboard/reports")
+@_login_required
+def dashboard_reports():
+    return (
+        "<!doctype html><html><head><title>Reports</title></head><body>"
+        "<h1>My reports</h1><p>No reports yet.</p>"
+        '<p><a href="/dashboard">Back to dashboard</a></p>'
+        "</body></html>"
     )
 
 

@@ -197,6 +197,7 @@
             <td class="actions">
               ${can(perms, 'asset.verify') ? `<a class="btn btn-xs btn-secondary" href="#/projects/${projectId}/assets/${a.AssetID}/verify">Verify</a>` : ''}
               ${can(perms, 'attestation.create') && a.VerificationStatus === 'Verified' ? `<a class="btn btn-xs btn-secondary" href="#/projects/${projectId}/assets/${a.AssetID}/attest">Attest</a>` : ''}
+              ${can(perms, 'credential.read') && a.VerificationStatus === 'Verified' ? `<a class="btn btn-xs btn-secondary" href="#/projects/${projectId}/assets/${a.AssetID}/credentials">Credentials</a>` : ''}
               ${can(perms, 'asset.revoke') && a.VerificationStatus === 'Verified' ? `<button class="btn btn-xs btn-danger" data-revoke="${a.AssetID}">Revoke</button>` : ''}
             </td></tr>`).join('')}</tbody></table></div>` : empty('No assets registered yet.')}
       </div>
@@ -416,6 +417,173 @@
     }
   }
 
+  /* ================================================= TEMPORARY CREDENTIALS */
+  async function assetCredentials(el, projectId, assetId) {
+    el.innerHTML = U.loading('Loading credentials…');
+    const [assetBody, credsBody, projectBody] = await Promise.all([
+      API.get(`/api/v1/projects/${projectId}/assets/${assetId}`),
+      API.get(`/api/v1/projects/${projectId}/assets/${assetId}/credentials`),
+      API.get('/api/v1/projects/' + projectId)
+    ]);
+    const asset = assetBody.Asset;
+    const credentials = credsBody.Credentials || [];
+    const perms = projectBody.Permissions || [];
+
+    const actions = (c) => {
+      const out = [];
+      if (can(perms, 'credential.create') && ['PendingApproval', 'Approved'].includes(c.Status) && c.HasSecret) {
+        out.push(`<button class="btn btn-xs btn-secondary" data-test="${c.CredentialID}">Test login</button>`);
+      }
+      if (can(perms, 'credential.approve') && c.Status === 'PendingApproval') {
+        out.push(`<button class="btn btn-xs btn-primary" data-approve="${c.CredentialID}">Approve</button>`);
+        out.push(`<button class="btn btn-xs btn-danger" data-reject="${c.CredentialID}">Reject</button>`);
+      }
+      if (can(perms, 'credential.revoke') && ['PendingApproval', 'Approved', 'Used'].includes(c.Status)) {
+        out.push(`<button class="btn btn-xs btn-danger" data-revoke="${c.CredentialID}">Revoke</button>`);
+      }
+      return out.join(' ');
+    };
+
+    el.innerHTML = `
+      <div class="page-head"><div class="row"><div>
+        <h1>Temporary scan credentials</h1>
+        <div class="sub">${U.esc(asset.Hostname)} · approved test-account logins for authenticated scans</div>
+      </div><div style="display:flex;gap:8px">
+        <a class="btn btn-secondary" href="#/projects/${projectId}">← Back</a>
+        ${can(perms, 'credential.create') ? '<button class="btn btn-primary" style="width:auto" id="cred-new">+ New credential</button>' : ''}
+      </div></div></div>
+      <div class="trust-notice">Credentials are encrypted at rest, expire automatically and can be used for one scan only.
+        Create a dedicated least-privilege test account, never a personal or administrator account. MFA, CAPTCHA and SSO cannot be automated.</div>
+      <div class="card card-pad" style="margin-top:16px">
+        ${credentials.length ? `<div class="table-wrap"><table class="tbl">
+          <thead><tr><th>Name</th><th>Account</th><th>Status</th><th>Expires</th><th>Bound scan</th><th class="actions">Actions</th></tr></thead>
+          <tbody>${credentials.map(c => `<tr>
+            <td><b>${U.esc(c.Name)}</b><div class="mono" style="color:var(--muted)">#${c.CredentialID} · ${U.esc(c.AuthType)}</div></td>
+            <td class="mono">${U.esc(c.Username)}</td>
+            <td>${statusBadge(c.Status)}${c.FailureReason ? `<div class="hint" style="color:var(--red)">${U.esc(c.FailureReason)}</div>` : ''}</td>
+            <td class="tbl-nowrap">${U.fmtDT(c.ExpiresAt)}</td>
+            <td>${c.BoundScanID ? `<a href="#/scans/${c.BoundScanID}">#${c.BoundScanID}</a>` : '–'}</td>
+            <td class="actions">${actions(c)}</td>
+          </tr>`).join('')}</tbody></table></div>` : empty('No credentials yet for this asset.')}
+      </div>`;
+
+    if (can(perms, 'credential.create')) {
+      el.querySelector('#cred-new').addEventListener('click', () => credentialModal(projectId, asset, () => assetCredentials(el, projectId, assetId)));
+    }
+
+    el.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        const data = await API.post(`/api/v1/projects/${projectId}/credentials/${b.dataset.test}/test-login`, {});
+        U.modal('Login test succeeded',
+          `<p>The account authenticated successfully.</p>
+           <div class="kv"><span class="k">Final URL</span><span class="mono">${U.esc(data.Login.FinalURL)}</span>
+           <span class="k">HTTP status</span><span>${data.Login.StatusCode}</span></div>
+           <p class="hint">No scan credit was used.</p>`,
+          `<button class="btn btn-secondary" onclick="U.closeModal()">Close</button>`);
+      } catch (e) {
+        U.toast(e.message, 'err');
+      } finally {
+        b.disabled = false;
+      }
+    }));
+
+    el.querySelectorAll('[data-approve]').forEach(b => b.addEventListener('click', () => {
+      const m = U.modal('Approve temporary credential',
+        `<p style="font-size:13px">By approving, the organisation authorises VulnScan to authenticate to
+          <b>${U.esc(asset.Hostname)}</b> with this dedicated test account for one scan and the stated expiry window.</p>
+         <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px">
+           <input type="checkbox" id="cred-ack" style="margin-top:3px">
+           <span>I confirm the account was created for this assessment with the least privilege needed,
+             and that I am a different project owner from the creator.</span></label>`,
+        `<button class="btn btn-secondary" onclick="U.closeModal()">Cancel</button>
+         <button class="btn btn-primary" style="width:auto" id="cred-approve">Approve</button>`);
+      m.root.querySelector('#cred-approve').addEventListener('click', async () => {
+        if (!m.root.querySelector('#cred-ack').checked) {
+          U.toast('Tick the approval statement first.', 'err');
+          return;
+        }
+        try {
+          await API.post(`/api/v1/projects/${projectId}/credentials/${b.dataset.approve}/approve`, { acknowledge: true });
+          U.closeModal();
+          U.toast('Credential approved.', 'ok');
+          assetCredentials(el, projectId, assetId);
+        } catch (e) { U.toast(e.message, 'err'); }
+      });
+    }));
+
+    el.querySelectorAll('[data-reject]').forEach(b => b.addEventListener('click', async () => {
+      const m = U.modal('Reject credential',
+        `<div class="field"><label>Reason (optional)</label><input id="cred-reason" maxlength="500"></div>`,
+        `<button class="btn btn-secondary" onclick="U.closeModal()">Cancel</button>
+         <button class="btn btn-danger" style="width:auto" id="cred-reject">Reject</button>`);
+      m.root.querySelector('#cred-reject').addEventListener('click', async () => {
+        try {
+          await API.post(`/api/v1/projects/${projectId}/credentials/${b.dataset.reject}/reject`, {
+            reason: m.root.querySelector('#cred-reason').value.trim() || undefined
+          });
+          U.closeModal();
+          U.toast('Credential rejected and secret destroyed.', 'ok');
+          assetCredentials(el, projectId, assetId);
+        } catch (e) { U.toast(e.message, 'err'); }
+      });
+    }));
+
+    el.querySelectorAll('[data-revoke]').forEach(b => b.addEventListener('click', async () => {
+      if (!(await U.confirmDlg('Revoke this credential? The stored secret is destroyed immediately and retests on authenticated scans stop working.', 'Revoke credential'))) return;
+      try {
+        await API.post(`/api/v1/projects/${projectId}/credentials/${b.dataset.revoke}/revoke`, { reason: 'revoked by user' });
+        U.toast('Credential revoked.', 'ok');
+        assetCredentials(el, projectId, assetId);
+      } catch (e) { U.toast(e.message, 'err'); }
+    }));
+  }
+
+  function credentialModal(projectId, asset, onCreated) {
+    const m = U.modal('New temporary credential',
+      `<div class="field"><label>Name</label><input id="c-name" maxlength="100" placeholder="Pentest test account"></div>
+       <div class="field"><label>Login URL</label>
+         <input id="c-url" maxlength="500" value="${U.esc(asset.Scheme + '://' + asset.Hostname + '/login')}">
+         <div class="hint">Must stay on the verified asset host. The form must post back to the same host.</div></div>
+       <div class="form-row">
+         <div class="field"><label>Username / email</label><input id="c-user" maxlength="255"></div>
+         <div class="field"><label>Password</label><input id="c-pass" type="password" maxlength="500" autocomplete="new-password"></div>
+       </div>
+       <div class="form-row">
+         <div class="field"><label>Username field (optional)</label><input id="c-userfield" maxlength="64" placeholder="auto-detect"></div>
+         <div class="field"><label>Password field (optional)</label><input id="c-passfield" maxlength="64" placeholder="auto-detect"></div>
+       </div>
+       <div class="form-row">
+         <div class="field"><label>Success URL contains</label><input id="c-successurl" maxlength="255" value="/dashboard"></div>
+         <div class="field"><label>Success text (optional)</label><input id="c-successtext" maxlength="255"></div>
+       </div>
+       <div class="field"><label>Expires in (minutes, max 1440)</label><input id="c-expires" type="number" min="5" max="1440" value="240"></div>
+       <p class="hint">At least one success indicator is required so a failed login cannot be mistaken for success.
+         The secret is encrypted at rest, never returned by the API and destroyed on expiry or revocation.</p>`,
+      `<button class="btn btn-secondary" onclick="U.closeModal()">Cancel</button>
+       <button class="btn btn-primary" style="width:auto" id="c-save">Create credential</button>`);
+    m.root.querySelector('#c-save').addEventListener('click', async () => {
+      const payload = {
+        name: m.root.querySelector('#c-name').value.trim(),
+        auth_type: 'FORM',
+        login_url: m.root.querySelector('#c-url').value.trim(),
+        username: m.root.querySelector('#c-user').value.trim(),
+        password: m.root.querySelector('#c-pass').value,
+        username_field: m.root.querySelector('#c-userfield').value.trim() || undefined,
+        password_field: m.root.querySelector('#c-passfield').value.trim() || undefined,
+        success_url_contains: m.root.querySelector('#c-successurl').value.trim() || undefined,
+        success_text: m.root.querySelector('#c-successtext').value.trim() || undefined,
+        expires_in_minutes: parseInt(m.root.querySelector('#c-expires').value, 10)
+      };
+      try {
+        await API.post(`/api/v1/projects/${projectId}/assets/${asset.AssetID}/credentials`, payload);
+        U.closeModal();
+        U.toast('Credential created. A different project owner must approve it.', 'ok');
+        onCreated();
+      } catch (e) { U.toast(e.message, 'err'); }
+    });
+  }
+
   /* ================================================================ CREDITS */
   async function credits(el, projectId) {
     el.innerHTML = U.loading('Loading credits…');
@@ -487,16 +655,18 @@
   /* ============================================================ GATED SCAN */
   async function newScan(el, projectId) {
     el.innerHTML = U.loading('Loading scan setup…');
-    const [projectBody, assetsBody, creditsBody, profilesBody] = await Promise.all([
+    const [projectBody, assetsBody, creditsBody, profilesBody, credentialsBody] = await Promise.all([
       API.get('/api/v1/projects/' + projectId),
       API.get(`/api/v1/projects/${projectId}/assets`),
       API.get(`/api/v1/projects/${projectId}/credits?status=Available`),
-      API.get('/api/scan-profiles')
+      API.get('/api/scan-profiles'),
+      API.get(`/api/v1/projects/${projectId}/credentials`).catch(() => ({ Credentials: [] }))
     ]);
     const perms = projectBody.Permissions || [];
     const assets = (assetsBody.Assets || []).filter(a => a.VerificationStatus === 'Verified');
     const credits = creditsBody.Credits || [];
     const profiles = profilesBody.ScanProfiles || [];
+    const allCredentials = credentialsBody.Credentials || [];
 
     if (!can(perms, 'scan.start')) {
       el.innerHTML = `<div class="card card-pad">${empty('You do not have permission to start scans in this project.')}</div>`;
@@ -505,7 +675,8 @@
     el.innerHTML = `
       <div class="page-head"><div class="row"><div>
         <h1>Start a scan</h1>
-        <div class="sub">A scan needs a verified asset, an active attestation and one available credit.</div>
+        <div class="sub">A scan needs a verified asset, an active attestation and one available credit.
+          Optionally authenticate with an approved temporary credential to reach protected pages.</div>
       </div><a class="btn btn-secondary" href="#/projects/${projectId}">← Back</a></div></div>
       <div class="grid-2">
         <div class="card card-pad">
@@ -514,7 +685,10 @@
             ${assets.length ? '' : '<div class="hint">No verified assets. Verify one first.</div>'}</div>
           <div class="field"><label>Target URL</label>
             <input id="s-target" placeholder="https://example.com/">
-            <div class="hint">The host must match the verified asset exactly.</div></div>
+            <div class="hint">The host must match the verified asset exactly. For an authenticated scan, start at a post-login page such as /dashboard.</div></div>
+          <div class="field"><label>Authentication</label>
+            <select id="s-credential"><option value="">Anonymous (no credential)</option></select>
+            <div class="hint" id="s-credential-hint">Only approved, unused credentials for the selected asset appear here. One credential = one scan.</div></div>
           <div class="field"><label>Scan name (optional)</label><input id="s-name" maxlength="100"></div>
           <div class="field"><label>Scan profile</label>
             <select id="s-profile">${profiles.map(p => `<option value="${p.ScanProfileID}">${U.esc(p.Name)}</option>`).join('')}</select></div>
@@ -531,6 +705,8 @@
 
     const assetSel = el.querySelector('#s-asset');
     const targetInput = el.querySelector('#s-target');
+    const credentialSel = el.querySelector('#s-credential');
+    const credentialHint = el.querySelector('#s-credential-hint');
     const readinessBox = el.querySelector('#s-readiness');
 
     function syncTarget() {
@@ -539,11 +715,31 @@
         targetInput.value = `${opt.dataset.scheme}://${opt.dataset.host}/`;
       }
     }
+    function syncCredentials() {
+      const assetId = parseInt(assetSel.value, 10);
+      const now = new Date();
+      const eligible = allCredentials.filter(c =>
+        Number(c.AssetID) === assetId &&
+        c.Status === 'Approved' &&
+        !c.BoundScanID &&
+        c.HasSecret &&
+        (!c.ExpiresAt || new Date(c.ExpiresAt) > now)
+      );
+      credentialSel.innerHTML = '<option value="">Anonymous (no credential)</option>' +
+        eligible.map(c => `<option value="${c.CredentialID}">${U.esc(c.Name)} — expires ${U.fmtDT(c.ExpiresAt)}</option>`).join('');
+      credentialSel.disabled = eligible.length === 0;
+      credentialHint.textContent = eligible.length
+        ? 'The scan logs in once with this credential. One credential = one scan; the secret is destroyed on expiry or revocation.'
+        : 'No approved, unused credential for this asset. Create one on the asset’s Credentials page, then have a different project owner approve it.';
+    }
     async function refreshReadiness() {
       const assetId = assetSel.value;
       if (!assetId) { readinessBox.innerHTML = empty('No verified asset available.'); return; }
       try {
-        const data = await API.get(`/api/v1/projects/${projectId}/scan-readiness`, { asset_id: assetId });
+        const data = await API.get(`/api/v1/projects/${projectId}/scan-readiness`, {
+          asset_id: assetId,
+          credential_id: credentialSel.value || undefined
+        });
         const r = data.Readiness;
         const rows = Object.keys(r.Checks).map(k => {
           const c = r.Checks[k];
@@ -553,8 +749,15 @@
         readinessBox.innerHTML = rows + (r.Ready ? '' : `<div class="hint" style="margin-top:8px">Next action: ${U.esc(r.NextAction)}</div>`);
       } catch (e) { readinessBox.innerHTML = U.esc(e.message); }
     }
-    assetSel.addEventListener('change', () => { targetInput.value = ''; syncTarget(); refreshReadiness(); });
+    assetSel.addEventListener('change', () => {
+      targetInput.value = '';
+      syncTarget();
+      syncCredentials();
+      refreshReadiness();
+    });
+    credentialSel.addEventListener('change', refreshReadiness);
     syncTarget();
+    syncCredentials();
     refreshReadiness();
 
     el.querySelector('#s-start').addEventListener('click', async () => {
@@ -566,6 +769,7 @@
           scan_profile_id: parseInt(el.querySelector('#s-profile').value, 10),
           scan_name: el.querySelector('#s-name').value.trim() || undefined,
           credit_id: el.querySelector('#s-credit').value || undefined,
+          credential_id: parseInt(credentialSel.value, 10) || undefined,
           target_url: targetInput.value.trim() || undefined
         });
         U.toast('Scan started.', 'ok');
@@ -616,6 +820,9 @@
       }
       if (segments[2] === 'assets' && segments[4] === 'attest') {
         return assetAttest(el, projectId, segments[3]);
+      }
+      if (segments[2] === 'assets' && segments[4] === 'credentials') {
+        return assetCredentials(el, projectId, segments[3]);
       }
       if (segments[2] === 'credits') return credits(el, projectId);
       if (segments[2] === 'scans' && segments[3] === 'new') return newScan(el, projectId);

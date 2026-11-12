@@ -20,11 +20,17 @@ logger = logging.getLogger("vulnscan.crawler")
 
 
 class Crawler:
-    def __init__(self, http=None, max_pages=30, max_depth=2, follow_external=False):
+    def __init__(self, http=None, max_pages=30, max_depth=2, follow_external=False,
+                 skip_url_contains=None):
         self.http = http
         self.max_pages = max(1, max_pages)
         self.max_depth = max(0, max_depth)
         self.follow_external = bool(follow_external)
+        # Authenticated scans skip sign-out routes; following them would
+        # destroy the session mid-crawl.
+        self.skip_url_contains = tuple(
+            token.lower() for token in (skip_url_contains or ())
+        )
 
     def in_scope(self, url, base_parsed):
         """Return True when url is within the target's scan scope."""
@@ -101,6 +107,10 @@ class Crawler:
                     continue
                 if is_static_resource(absolute):
                     continue
+                if self.skip_url_contains:
+                    path = (urlparse(absolute).path or "").lower()
+                    if any(token in path for token in self.skip_url_contains):
+                        continue
                 if absolute in seen:
                     continue
                 seen.add(absolute)

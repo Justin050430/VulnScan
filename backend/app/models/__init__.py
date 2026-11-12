@@ -11,7 +11,8 @@ Trust Boundary Extension (additive - see docs/TRUST_BOUNDARY.md):
     TrustOrganisation, TrustProject, TrustOrganisationMembership,
     TrustProjectMembership, TrustAsset, TrustAuthorizationAttestation,
     TrustPaymentTransaction, TrustScanCredit, TrustCreditRedemption,
-    TrustScanContext, TrustAuditEvent
+    TrustScanContext, TrustAuditEvent, TrustScanCredential,
+    TrustScanCredentialBinding
 """
 from .discovered_page import DiscoveredPage
 from .finding import Finding
@@ -29,6 +30,10 @@ from .trust_payment import TrustPaymentTransaction
 from .trust_project import TrustProject
 from .trust_project_membership import TrustProjectMembership
 from .trust_scan_context import TrustScanContext
+from .trust_scan_credential import (
+    TrustScanCredential,
+    TrustScanCredentialBinding,
+)
 from .user import User
 from .vulnerability import Vulnerability
 
@@ -57,6 +62,8 @@ TRUST_ENTITIES = [
     "TrustCreditRedemption",
     "TrustScanContext",
     "TrustAuditEvent",
+    "TrustScanCredential",
+    "TrustScanCredentialBinding",
 ]
 
 __all__ = CORE_ENTITIES + TRUST_ENTITIES

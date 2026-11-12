@@ -80,6 +80,39 @@ def retest_finding(finding):
         ),
     )
     try:
+        # Authenticated scans: re-establish the session for the retest while
+        # the bound credential is still approved, unexpired and unused by
+        # another scan.
+        from app.services import credential_service
+
+        credential = credential_service.credential_for_scan(scan.ScanID)
+        if credential is not None:
+            if not credential.is_available_for_retest():
+                return _finish(
+                    finding, checked_at, VERDICT_UNABLE,
+                    {"RequestsIssued": http.request_count},
+                    "This scan used an authenticated credential that is no "
+                    "longer valid (expired, revoked or already purged); "
+                    "re-verify manually or approve a new credential.",
+                )
+            try:
+                from app.scanner.auth import AuthSession
+
+                password = credential_service.decrypt_for_use(credential)
+                auth = AuthSession(
+                    http,
+                    credential_service.login_config(credential, password),
+                )
+                auth.login()
+                http.auth_session = auth
+            except Exception as exc:
+                return _finish(
+                    finding, checked_at, VERDICT_UNABLE,
+                    {"RequestsIssued": http.request_count},
+                    "The authenticated session could not be established for "
+                    f"the retest: {exc}.",
+                )
+
         probe = http.get(page.URL)
         if probe is None or probe.status_code is None:
             error = getattr(probe, "error", None) if probe is not None else None

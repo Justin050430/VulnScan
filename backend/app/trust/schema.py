@@ -50,5 +50,5 @@ def missing_schema_response():
             "directory, then retry."
         ),
         "code": "TRUST_BOUNDARY_UNAVAILABLE",
-        "details": {"missing_migration": "aaf9e35de1fe_trust_boundary_extension"},
+        "details": {"missing_migration": "c4d8f1a2b6e9_temporary_scan_credentials"},
     }, 503

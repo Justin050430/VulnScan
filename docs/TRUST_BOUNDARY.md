@@ -17,6 +17,8 @@ Implemented:
 - Separate permission for **starting a scan** vs **viewing results**.
 - Exact-hostname asset registration with DNS TXT / `/.well-known/vulnscan.txt` verification.
 - Explicit, revocable, expiring authorisation attestation per asset.
+- Organisation-approved temporary credentials for authenticated FORM-login scans
+  (maker-checker, encrypted at rest, expiring, single-use).
 - Mock-only single-use scan credits with atomic reservation.
 - Gated scan start (permission + asset + attestation + credit + host match + no active scan).
 - Append-only trust audit.
@@ -27,7 +29,7 @@ Explicitly **not** implemented (future work):
 - Real payment gateways, real money, billing, invoices, refunds.
 - Durable queues/isolated workers, controlled egress proxy, autoscaling.
 - Multi-tenant commercial model, SSO, API keys, scheduling, scan diffs.
-- Additional detection modules, authenticated scanning, JavaScript rendering.
+- Additional detection modules, JavaScript rendering, MFA/CAPTCHA/SSO login flows.
 - Public deployment and its legal/abuse operations.
 
 ---
@@ -46,6 +48,8 @@ Explicitly **not** implemented (future work):
 | `TrustScanCredit` | Single-use entitlement |
 | `TrustCreditRedemption` | Immutable reservation/consumption ledger |
 | `TrustScanContext` | Bridge from core `Scan` to project/asset/attestation/credit |
+| `TrustScanCredential` | Encrypted, expiring, org-approved test-account credential |
+| `TrustScanCredentialBinding` | Single-use binding of one credential to one scan |
 | `TrustAuditEvent` | Append-only audit ledger |
 
 The frozen core tables (`User`, `Scan`, `ScanProfile`, `ProfileModule`,
@@ -74,6 +78,9 @@ The frozen core tables (`User`, `Scan`, `ScanProfile`, `ProfileModule`,
 | `scan.cancel` | — | ✅ | ✅ | ✅ | — | — |
 | `scan.retest` (also finding triage) | — | ✅ | ✅ | — | ✅ | — |
 | `trust_audit.view` | — | ✅ | ✅ | — | — | — |
+| `credential.read` | ◐ if member | ✅ | ✅ | ✅ | ✅ | — |
+| `credential.create` | — | ✅ | ✅ | ✅ | — | — |
+| `credential.approve` / `credential.revoke` | — | ✅ | ✅ | — | — | — |
 
 Key rules:
 
@@ -186,6 +193,45 @@ the engine stops between pages.
 
 ---
 
+## 7a. Temporary scan credentials (authenticated scans)
+
+Protected pages cannot be assessed anonymously.  A project may therefore register a
+**dedicated test account** as a temporary credential:
+
+1. A `SCAN_OPERATOR` or `PROJECT_OWNER` creates the credential (`credential.create`)
+   for one verified asset: login URL (exact host/scheme), username, encrypted password,
+   optional field names, extra form fields, and an explicit success indicator
+   (`success_url_contains` or `success_text`).
+2. A **different** `PROJECT_OWNER` approves it (`credential.approve`) after acknowledging
+   the approval statement.  Self-approval is disabled in production.
+3. Starting a scan with `credential_id` reserves the credential atomically and binds it
+   to that scan in `TrustScanCredentialBinding` (unique per credential).  The scan gate
+   still requires permission, verified asset, active attestation, credit and no active
+   scan.
+4. The worker performs one FORM login on the scan's hardened HTTP session (CSRF hidden
+   fields are preserved; the form must post to the same host), then crawls and tests
+   with that session.  A lost session triggers at most one re-login.  Sign-out and
+   login URLs are excluded from crawling.
+5. The credential is **single-use** for new scans.  It remains decryptable for retests
+   of its bound scan until it expires; revoking or expiring it destroys the secret.
+
+Security controls:
+
+- secret encrypted with Fernet/AES (`TRUST_CREDENTIAL_KEY`, rotatable with
+  `TRUST_CREDENTIAL_KEY_OLD`); plaintext exists only in worker memory;
+- expiry is mandatory (default 4 h, maximum 24 h);
+- the API never returns the secret; audit metadata, evidence and reports contain only
+  the credential ID/name/approver, never the password or session cookie;
+- login failure fails the scan **before** credit consumption and releases the reserved
+  credit; the single-use credential is consumed and its secret purged;
+- login URL must match the verified asset exactly and passes the same private-address
+  SSRF guard; the form action must stay on the same origin;
+- revocation is audited and stops a running authenticated scan at the next page
+  boundary.
+
+Not supported: MFA, CAPTCHA, SSO/OAuth form automation, cookie/header credential types
+(v1 supports `FORM` only), and multi-account differential testing.
+
 ## 8. Audit
 
 `TrustAuditEvent` is insert-only. There is no update or delete route; a test asserts
@@ -194,7 +240,8 @@ that `PUT`/`DELETE` cannot match an endpoint and that the row is unchanged.
 Recorded events include: organisation/project creation, member invite/accept/revoke,
 asset registration/verification/failure/revocation, attestation create/revoke,
 payment checkout/verified/failed/duplicate, credit issued/reserved/consumed/released/
-expired, scan denied/started/cancelled.
+expired, scan denied/started/cancelled, and credential created/approved/rejected/
+revoked/tested/used/released/login-failed/secret-purged.
 
 Metadata is filtered: keys containing `token`, `secret`, `password`, `authorization`,
 `cookie`, `signature`, `card`, `cvv`, `pan` or `credential` are replaced with
@@ -234,3 +281,12 @@ falling back to the legacy path.
   future hardening work.
 - Scans still run in-process threads; durable workers and egress control remain future
   work.
+- Authenticated scanning supports FORM login only. MFA, CAPTCHA, SSO/OAuth, cookie or
+  header credentials, and JavaScript-rendered pages are not supported. The test
+  account's own permissions still bound what can be discovered.
+- A temporary credential is single-use for new scans and remains usable only for
+  retests of its bound scan until it expires. A failed login consumes it; create and
+  approve a new one after fixing the configuration.
+- Credential plaintext exists in worker memory during the login handshake (Python
+  cannot guarantee memory zeroisation); only one re-login is attempted if the session
+  is lost mid-scan.

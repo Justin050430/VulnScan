@@ -162,6 +162,68 @@ Creating a new attestation automatically expires the previous active one.
 
 ---
 
+## 3a. Temporary scan credentials
+
+| Method | Path | Permission |
+| --- | --- | --- |
+| GET | `/api/v1/projects/{project_id}/credentials?asset_id=` | `credential.read` |
+| GET | `/api/v1/projects/{project_id}/assets/{asset_id}/credentials` | `credential.read` |
+| POST | `/api/v1/projects/{project_id}/assets/{asset_id}/credentials` | `credential.create` |
+| GET | `/api/v1/projects/{project_id}/credentials/{credential_id}` | `credential.read` |
+| POST | `/api/v1/projects/{project_id}/credentials/{credential_id}/approve` | `credential.approve` |
+| POST | `/api/v1/projects/{project_id}/credentials/{credential_id}/reject` | `credential.approve` |
+| POST | `/api/v1/projects/{project_id}/credentials/{credential_id}/revoke` | `credential.revoke` |
+| POST | `/api/v1/projects/{project_id}/credentials/{credential_id}/test-login` | `credential.create` |
+
+```http
+POST /api/v1/projects/1/assets/10/credentials
+{
+  "name": "Pentest test account",
+  "auth_type": "FORM",
+  "login_url": "https://shop.example.com/login",
+  "username": "vulnscan.tester@example.com",
+  "password": "<test-account password>",
+  "success_url_contains": "/dashboard",
+  "expires_in_minutes": 240
+}
+
+201 {"Credential": {"CredentialID": 3, "Status": "PendingApproval",
+                    "HasSecret": true, "ExpiresAt": "...", ...}}
+```
+
+The password is **never** returned. Only the creator or another member with
+`credential.create` may run `POST .../test-login`; it performs the login handshake
+without starting a scan or consuming a credit (cooldown:
+`TRUST_CREDENTIAL_TEST_COOLDOWN_SECONDS`).
+
+```http
+POST /api/v1/projects/1/credentials/3/approve
+{"acknowledge": true}
+```
+
+Approval requires a **different** `PROJECT_OWNER` (unless
+`TRUST_CREDENTIAL_ALLOW_SELF_APPROVAL=true` for local demos), a verified asset and an
+active attestation.  `POST .../reject` and `POST .../revoke` destroy the stored secret
+immediately.  Expired credentials are marked `Expired` and purged opportunistically.
+
+Start a scan with the credential:
+
+```http
+POST /api/v1/projects/1/scans
+{"asset_id": 10, "scan_profile_id": 2, "credit_id": "<uuid>",
+ "credential_id": 3, "target_url": "https://shop.example.com/dashboard"}
+
+409 {"code": "CREDENTIAL_NOT_APPROVED" | "CREDENTIAL_EXPIRED" |
+              "CREDENTIAL_ALREADY_USED" | "CREDENTIAL_LOGIN_FAILED"}
+```
+
+A credential is single-use for new scans.  If the login handshake fails, the scan fails
+with `CREDENTIAL_LOGIN_FAILED`, the reserved credit is released and the credential is
+consumed (its secret purged).  Readiness (`GET .../scan-readiness?asset_id=&credential_id=`)
+adds a `Credential` check and `NextAction: APPROVE_CREDENTIAL` when needed.
+
+---
+
 ## 4. Products, payments and credits
 
 | Method | Path | Permission |
@@ -350,5 +412,12 @@ Legacy (non-trust) scans keep the historical owner/administrator rule.
 | 409 | `VERIFICATION_TOKEN_EXPIRED` | Challenge expired |
 | 409 | `PAYMENT_AMOUNT_MISMATCH` | Callback amount/currency/product mismatch |
 | 400 | `PAYMENT_NOT_VERIFIED` | Bad signature / unusable payment |
+| 403 | `CREDENTIAL_SELF_APPROVAL_DENIED` | Creator tried to approve their own credential |
+| 409 | `CREDENTIAL_NOT_APPROVED` | Credential is not approved (or already closed) |
+| 409 | `CREDENTIAL_EXPIRED` | Credential expired; its secret was purged |
+| 409 | `CREDENTIAL_ALREADY_USED` | Credential already bound to a scan |
+| 409 | `CREDENTIAL_LOGIN_FAILED` | Login handshake failed (no secret in the response) |
+| 429 | `RATE_LIMITED` | Login test cooldown still active |
+| 503 | `CREDENTIAL_STORAGE_UNAVAILABLE` | Encryption key missing/invalid or ciphertext unusable |
 | 410 | `LEGACY_SCAN_ENDPOINT_DISABLED` | `POST /api/scans` used in enforce mode |
 | 503 | `CREDIT_NOT_AVAILABLE` | Worker could not start (credit released) |

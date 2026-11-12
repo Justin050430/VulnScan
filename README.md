@@ -17,6 +17,11 @@ VulnScan is **not** a "scan any website" service. Scan creation is gated by an a
   (`_vulnscan-challenge.<host>`) or `/.well-known/vulnscan.txt` challenge.
   Wildcards, IP literals and sub-domain scanning are rejected.
 - **Authorisation attestation** per asset before any active scan, revocable and expiring.
+- **Temporary authenticated-scan credentials**: a project member creates a dedicated
+  test-account login for one verified asset, a *different* project owner approves it,
+  and the scan uses it for one scan only. Secrets are encrypted at rest, never returned
+  by the API or written to reports, and are destroyed on expiry or revocation. FORM
+  login (including CSRF tokens) is supported; MFA/SSO are out of scope.
 - **Single-use scan credits** issued only by a server-side verified **mock** payment
   (no real money, no card data, no real gateway).
 - **Atomic gated scan start**: permission + verified asset + active attestation +
@@ -158,12 +163,16 @@ contacts arbitrary third-party websites. Do not scan public sites you do not own
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Organisations tab shows **"An internal server error occurred"** (older build) or **503 `TRUST_BOUNDARY_UNAVAILABLE`** | Database still at the core migration; the 11 `Trust*` tables do not exist | `cd backend` then `python -m flask --app run.py db upgrade`, restart the server |
+| Organisations tab shows **"An internal server error occurred"** (older build) or **503 `TRUST_BOUNDARY_UNAVAILABLE`** | Database is behind the additive Trust schema (the `Trust*` tables are missing) | `cd backend` then `python -m flask --app run.py db upgrade`, restart the server |
 | Verification returns `VERIFICATION_MISMATCH ... Connection error` | `/.well-known` was fetched on port 80/443 but the target listens on 5001/5003 | Start VulnScan with `TRUST_WEBFILE_PORT=5001` (or `5003`) |
 | `HOSTNAME_INVALID` when registering an asset | IP literal, wildcard, scheme/port or path supplied | Register the exact hostname only, e.g. `localhost` |
 | `TARGET_HOST_MISMATCH` on scan start | Target URL host differs from the verified asset | Use the same host, e.g. `http://localhost:5001/` |
 | `CREDIT_REQUIRED` / `CREDIT_NOT_AVAILABLE` | No available credit, or the credit was already consumed | Buy another credit (one per scan) |
 | `ATTESTATION_REQUIRED` / `ATTESTATION_EXPIRED` | No active attestation for the asset | Create a new attestation (1–90 days) |
+| `credential.approve` returns `CREDENTIAL_SELF_APPROVAL_DENIED` | Maker-checker is enabled and the creator tried to approve their own credential | Sign in as a different project owner (or set `TRUST_CREDENTIAL_ALLOW_SELF_APPROVAL=true` for local demos only) |
+| Credential creation returns `CREDENTIAL_STORAGE_UNAVAILABLE` | `TRUST_CREDENTIAL_KEY` is blank in production, or the key is not valid Fernet base64 | Set a valid key in App Settings and restart |
+| Scan fails with `CREDENTIAL_LOGIN_FAILED` | Wrong account/password, wrong field names, missing CSRF handling or the success indicator did not match | Use **Test login** on the credential, fix the login URL/fields/success indicator, then create and re-approve a new credential (single-use) |
+| Authenticated scan still only finds public pages | Target URL starts on a page that does not link to the protected area, or the account lacks access | Start the scan at a post-login landing page (e.g. `/dashboard`) and use an account that can see the pages you want tested |
 
 Check the schema state at any time:
 
@@ -172,7 +181,8 @@ cd backend
 python -m flask --app run.py db current
 ```
 
-The Trust Boundary revision is `aaf9e35de1fe`.
+The Trust Boundary head revision is `c4d8f1a2b6e9` (temporary scan credentials);
+`aaf9e35de1fe` is the base Trust Boundary migration.
 
 ## Google Sign-In
 

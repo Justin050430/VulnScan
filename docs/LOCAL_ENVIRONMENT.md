@@ -128,6 +128,7 @@ Sign in with the seeded developer account. Read the credentials from
 | 8 | Project → **Credits** | *Buy credit* → `SCAN_CREDIT_1` | Mock checkout page ("No real money") → complete → 1 `Available` credit |
 | 9 | Project → **New scan** | Pick the verified asset, profile **OWASP Top 10 Full Scan**, the credit | Readiness panel shows all five checks green |
 | 10 | **Start scan** | — | Scan created, credit `Reserved` → `Consumed` |
+| 10a | *(Optional)* authenticated scan | Asset → **Credentials** → create with login URL `http://localhost:5001/login`, account `pentester@example.test` / `Temporary!Pass123`, success URL `/dashboard`; invite a second `PROJECT_OWNER`, log in as them and **Approve**; **Test login**; start the scan at `http://localhost:5001/dashboard` and select the credential | Protected pages (`/dashboard`, `/dashboard/search`, `/dashboard/reports`) are discovered; the XSS on `/dashboard/search` is reported; the credential becomes `Used` and the report shows the authentication context without the password |
 | 11 | Scan detail | Watch progress | ~9 pages, 45 findings, **Critical**, SQLi 9.8 confirmed, XSS, header gaps |
 | 12 | Scan detail | **CSV** / **PDF** | 57 KB CSV, 68 KB PDF |
 | 13 | Project → **Audit** | — | `ASSET_REGISTERED`, `ASSET_VERIFIED`, `ATTESTATION_CREATED`, `PAYMENT_*`, `CREDIT_ISSUED`, `CREDIT_RESERVED`, `SCAN_STARTED`, `CREDIT_CONSUMED`, `SCAN_DENIED` (hash-chained) |

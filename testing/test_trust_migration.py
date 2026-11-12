@@ -97,7 +97,7 @@ def test_missing_trust_schema_fails_closed(app, client, admin_token):
     body = response.get_json()
     assert body["code"] == "TRUST_BOUNDARY_UNAVAILABLE"
     assert "flask --app run.py db upgrade" in body["message"]
-    assert body["details"]["missing_migration"] == "aaf9e35de1fe_trust_boundary_extension"
+    assert body["details"]["missing_migration"] == "c4d8f1a2b6e9_temporary_scan_credentials"
 
 
 def test_trust_schema_available_after_migration(app):

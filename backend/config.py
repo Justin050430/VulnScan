@@ -138,6 +138,26 @@ class Config:
     # the controlled target on a non-default port set this to that port.
     # 0 = use the URL default port (80/443).  Production leaves this at 0.
     TRUST_WEBFILE_PORT = int(os.getenv("TRUST_WEBFILE_PORT", "0") or 0)
+    # Temporary authenticated-scan credentials.  Production must set an
+    # explicit Fernet key; development derives a key from SECRET_KEY.
+    TRUST_CREDENTIAL_KEY = os.getenv("TRUST_CREDENTIAL_KEY", "")
+    TRUST_CREDENTIAL_KEY_OLD = os.getenv("TRUST_CREDENTIAL_KEY_OLD", "")
+    TRUST_CREDENTIAL_DEFAULT_HOURS = int(
+        os.getenv("TRUST_CREDENTIAL_DEFAULT_HOURS", "4")
+    )
+    TRUST_CREDENTIAL_MAX_HOURS = int(
+        os.getenv("TRUST_CREDENTIAL_MAX_HOURS", "24")
+    )
+    TRUST_CREDENTIAL_TEST_COOLDOWN_SECONDS = int(
+        os.getenv("TRUST_CREDENTIAL_TEST_COOLDOWN_SECONDS", "10")
+    )
+    TRUST_CREDENTIAL_TIMEOUT = float(
+        os.getenv("TRUST_CREDENTIAL_TIMEOUT", "10")
+    )
+    # Local demonstrations only.  Production should keep maker-checker on.
+    TRUST_CREDENTIAL_ALLOW_SELF_APPROVAL = _as_bool(
+        os.getenv("TRUST_CREDENTIAL_ALLOW_SELF_APPROVAL", "false")
+    )
 
     # ---------------------------------------------------------------- Misc
     AUDIT_LOG_ENABLED = True
@@ -177,11 +197,6 @@ class ProductionConfig(Config):
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "") or SECRET_KEY
     # The legacy scan endpoint is never available in production.
     TRUST_BOUNDARY_MODE = "enforce"
-    # Fail closed: if the setting is absent, do not let the scanner reach
-    # loopback/private/metadata addresses.
-    SCANNER_ALLOW_PRIVATE_TARGETS = _as_bool(
-        os.getenv("SCANNER_ALLOW_PRIVATE_TARGETS", "false")
-    )
 
 
 config_by_name = {

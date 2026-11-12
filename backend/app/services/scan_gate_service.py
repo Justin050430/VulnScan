@@ -23,9 +23,10 @@ from app.models import (
     TrustCreditRedemption,
     TrustScanContext,
     TrustScanCredit,
+    TrustScanCredentialBinding,
 )
 from app.scanner.engine import ScanValidationError, validate_scan_request
-from app.services import attestation_service, credit_service
+from app.services import attestation_service, credit_service, credential_service
 from app.services import trust_audit_service as audit
 from app.services.asset_verification_service import ensure_verified, refresh_status
 from app.services.audit_service import write_audit
@@ -40,6 +41,7 @@ from app.utils.constants import (
 from app.trust.constants import (
     CREDIT_AVAILABLE,
     ERR_ACTIVE_SCAN_EXISTS,
+    ERR_CREDENTIAL_ALREADY_USED,
     ERR_CREDIT_NOT_AVAILABLE,
     ERR_CREDIT_REQUIRED,
     ERR_IDEMPOTENCY_CONFLICT,
@@ -78,7 +80,7 @@ def _active_scan_for_asset(asset_id):
     )
 
 
-def evaluate(access, asset, attestation_id=None):
+def evaluate(access, asset, attestation_id=None, credential_id=None):
     """Read-only readiness evaluation used by the pre-scan checklist."""
     checks = {}
 
@@ -108,16 +110,52 @@ def evaluate(access, asset, attestation_id=None):
         "ExpiresAt": attestation.ExpiresAt.isoformat() if attestation else None,
     }
 
+    order = ["Permission", "Asset", "Attestation"]
+    if credential_id:
+        credential_check = {"Ok": False, "Code": None}
+        try:
+            credential = credential_service.get_project_credential(
+                access.project_id, credential_id
+            )
+            if credential.AssetID != asset.AssetID:
+                credential_check["Code"] = ERR_VALIDATION
+            else:
+                available = credential.is_available_for_scan()
+                if available:
+                    blocked_code = None
+                elif credential.binding is not None:
+                    blocked_code = "CREDENTIAL_ALREADY_USED"
+                elif credential.is_expired():
+                    blocked_code = "CREDENTIAL_EXPIRED"
+                else:
+                    blocked_code = "CREDENTIAL_NOT_APPROVED"
+                credential_check = {
+                    "Ok": available,
+                    "Status": credential.Status,
+                    "ExpiresAt": (
+                        credential.ExpiresAt.isoformat()
+                        if credential.ExpiresAt else None
+                    ),
+                    "Code": blocked_code,
+                }
+        except TrustError as exc:
+            credential_check["Code"] = exc.code
+        except (TypeError, ValueError):
+            credential_check["Code"] = ERR_VALIDATION
+        checks["Credential"] = credential_check
+        order.append("Credential")
+
     available = credit_service.available_credits(access.project_id)
     checks["Credit"] = {"Ok": bool(available), "AvailableCount": len(available)}
+    order.append("Credit")
 
     active = _active_scan_for_asset(asset.AssetID)
     checks["ActiveScan"] = {
         "Ok": active is None,
         "ScanID": active.ScanID if active else None,
     }
+    order.append("ActiveScan")
 
-    order = ["Permission", "Asset", "Attestation", "Credit", "ActiveScan"]
     next_action = None
     for name in order:
         if not checks[name]["Ok"]:
@@ -125,6 +163,7 @@ def evaluate(access, asset, attestation_id=None):
                 "Permission": "REQUEST_SCAN_ROLE",
                 "Asset": "VERIFY_ASSET",
                 "Attestation": "CREATE_ATTESTATION",
+                "Credential": "APPROVE_CREDENTIAL",
                 "Credit": "BUY_CREDIT",
                 "ActiveScan": "WAIT_FOR_ACTIVE_SCAN",
             }[name]
@@ -157,7 +196,8 @@ def _deny(access, actor, asset, code, message, status=403, metadata=None,
 
 def start_gated_scan(access, actor, *, asset, scan_profile_id, scan_name=None,
                      attestation_id=None, credit_ref=None, idempotency_key=None,
-                     target_url=None, ip_address=None, run_async=True):
+                     target_url=None, credential_id=None, ip_address=None,
+                     run_async=True):
     """Validate every gate, reserve one credit atomically and create the scan."""
     from app.services import scan_service
 
@@ -196,6 +236,20 @@ def start_gated_scan(access, actor, *, asset, scan_profile_id, scan_name=None,
     ensure_verified(asset)
 
     attestation = attestation_service.resolve_valid(asset, attestation_id)
+
+    credential = None
+    if credential_id:
+        try:
+            credential = credential_service.resolve_for_scan(
+                access, asset, credential_id
+            )
+        except TrustError as exc:
+            raise _deny(
+                access, actor, asset, exc.code, exc.message,
+                status=exc.status,
+                metadata={"auth_ref": credential_id},
+                ip_address=ip_address,
+            ) from exc
 
     if not credit_ref:
         raise _deny(
@@ -292,6 +346,9 @@ def start_gated_scan(access, actor, *, asset, scan_profile_id, scan_name=None,
         redemption.ScanID = scan.ScanID
         db.session.flush()
 
+        if credential is not None:
+            credential_service.bind_to_scan(credential, scan.ScanID, actor)
+
         audit.record(
             EVENT_CREDIT_RESERVED,
             organisation_id=access.organisation_id,
@@ -320,6 +377,8 @@ def start_gated_scan(access, actor, *, asset, scan_profile_id, scan_name=None,
                 "attestation_id": attestation.AttestationID,
                 "credit_id": credit.CreditID,
                 "profile_id": profile.ScanProfileID,
+                "auth_ref": credential.CredentialID if credential else None,
+                "auth_type": credential.AuthType if credential else None,
             },
             ip_address=ip_address,
             commit=False,
@@ -351,6 +410,18 @@ def start_gated_scan(access, actor, *, asset, scan_profile_id, scan_name=None,
                 "Redemption": existing,
                 "IdempotentReplay": True,
             }
+        if credential is not None:
+            existing_binding = TrustScanCredentialBinding.query.filter_by(
+                CredentialID=credential.CredentialID
+            ).first()
+            if existing_binding is not None:
+                raise _deny(
+                    access, actor, asset, ERR_CREDENTIAL_ALREADY_USED,
+                    "This credential was already used for another scan.",
+                    status=409,
+                    metadata={"auth_ref": credential.CredentialID},
+                    ip_address=ip_address,
+                )
         raise _deny(
             access, actor, asset, ERR_CREDIT_NOT_AVAILABLE,
             "The selected credit is not available.",
@@ -378,6 +449,18 @@ def start_gated_scan(access, actor, *, asset, scan_profile_id, scan_name=None,
         credit_service.release_redemption(
             redemption, reason="Scan worker could not be started"
         )
+        if credential is not None:
+            try:
+                credential_service.unbind_from_scan(
+                    credential, scan.ScanID, actor=actor
+                )
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                logger.exception(
+                    "Could not release credential %s after launch failure",
+                    credential.CredentialID,
+                )
         fresh = db.session.get(Scan, scan.ScanID)
         if fresh is not None:
             fresh.Status = SCAN_STATUS_FAILED

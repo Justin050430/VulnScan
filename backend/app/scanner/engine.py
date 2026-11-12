@@ -120,6 +120,65 @@ def run_scan(scan_id):
         _finish_failed(scan, "Scan profile no longer exists.")
         return
 
+    allow_private = bool(
+        current_app.config.get("SCANNER_ALLOW_PRIVATE_TARGETS", True)
+    )
+    timeout = float(current_app.config.get("SCANNER_DEFAULT_TIMEOUT", 10))
+    verify_ssl = current_app.config.get("SCANNER_VERIFY_SSL", True)
+    http = HttpClient(
+        timeout=timeout,
+        delay_ms=profile.RequestDelayMs or 0,
+        verify_ssl=verify_ssl,
+        url_validator=make_url_validator(
+            scan.TargetURL, profile.FollowExternalLinks, allow_private
+        ),
+    )
+
+    # ------------------------------------------------------ authentication
+    # Authenticate before the scan is marked Running so a bad credential does
+    # not consume the reserved credit.  Anonymous scans skip this block.
+    from app.scanner.auth import AuthSession
+    from app.services import credential_service
+
+    auth_session = None
+    credential = credential_service.credential_for_scan(scan.ScanID)
+    if credential is not None:
+        auth_failure = None
+        progress.update(scan_id, http=http, stage="authenticating")
+        try:
+            password = credential_service.decrypt_for_use(credential)
+            auth_session = AuthSession(
+                http, credential_service.login_config(credential, password)
+            )
+            auth_session.login()
+            http.auth_session = auth_session
+        except Exception as exc:  # LoginError plus storage/unexpected I/O
+            auth_failure = str(exc)
+            logger.warning("Scan %s authentication failed: %s", scan_id, auth_failure)
+        if auth_failure:
+            try:
+                credential_service.mark_login_failure(credential, auth_failure)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                logger.exception(
+                    "Could not record credential failure for scan %s", scan_id
+                )
+            _finish_failed(scan, f"Authentication failed: {auth_failure}")
+            try:
+                from app.services.scan_gate_service import release_if_never_started
+
+                release_if_never_started(
+                    scan.ScanID,
+                    "Authentication failed before the scan started",
+                )
+            except Exception:
+                logger.exception(
+                    "Could not release credit for failed auth scan %s", scan_id
+                )
+            http.close()
+            return
+
     scan.Status = SCAN_STATUS_RUNNING
     scan.StartedAt = datetime.utcnow()
     db.session.commit()
@@ -141,32 +200,31 @@ def run_scan(scan_id):
         commit=True,
     )
 
-    allow_private = bool(
-        current_app.config.get("SCANNER_ALLOW_PRIVATE_TARGETS", True)
-    )
-    timeout = float(current_app.config.get("SCANNER_DEFAULT_TIMEOUT", 10))
-    verify_ssl = current_app.config.get("SCANNER_VERIFY_SSL", True)
-    http = HttpClient(
-        timeout=timeout,
-        delay_ms=profile.RequestDelayMs or 0,
-        verify_ssl=verify_ssl,
-        url_validator=make_url_validator(
-            scan.TargetURL, profile.FollowExternalLinks, allow_private
-        ),
-    )
-
     progress.update(scan_id, http=http, stage="crawling")
 
     try:
         # --------------------------------------------------------- crawl
+        skip_paths = ()
+        if auth_session is not None:
+            skip_paths = ("logout", "signout", "sign-out")
+            if auth_session.login_path not in ("", "/"):
+                skip_paths = skip_paths + (auth_session.login_path,)
         crawler = Crawler(
             http=http,
             max_pages=profile.MaxPages,
             max_depth=profile.MaxDepth,
             follow_external=profile.FollowExternalLinks,
+            skip_url_contains=skip_paths,
         )
         pages = crawler.crawl(scan.TargetURL)
         progress.update(scan_id, pages_found=len(pages), stage="analysing")
+        if http.auth_failed:
+            _finish_failed(
+                scan,
+                "The authenticated session was lost during the crawl and "
+                "could not be restored.",
+            )
+            return
         if not pages:
             _finish_failed(scan, "Crawler discovered no reachable pages.")
             return
@@ -210,6 +268,13 @@ def run_scan(scan_id):
         findings_total = 0
         cancelled = False
         for page, page_row in page_rows:
+            if auth_session is not None:
+                usable, reason = credential_service.scan_credential_usable(scan_id)
+                if not usable:
+                    _finish_failed(
+                        scan, f"Authenticated scan stopped: {reason}."
+                    )
+                    return
             if _is_cancelled(scan_id):
                 cancelled = True
                 break

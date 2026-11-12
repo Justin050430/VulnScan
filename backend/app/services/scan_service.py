@@ -365,12 +365,34 @@ def get_scan_detail(scan_id):
         for p in skipped_pages
     ]
     data["TestedParameters"] = sorted(tested_parameters)
+
+    from app.services import credential_service
+
+    credential = credential_service.credential_for_scan(scan.ScanID)
+    if credential is None:
+        data["Authentication"] = {"Mode": "Anonymous"}
+        auth_note = "Authenticated pages were not reached."
+    else:
+        data["Authentication"] = {
+            "Mode": "Authenticated",
+            "CredentialID": credential.CredentialID,
+            "CredentialName": credential.Name,
+            "ApprovedByUserID": credential.ApprovedByUserID,
+            "ExpiresAt": (
+                credential.ExpiresAt.isoformat() if credential.ExpiresAt else None
+            ),
+            "AvailableForRetest": credential.is_available_for_retest(),
+        }
+        auth_note = (
+            "Pages reachable by the approved temporary test account were "
+            "included; pages that account cannot access were not."
+        )
     data["CoverageNote"] = (
         f"{len(analysed_pages)} of {len(scan.pages)} discovered page(s) were "
-        "analysed. Only GET query-string parameters are tested (no POST "
-        "bodies, form submission, JavaScript-rendered content or "
-        "authenticated pages); pages skipped due to a non-success HTTP "
-        "status are listed in SkippedPages and were not tested."
+        f"analysed. {auth_note} Only GET query-string parameters are tested "
+        "(no POST bodies, form submission or JavaScript-rendered content). "
+        "Pages skipped due to a non-success HTTP status are listed in "
+        "SkippedPages and were not tested."
     )
     return data
 

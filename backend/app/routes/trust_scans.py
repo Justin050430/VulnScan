@@ -38,7 +38,12 @@ def scan_readiness(project_id, _access=None):
 
         raise TrustError("asset_id is required.", ERR_VALIDATION, 400)
     asset = _asset_in_project(project_id, asset_id)
-    return jsonify({"Readiness": scan_gate_service.evaluate(_access, asset)}), 200
+    credential_id = request.args.get("credential_id")
+    return jsonify({
+        "Readiness": scan_gate_service.evaluate(
+            _access, asset, credential_id=credential_id
+        )
+    }), 200
 
 
 @trust_scans_bp.post("/<int:project_id>/scans")
@@ -56,6 +61,7 @@ def create_scan(project_id, _access=None):
         credit_ref=data.get("credit_id"),
         idempotency_key=data.get("idempotency_key"),
         target_url=data.get("target_url"),
+        credential_id=data.get("credential_id"),
         ip_address=client_ip(),
         run_async=bool(current_app.config.get("SCAN_ASYNC", True)),
     )

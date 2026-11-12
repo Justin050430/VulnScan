@@ -641,6 +641,9 @@
               <span class="k">Scan ID</span><span class="mono">SCAN-${scan.ScanID}</span>
               <span class="k">Target URL</span><span class="mono">${U.esc(scan.TargetURL)}</span>
               <span class="k">Scan Profile</span><span>${U.esc(scan.ScanProfileName || '-')}</span>
+              <span class="k">Authentication</span><span>${scan.Authentication && scan.Authentication.Mode === 'Authenticated'
+                ? `Temporary credential #${scan.Authentication.CredentialID} (${U.esc(scan.Authentication.CredentialName || '')})`
+                : 'Anonymous session'}</span>
               <span class="k">Started By</span><span>${U.esc(scan.Username || '-')}</span>
               <span class="k">Started</span><span>${U.fmtDT(scan.StartedAt)}</span>
               <span class="k">Finished</span><span>${U.fmtDT(scan.FinishedAt)}</span>

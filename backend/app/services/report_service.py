@@ -32,7 +32,22 @@ SEVERITY_COLORS = {
 }
 
 
+def _authentication(scan):
+    """Human-readable authentication context.  Never includes the secret."""
+    from app.services import credential_service
+
+    credential = credential_service.credential_for_scan(scan.ScanID)
+    if credential is None:
+        return "Anonymous session", "-"
+    return (
+        f"Temporary credential #{credential.CredentialID} ({credential.Name}), "
+        f"approved by user #{credential.ApprovedByUserID}",
+        credential.ExpiresAt.isoformat() if credential.ExpiresAt else "-",
+    )
+
+
 def build_csv(scan, findings, pages):
+    auth_label, auth_expires = _authentication(scan)
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["VulnScan Scan Report"])
@@ -41,6 +56,8 @@ def build_csv(scan, findings, pages):
     writer.writerow(["Scan Name", scan.ScanName])
     writer.writerow(["Target URL", scan.TargetURL])
     writer.writerow(["Scan Profile", scan.scan_profile.Name if scan.scan_profile else ""])
+    writer.writerow(["Authentication", auth_label])
+    writer.writerow(["Authentication Expires", auth_expires])
     writer.writerow(["Status", scan.Status])
     writer.writerow(["Started At", scan.StartedAt.isoformat() if scan.StartedAt else ""])
     writer.writerow(["Finished At", scan.FinishedAt.isoformat() if scan.FinishedAt else ""])
@@ -118,6 +135,7 @@ def build_pdf(scan, findings, pages):
     story = []
     story.append(Paragraph("VulnScan Vulnerability Scan Report", title_style))
     story.append(Spacer(1, 4))
+    auth_label, auth_expires = _authentication(scan)
     meta = [
         ["Scan ID", f"#{scan.ScanID}", "Scan Name", scan.ScanName],
         ["Target URL", scan.TargetURL, "Scan Profile",
@@ -126,6 +144,7 @@ def build_pdf(scan, findings, pages):
          scan.user.Email if scan.user else "-"],
         ["Started At", scan.StartedAt.isoformat() if scan.StartedAt else "-",
          "Finished At", scan.FinishedAt.isoformat() if scan.FinishedAt else "-"],
+        ["Authentication", auth_label, "Auth Expires", auth_expires],
     ]
     meta_tbl = Table(meta, colWidths=[28 * mm, 67 * mm, 28 * mm, 67 * mm])
     meta_tbl.setStyle(TableStyle([

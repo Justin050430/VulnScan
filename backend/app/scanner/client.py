@@ -58,7 +58,8 @@ class ScanResponse:
 class HttpClient:
     def __init__(self, timeout=10, delay_ms=0, verify_ssl=True,
                  user_agent=DEFAULT_USER_AGENT, max_body_bytes=MAX_BODY_BYTES,
-                 max_redirects=MAX_REDIRECTS, url_validator=None):
+                 max_redirects=MAX_REDIRECTS, url_validator=None,
+                 auth_session=None):
         self.timeout = timeout
         self.delay = max(0, delay_ms / 1000.0)
         self.verify_ssl = verify_ssl
@@ -66,6 +67,11 @@ class HttpClient:
         self.max_redirects = max_redirects
         # url_validator(target_url) -> (ok: bool, reason: str)
         self.url_validator = url_validator
+        # Optional AuthSession; attached after the initial login so login
+        # requests themselves are never retried by this mechanism.
+        self.auth_session = auth_session
+        self.auth_retries = 0
+        self.auth_failed = False
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": user_agent})
         self._last_request_at = 0.0
@@ -157,6 +163,24 @@ class HttpClient:
                     ok=True,
                 )
                 result.history = history
+
+                if (
+                    self.auth_session is not None
+                    and method == "GET"
+                    and self.auth_retries < 1
+                    and self.auth_session.session_lost(result)
+                ):
+                    self.auth_retries += 1
+                    if self.auth_session.reauthenticate():
+                        current = url
+                        history = []
+                        redirects = 0
+                        continue
+                    self.auth_failed = True
+                    result.error = (
+                        self.auth_session.failure_reason
+                        or "the authenticated session was lost"
+                    )
                 return result
 
     def get(self, url, **kwargs):

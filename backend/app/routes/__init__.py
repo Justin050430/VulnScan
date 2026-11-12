@@ -6,6 +6,7 @@ def register_blueprints(app):
     from app.routes.assets import assets_bp
     from app.routes.audit_logs import audit_logs_bp
     from app.routes.auth import auth_bp
+    from app.routes.credentials import credentials_bp
     from app.routes.organisations import (
         invitations_bp,
         organisations_bp,
@@ -46,6 +47,7 @@ def register_blueprints(app):
     v1.register_blueprint(projects_bp)
     v1.register_blueprint(invitations_bp)
     v1.register_blueprint(assets_bp)
+    v1.register_blueprint(credentials_bp)
     v1.register_blueprint(payments_bp)
     v1.register_blueprint(payments_scoped_bp)
     v1.register_blueprint(trust_scans_bp)
