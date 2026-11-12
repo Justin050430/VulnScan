@@ -56,6 +56,15 @@ def list_products():
     return list(PRODUCTS.values())
 
 
+def _credits_per_unit(product_code):
+    """Credits granted by one unit of a product (1 for unknown/legacy codes)."""
+    product = PRODUCTS.get(product_code) or {}
+    try:
+        return max(1, int(product.get("Credits", 1)))
+    except (TypeError, ValueError):
+        return 1
+
+
 def _credit_validity_days():
     return int(current_app.config.get("TRUST_CREDIT_VALIDITY_DAYS", 180))
 
@@ -263,8 +272,13 @@ def process_callback(payload, signature, ip_address=None, actor=None):
     payment.CallbackHash = signature[:64] if signature else None
     payment.Version += 1
 
+    # Quantity is the number of products bought; each product grants its own
+    # number of credits (SCAN_CREDIT_5 grants five), so issue both factors.
+    total_credits = max(1, payment.Quantity) * _credits_per_unit(
+        payment.ProductCode
+    )
     credits = []
-    for sequence in range(1, payment.Quantity + 1):
+    for sequence in range(1, total_credits + 1):
         credit = TrustScanCredit(
             CreditUUID=str(uuid.uuid4()),
             OrganisationID=payment.OrganisationID,
@@ -275,7 +289,7 @@ def process_callback(payload, signature, ip_address=None, actor=None):
             Status=CREDIT_AVAILABLE,
             IssuedAt=now,
             ExpiresAt=now + timedelta(days=_credit_validity_days()),
-            PurchasePriceMinor=payment.AmountMinor // max(payment.Quantity, 1),
+            PurchasePriceMinor=payment.AmountMinor // total_credits,
             Currency=payment.Currency,
         )
         db.session.add(credit)
@@ -292,6 +306,7 @@ def process_callback(payload, signature, ip_address=None, actor=None):
             "provider_transaction_id": event.provider_transaction_id,
             "amount_minor": payment.AmountMinor,
             "quantity": payment.Quantity,
+            "credits_issued": total_credits,
         },
         ip_address=ip_address,
         commit=False,

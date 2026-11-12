@@ -92,6 +92,42 @@ def test_mock_completion_issues_one_credit(trust_app, client, dev_token, project
     assert credits[0].PurchasePriceMinor == 1000
 
 
+def test_five_credit_product_issues_five_credits(trust_app, client, dev_token,
+                                                 project):
+    payment = _checkout(
+        client, dev_token, project["ProjectID"], product="SCAN_CREDIT_5"
+    ).get_json()["Payment"]
+    completed = _complete(client, dev_token, project["ProjectID"],
+                          payment["PaymentUUID"])
+    assert completed.status_code == 200
+    assert completed.get_json()["CreditsIssued"] == 5
+
+    credits = _credits(trust_app, project["ProjectID"])
+    assert len(credits) == 5
+    assert {c.Status for c in credits} == {"Available"}
+    assert {c.ProductCode for c in credits} == {"SCAN_CREDIT_5"}
+    assert sorted(c.CreditSequence for c in credits) == [1, 2, 3, 4, 5]
+    # The bundle price is split evenly across the credits it grants.
+    assert {c.PurchasePriceMinor for c in credits} == {900}
+    assert len({c.CreditUUID for c in credits}) == 5
+
+
+def test_bundle_quantity_multiplies_credits(trust_app, client, dev_token,
+                                            project):
+    payment = _checkout(
+        client, dev_token, project["ProjectID"], product="SCAN_CREDIT_5",
+        quantity=2,
+    ).get_json()["Payment"]
+    assert payment["AmountMinor"] == 9000
+    completed = _complete(client, dev_token, project["ProjectID"],
+                          payment["PaymentUUID"])
+    assert completed.get_json()["CreditsIssued"] == 10
+
+    credits = _credits(trust_app, project["ProjectID"])
+    assert len(credits) == 10
+    assert sorted(c.CreditSequence for c in credits) == list(range(1, 11))
+
+
 def test_duplicate_completion_is_idempotent(trust_app, client, dev_token, project):
     payment = _checkout(client, dev_token, project["ProjectID"]).get_json()["Payment"]
     first = _complete(client, dev_token, project["ProjectID"], payment["PaymentUUID"])
