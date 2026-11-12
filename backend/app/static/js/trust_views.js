@@ -429,14 +429,20 @@
     const credentials = credsBody.Credentials || [];
     const perms = projectBody.Permissions || [];
 
+    const me = API.user || {};
+    const isCreator = (c) => Number(c.CreatedByUserID) === Number(me.UserID);
     const actions = (c) => {
       const out = [];
       if (can(perms, 'credential.create') && ['PendingApproval', 'Approved'].includes(c.Status) && c.HasSecret) {
         out.push(`<button class="btn btn-xs btn-secondary" data-test="${c.CredentialID}">Test login</button>`);
       }
       if (can(perms, 'credential.approve') && c.Status === 'PendingApproval') {
-        out.push(`<button class="btn btn-xs btn-primary" data-approve="${c.CredentialID}">Approve</button>`);
-        out.push(`<button class="btn btn-xs btn-danger" data-reject="${c.CredentialID}">Reject</button>`);
+        if (isCreator(c)) {
+          out.push('<span class="hint" style="display:block;text-align:left">You created this credential, so a different project owner must approve it.</span>');
+        } else {
+          out.push(`<button class="btn btn-xs btn-primary" data-approve="${c.CredentialID}">Approve</button>`);
+          out.push(`<button class="btn btn-xs btn-danger" data-reject="${c.CredentialID}">Reject</button>`);
+        }
       }
       if (can(perms, 'credential.revoke') && ['PendingApproval', 'Approved', 'Used'].includes(c.Status)) {
         out.push(`<button class="btn btn-xs btn-danger" data-revoke="${c.CredentialID}">Revoke</button>`);
@@ -655,18 +661,25 @@
   /* ============================================================ GATED SCAN */
   async function newScan(el, projectId) {
     el.innerHTML = U.loading('Loading scan setup…');
-    const [projectBody, assetsBody, creditsBody, profilesBody, credentialsBody] = await Promise.all([
+    const [projectBody, assetsBody, creditsBody, profilesBody] = await Promise.all([
       API.get('/api/v1/projects/' + projectId),
       API.get(`/api/v1/projects/${projectId}/assets`),
       API.get(`/api/v1/projects/${projectId}/credits?status=Available`),
-      API.get('/api/scan-profiles'),
-      API.get(`/api/v1/projects/${projectId}/credentials`).catch(() => ({ Credentials: [] }))
+      API.get('/api/scan-profiles')
     ]);
     const perms = projectBody.Permissions || [];
     const assets = (assetsBody.Assets || []).filter(a => a.VerificationStatus === 'Verified');
     const credits = creditsBody.Credits || [];
     const profiles = profilesBody.ScanProfiles || [];
-    const allCredentials = credentialsBody.Credentials || [];
+    let allCredentials = [];
+    let credentialsError = null;
+    try {
+      allCredentials = (await API.get(`/api/v1/projects/${projectId}/credentials`)).Credentials || [];
+    } catch (e) {
+      // Never hide the reason: an empty list and an unreadable list differ.
+      credentialsError = e.message + (e.code ? ` (${e.code})` : '');
+    }
+    const me = API.user || {};
 
     if (!can(perms, 'scan.start')) {
       el.innerHTML = `<div class="card card-pad">${empty('You do not have permission to start scans in this project.')}</div>`;
@@ -715,22 +728,48 @@
         targetInput.value = `${opt.dataset.scheme}://${opt.dataset.host}/`;
       }
     }
+    function credentialBlockedReason(c, now) {
+      if (c.BoundScanID) return `already bound to scan #${c.BoundScanID}`;
+      if (c.Status === 'PendingApproval') {
+        return Number(c.CreatedByUserID) === Number(me.UserID)
+          ? 'awaiting approval by a different project owner'
+          : 'awaiting approval';
+      }
+      if (c.Status === 'Expired') return 'expired';
+      if (c.Status === 'Revoked') return 'revoked';
+      if (c.Status === 'Rejected') return 'rejected';
+      if (c.Status === 'Used') return 'already used';
+      if (!c.HasSecret) return 'secret purged';
+      const expires = U.parseDT(c.ExpiresAt);
+      if (expires && expires <= now) return 'expired';
+      return c.Status;
+    }
+
     function syncCredentials() {
       const assetId = parseInt(assetSel.value, 10);
       const now = new Date();
-      const eligible = allCredentials.filter(c =>
-        Number(c.AssetID) === assetId &&
-        c.Status === 'Approved' &&
-        !c.BoundScanID &&
-        c.HasSecret &&
-        (!c.ExpiresAt || new Date(c.ExpiresAt) > now)
-      );
+      const forAsset = allCredentials.filter(c => Number(c.AssetID) === assetId);
+      const eligible = forAsset.filter(c => {
+        const expires = U.parseDT(c.ExpiresAt);
+        return c.Status === 'Approved' &&
+          !c.BoundScanID &&
+          c.HasSecret &&
+          (!expires || expires > now);
+      });
+      const blocked = forAsset.filter(c => eligible.indexOf(c) === -1);
       credentialSel.innerHTML = '<option value="">Anonymous (no credential)</option>' +
-        eligible.map(c => `<option value="${c.CredentialID}">${U.esc(c.Name)} — expires ${U.fmtDT(c.ExpiresAt)}</option>`).join('');
-      credentialSel.disabled = eligible.length === 0;
-      credentialHint.textContent = eligible.length
-        ? 'The scan logs in once with this credential. One credential = one scan; the secret is destroyed on expiry or revocation.'
-        : 'No approved, unused credential for this asset. Create one on the asset’s Credentials page, then have a different project owner approve it.';
+        eligible.map(c => `<option value="${c.CredentialID}">${U.esc(c.Name)} — expires ${U.fmtDT(c.ExpiresAt)}</option>`).join('') +
+        blocked.map(c => `<option value="" disabled>${U.esc(c.Name)} — ${U.esc(credentialBlockedReason(c, now))}</option>`).join('');
+      const url = `#/projects/${projectId}/assets/${assetId}/credentials`;
+      if (credentialsError) {
+        credentialHint.innerHTML = `Could not load credentials: ${U.esc(credentialsError)}`;
+      } else if (eligible.length) {
+        credentialHint.textContent = 'The scan logs in once with this credential. One credential = one scan; the secret is destroyed on expiry or revocation.';
+      } else if (forAsset.length) {
+        credentialHint.innerHTML = `This asset has ${forAsset.length} credential(s), but none is usable yet — see the status in the list above. <a href="${url}">Open the credentials page</a> to approve or replace one.`;
+      } else {
+        credentialHint.innerHTML = `No credential exists for this asset. <a href="${url}">Create one</a>, then have a different project owner approve it.`;
+      }
     }
     async function refreshReadiness() {
       const assetId = assetSel.value;

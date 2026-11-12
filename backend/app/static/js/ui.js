@@ -9,16 +9,25 @@
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[c]));
     },
+    /* The API serialises UTC datetimes without a timezone designator, which
+       `new Date()` would read as local time. Treat a bare timestamp as UTC so
+       both display and any date comparison use the real instant. */
+    parseDT(v) {
+      if (v === null || v === undefined || v === '') return null;
+      if (v instanceof Date) return isNaN(v) ? null : v;
+      let s = String(v);
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) s += 'Z';
+      const d = new Date(s);
+      return isNaN(d) ? null : d;
+    },
     fmtDT(v) {
-      if (!v) return '-';
-      const d = new Date(v);
-      if (isNaN(d)) return '-';
+      const d = this.parseDT(v);
+      if (!d) return '-';
       return d.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     },
     fmtDate(v) {
-      if (!v) return '-';
-      const d = new Date(v);
-      if (isNaN(d)) return '-';
+      const d = this.parseDT(v);
+      if (!d) return '-';
       return d.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
     },
     sevClass(s) { return (s || '').toLowerCase(); },

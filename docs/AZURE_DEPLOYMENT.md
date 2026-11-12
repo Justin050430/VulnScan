@@ -131,14 +131,108 @@ On the **SQL server** → Networking:
 
 ## 6. Migrations and seed data
 
-Run once against Azure SQL from a machine with the firewall rule above:
+The current head is `c4d8f1a2b6e9` (temporary authenticated-scan credentials).
+`aaf9e35de1fe` is the base Trust Boundary migration. The local `.env` points at
+LocalDB, so running `flask db upgrade` locally does **not** migrate Azure SQL.
+
+### Simplest path (no Azure CLI)
+
+1. Azure Portal → SQL server `vulnscan` → **Networking** → **Add current client IP**.
+2. Azure Portal → App Service `vulnscan` → **Configuration → Environment
+   variables** → copy `DATABASE_URL`.
+3. In PowerShell, with the App Service connection string (this machine only has
+   ODBC Driver 17, so the 18 in the copied value is substituted automatically):
 
 ```powershell
-cd backend
-$env:DATABASE_URL = "mssql+pyodbc:///?odbc_connect=..."
-python -m flask --app run.py db upgrade
+cd C:\FYP\VulnScan\backend
+
+# Paste the URL at the prompt (not inside the quotes), then press Enter.
+$url = Read-Host "Paste Azure DATABASE_URL"
+$env:DATABASE_URL = $url.Replace(
+    'ODBC%20Driver%2018%20for%20SQL%20Server',
+    'ODBC%20Driver%2017%20for%20SQL%20Server'
+).Replace(
+    'ODBC+Driver+18+for+SQL+Server',
+    'ODBC+Driver+17+for+SQL+Server'
+)
+
+# Both must be non-zero / True before continuing.
+$env:DATABASE_URL.Length
+$env:DATABASE_URL -match 'database\.windows\.net'
+
+..\.venv\Scripts\python.exe -m flask --app run.py db current
+..\.venv\Scripts\python.exe -m flask --app run.py db upgrade
+..\.venv\Scripts\python.exe -m flask --app run.py db current   # expect c4d8f1a2b6e9 (head)
+Remove-Item Env:DATABASE_URL
+```
+
+The `DATABASE_URL` value is percent-encoded, so the spaces are `%20`, not `+`.
+The replacement above handles both forms.
+
+4. Restart the Azure Web App.
+5. Verify `GET /api/v1/organisations` returns **401** (schema present), not **503**.
+
+If the first `db current` cannot connect, the cause is almost always the SQL
+firewall (step 1) or a missing ODBC driver. The error does not contain the
+password, so it is safe to paste the message (never the connection string).
+
+### Alternative: migration script (requires `az login`)
+
+The repository script reads the Web App's `DATABASE_URL` (never prints it),
+takes a pre-migration database copy, upgrades to head, generates
+`TRUST_CREDENTIAL_KEY` if it is missing, restarts the app and checks that
+`/api/v1` no longer returns `503`:
+
+```powershell
+$env:PATH = "C:\FYP\azurecli-venv\Scripts;$env:PATH"   # local Azure CLI venv
+az login
+cd C:\FYP\VulnScan
+.\scripts\azure_trust_migration.ps1
+```
+
+Then restart the Web App so the in-process schema check is re-evaluated. Seed
+only if the database has no users:
+
+```powershell
 python -m flask --app run.py seed
 ```
+
+### If `az login` is blocked by MFA or the account has no subscriptions
+
+Use the App Service's own environment instead — it already has
+`DATABASE_URL` and the ODBC drivers, and the SQL firewall already allows the
+Web App:
+
+1. Azure Portal → App Service `vulnscan` → **Development Tools → SSH → Go**.
+2. Find the app root (it is not `/backend`):
+
+   ```bash
+   ls -la /home/site/wwwroot
+   find /home/site/wwwroot -maxdepth 3 -name run.py
+   ```
+
+3. `cd` to the directory that contains `run.py`, then run:
+
+   ```bash
+   python -c "import flask, sqlalchemy; print('python ok')"
+   python -m flask --app run.py db current
+   python -m flask --app run.py db upgrade
+   python -m flask --app run.py db current     # expect c4d8f1a2b6e9 (head)
+   ```
+
+4. Restart the Web App from the portal.
+4. Verify `GET /api/v1/organisations` returns **401** (schema present) instead
+   of **503**.
+
+If SSH is unavailable, temporarily prepend the migration to the startup
+command, restart once, then restore the original gunicorn command:
+
+```text
+bash -c "cd /home/site/wwwroot/backend && python -m flask --app run.py db upgrade && gunicorn --bind=0.0.0.0:8000 --timeout 600 --workers 2 --threads 4 wsgi:app"
+```
+
+The schema migration is additive (two new tables). For a rollback point, copy
+the Azure SQL database in the portal before running it.
 
 ---
 

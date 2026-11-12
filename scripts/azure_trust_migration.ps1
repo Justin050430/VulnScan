@@ -3,19 +3,20 @@
     Apply the Trust Boundary migration to Azure SQL, with a pre-migration copy.
 
 .DESCRIPTION
-    Runs the additive migration aaf9e35de1fe against the database used by the
-    VulnScan App Service.
+    Runs the additive Trust Boundary migrations through head (currently
+    c4d8f1a2b6e9) against the database used by the VulnScan App Service.
 
     Steps:
       1. Verify Azure CLI login
       2. Create a pre-migration copy of the database (rollback point)
       3. Read DATABASE_URL from the App Service application settings
       4. Run `flask db upgrade` and print the resulting revision
-      5. Set a random TRUST_MOCK_PAYMENT_SECRET and restart the web app
+      5. Ensure the mock-payment secret and TRUST_CREDENTIAL_KEY are set,
+         then restart the web app
       6. Verify /api/health and /api/v1
 
-    The migration is additive: it only creates the eleven Trust* tables. The
-    eight frozen core tables are not touched.
+    The migrations are additive: they create the Trust* tables (including the
+    temporary-credential tables). The eight frozen core tables are not touched.
 
 .PARAMETER DryRun
     Show what would happen without changing anything.
@@ -47,6 +48,13 @@ $python = Join-Path $repoRoot ".venv\Scripts\python.exe"
 function Step($n, $text) { Write-Host ""; Write-Host "[$n/6] $text" -ForegroundColor Cyan }
 
 if (-not (Test-Path $python)) { Write-Host "ERROR: Python venv not found at $python" -ForegroundColor Red; exit 1 }
+if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+    # Fall back to the repository's local Azure CLI virtual environment.
+    $localAz = Join-Path (Split-Path -Parent $repoRoot) "azurecli-venv\Scripts"
+    if (Test-Path (Join-Path $localAz "az.bat")) {
+        $env:PATH = "$localAz;$env:PATH"
+    }
+}
 if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
     Write-Host "ERROR: Azure CLI (az) is not installed. Install it, run 'az login', then re-run." -ForegroundColor Red
     exit 1
@@ -111,9 +119,9 @@ try {
         exit 1
     }
 
-    Step 4 "Apply the additive Trust Boundary migration"
+    Step 4 "Apply the additive Trust Boundary migrations"
     if ($DryRun) {
-        Write-Host "  [dry-run] flask db upgrade  (expect 8d677211ad51 -> aaf9e35de1fe)"
+        Write-Host "  [dry-run] flask db upgrade  (expect ... -> c4d8f1a2b6e9)"
     } else {
         & $python -m flask --app run.py db upgrade
         if ($LASTEXITCODE -ne 0) {
@@ -127,24 +135,51 @@ try {
     Pop-Location
 }
 
-# ---------------------------------------------------------------- 5. secret
-Step 5 "Set a random mock-payment secret (replaces the public default)"
+# ---------------------------------------------------------------- 5. secrets
+Step 5 "Ensure runtime secrets are set"
 if ($SkipSecret) {
     Write-Host "  skipped (-SkipSecret)"
 } elseif ($DryRun) {
-    Write-Host "  [dry-run] az webapp config appsettings set TRUST_MOCK_PAYMENT_SECRET=***"
+    Write-Host "  [dry-run] ensure TRUST_MOCK_PAYMENT_SECRET and TRUST_CREDENTIAL_KEY exist"
 } else {
-    $bytes = New-Object byte[] 32
-    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-    $rng.GetBytes($bytes)
-    $secret = ($bytes | ForEach-Object { $_.ToString("x2") }) -join ""
-    az webapp config appsettings set --name $WebAppName --resource-group $ResourceGroup --settings "TRUST_MOCK_PAYMENT_SECRET=$secret" -o none
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: could not update the app setting." -ForegroundColor Red
-        exit 1
+    $settings = az webapp config appsettings list --name $WebAppName --resource-group $ResourceGroup -o json | ConvertFrom-Json
+    $names = @($settings | ForEach-Object { $_.name })
+    $toSet = @()
+
+    if ($names -notcontains "TRUST_MOCK_PAYMENT_SECRET") {
+        $bytes = New-Object byte[] 32
+        $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+        $rng.GetBytes($bytes)
+        $secret = ($bytes | ForEach-Object { $_.ToString("x2") }) -join ""
+        $toSet += "TRUST_MOCK_PAYMENT_SECRET=$secret"
+        Write-Host "  TRUST_MOCK_PAYMENT_SECRET: generating"
+    } else {
+        Write-Host "  TRUST_MOCK_PAYMENT_SECRET: already set"
     }
-    az webapp restart --name $WebAppName --resource-group $ResourceGroup -o none
-    Write-Host "Secret set; app restarting."
+
+    if ($names -notcontains "TRUST_CREDENTIAL_KEY") {
+        $credKey = & $python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+        if ($LASTEXITCODE -ne 0 -or -not $credKey) {
+            Write-Host "ERROR: could not generate TRUST_CREDENTIAL_KEY." -ForegroundColor Red
+            exit 1
+        }
+        $toSet += "TRUST_CREDENTIAL_KEY=$credKey"
+        Write-Host "  TRUST_CREDENTIAL_KEY: generating"
+    } else {
+        Write-Host "  TRUST_CREDENTIAL_KEY: already set"
+    }
+
+    if ($toSet.Count -gt 0) {
+        az webapp config appsettings set --name $WebAppName --resource-group $ResourceGroup --settings @toSet -o none
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: could not update the app settings." -ForegroundColor Red
+            exit 1
+        }
+        az webapp restart --name $WebAppName --resource-group $ResourceGroup -o none
+        Write-Host "Settings set; app restarting."
+    } else {
+        Write-Host "  No secret changes required."
+    }
 }
 
 # ---------------------------------------------------------------- 6. verify
@@ -156,9 +191,9 @@ if ($DryRun) {
 }
 Start-Sleep -Seconds 20
 $health = curl.exe -s -o NUL -w "%{http_code}" "$AppBaseUrl/api/health"
-$v1 = curl.exe -s -o NUL -w "%{http_code}" "$AppBaseUrl/api/v1/products"
-Write-Host "  /api/health      -> $health   (expect 200)"
-Write-Host "  /api/v1/products -> $v1   (expect 401 = schema present, auth required)"
+$v1 = curl.exe -s -o NUL -w "%{http_code}" "$AppBaseUrl/api/v1/organisations"
+Write-Host "  /api/health          -> $health   (expect 200)"
+Write-Host "  /api/v1/organisations -> $v1   (expect 401 = schema present, auth required)"
 
 if ($health -eq "200" -and $v1 -eq "401") {
     Write-Host ""
