@@ -33,15 +33,16 @@ def register_blueprints(app):
 
     from flask import jsonify
 
-    from app.trust.schema import available, missing_schema_response
+    from app.trust import schema
 
     @v1.before_request
     def _require_trust_schema():
         """Fail closed with an actionable error when the schema is missing."""
-        if not available():
-            payload, status = missing_schema_response()
-            return jsonify(payload), status
-        return None
+        details = schema.problem()
+        if details is None:
+            return None
+        payload, status = schema.missing_schema_response(details)
+        return jsonify(payload), status
 
     v1.register_blueprint(organisations_bp)
     v1.register_blueprint(projects_bp)

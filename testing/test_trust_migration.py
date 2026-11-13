@@ -105,3 +105,47 @@ def test_trust_schema_available_after_migration(app):
 
     with app.app_context():
         assert available() is True
+
+
+def test_missing_column_is_reported_with_the_exact_migration():
+    """
+    A database that has every Trust table but an older column set must be
+    reported as a missing column, not as a generic server error.
+    """
+    from app.trust.schema import REQUIRED_COLUMNS, check_schema, missing_schema_response
+
+    class _Inspector:
+        """Inspector stub: all tables exist, InviteEmail does not."""
+
+        def get_table_names(self):
+            from app.models import TRUST_ENTITIES
+
+            return list(TRUST_ENTITIES)
+
+        def get_columns(self, table):
+            columns = {"OrganisationMembershipID", "ProjectMembershipID"}
+            columns |= {
+                name
+                for name in REQUIRED_COLUMNS.get(table, {})
+                if name != "InviteEmail"
+            }
+            return [{"name": name} for name in columns]
+
+    missing_tables, missing_columns = check_schema(_Inspector())
+    assert missing_tables == []
+    assert {item["column"] for item in missing_columns} == {"InviteEmail"}
+
+    payload, status = missing_schema_response(
+        {"missing_tables": missing_tables, "missing_columns": missing_columns}
+    )
+    assert status == 503
+    assert payload["code"] == "TRUST_BOUNDARY_UNAVAILABLE"
+    assert "InviteEmail" in payload["message"]
+    assert payload["details"]["missing_migration"] == "d9f2a4c8b1e7_invitation_email"
+
+
+def test_complete_schema_reports_no_problem(app):
+    from app.trust.schema import problem
+
+    with app.app_context():
+        assert problem() is None

@@ -131,7 +131,8 @@ On the **SQL server** → Networking:
 
 ## 6. Migrations and seed data
 
-The current head is `c4d8f1a2b6e9` (temporary authenticated-scan credentials).
+The current head is `d9f2a4c8b1e7` (invitation email binding); `c4d8f1a2b6e9` added
+the temporary authenticated-scan credentials.
 `aaf9e35de1fe` is the base Trust Boundary migration. The local `.env` points at
 LocalDB, so running `flask db upgrade` locally does **not** migrate Azure SQL.
 
@@ -162,7 +163,7 @@ $env:DATABASE_URL -match 'database\.windows\.net'
 
 ..\.venv\Scripts\python.exe -m flask --app run.py db current
 ..\.venv\Scripts\python.exe -m flask --app run.py db upgrade
-..\.venv\Scripts\python.exe -m flask --app run.py db current   # expect c4d8f1a2b6e9 (head)
+..\.venv\Scripts\python.exe -m flask --app run.py db current   # expect d9f2a4c8b1e7 (head)
 Remove-Item Env:DATABASE_URL
 ```
 
@@ -217,7 +218,7 @@ Web App:
    python -c "import flask, sqlalchemy; print('python ok')"
    python -m flask --app run.py db current
    python -m flask --app run.py db upgrade
-   python -m flask --app run.py db current     # expect c4d8f1a2b6e9 (head)
+   python -m flask --app run.py db current     # expect d9f2a4c8b1e7 (head)
    ```
 
 4. Restart the Web App from the portal.
@@ -261,6 +262,64 @@ https://vulnscan-erehf4djeqg8dvbe.malaysiawest-01.azurewebsites.net/api/auth/goo
 
 After that, every push to `main` (or a manual *Run workflow*) tests and deploys.
 Pull requests are validated by `.github/workflows/ci.yml`.
+
+### 8a. Running database migrations from GitHub Actions
+
+`deploy.yml` deploys code but does not change the schema. Schema changes are applied
+by the separate, **manual** workflow `.github/workflows/migrate.yml`
+(*Actions → Database migration (Azure SQL) → Run workflow*):
+
+| Input | Effect |
+| --- | --- |
+| `dry-run` (default) | prints the current `alembic_version`; changes nothing |
+| `apply` | runs `flask db upgrade`, prints the resulting revision and verifies the live app |
+
+It is safe by construction:
+
+* it authenticates with **GitHub OIDC** — no Azure credential is stored in GitHub;
+* it reads `DATABASE_URL` from the App Service settings and masks it (never printed);
+* it opens the SQL firewall for the runner's public IP only, then deletes that rule
+  in an `always()` step so a failed run cannot leave the database exposed;
+* it only runs committed migrations (`flask db upgrade`), never `flask db migrate`.
+
+**One-time setup** (already done for this deployment):
+
+```powershell
+# 1. App registration + service principal
+$app = az ad app create --display-name "vulnscan-github-oidc" --query appId -o tsv
+az ad sp create --id $app
+
+# 2. Federated credentials trusting this repository
+#    (JSON files avoid PowerShell quoting problems with `az --parameters`)
+#    subject 1: repo:Justin050430/VulnScan:ref:refs/heads/main
+#    subject 2: repo:Justin050430/VulnScan:environment:production
+az ad app federated-credential create --id $app --parameters .\main.json
+az ad app federated-credential create --id $app --parameters .\env.json
+
+# 3. Least-privilege roles on the resource group that holds the app and SQL server
+$scope = "/subscriptions/<subscription-id>/resourceGroups/vulnscan"
+az role assignment create --assignee-object-id $app --assignee-principal-type ServicePrincipal `
+    --role "Website Contributor" --scope $scope
+az role assignment create --assignee-object-id $app --assignee-principal-type ServicePrincipal `
+    --role "SQL Server Contributor" --scope $scope
+```
+
+`Website Contributor` lets the job read the App Service settings; `SQL Server
+Contributor` lets it add and remove the temporary firewall rule. Nothing else is
+granted.
+
+Optionally set these repository **Variables** to override the defaults baked into the
+workflow: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
+
+Current values for this deployment: client id `696caaef-a481-47cd-a664-f8050351d9e8`,
+tenant `9be0bd27-8c02-4993-8d86-2975ccc9ae1e`, subscription
+`2e4ea030-fd2b-46af-a753-12f96bd10f23`.
+
+> **Order for a schema-changing release:** run the migration workflow (`apply`) and
+> confirm `d9f2a4c8b1e7 (head)`, then deploy the code — or deploy first and migrate
+> immediately, as happened on 2026-11-13. Additive migrations keep the old code
+> working, so either order is safe; the app answers `503 TRUST_BOUNDARY_UNAVAILABLE`
+> naming the missing migration if the two get out of step.
 
 ---
 

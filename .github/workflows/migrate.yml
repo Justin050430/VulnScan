@@ -1,0 +1,162 @@
+name: Database migration (Azure SQL)
+
+# Runs the additive Alembic migrations against the Azure SQL database used by
+# the App Service.
+#
+#   * manual trigger only (workflow_dispatch) - never runs on push
+#   * `mode: dry-run` (default) prints the current revision and changes nothing
+#   * `mode: apply`   runs `flask db upgrade` and prints the resulting revision
+#
+# Why a runner and not the app itself: Kudu runs in a separate container from
+# the app, so `flask db upgrade` cannot use the deployed virtualenv.  This job
+# therefore authenticates with GitHub OIDC (no stored Azure secret), reads
+# DATABASE_URL from the App Service settings (never printed, never stored in
+# GitHub), opens the SQL firewall for the runner's IP only, runs the migration
+# and closes the firewall rule again - even when the job fails.
+#
+# Required repository configuration (Settings -> Secrets and variables -> Actions):
+#   Variables (optional; the defaults below are the current deployment):
+#     AZURE_CLIENT_ID        app registration (service principal) client id
+#     AZURE_TENANT_ID        Entra tenant id
+#     AZURE_SUBSCRIPTION_ID  subscription id
+#   The service principal needs, on the `vulnscan` resource group:
+#     Website Contributor      (read App Service settings)
+#     SQL Server Contributor   (add/remove the temporary firewall rule)
+#
+# See docs/MIGRATION_TRUST.md for the runbook and rollback procedure.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run prints the schema revision; apply runs flask db upgrade"
+        type: choice
+        options: [dry-run, apply]
+        default: dry-run
+
+concurrency:
+  group: database-migration
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  APP_NAME: vulnscan
+  RESOURCE_GROUP: vulnscan
+  SQL_SERVER: vulnscan
+  DATABASE: vulnscandb
+  APP_BASE_URL: https://vulnscan-erehf4djeqg8dvbe.malaysiawest-01.azurewebsites.net
+  # The CLI would otherwise run the app's startup orphan-scan recovery and could
+  # fail a scan a user started while the migration job runs.
+  SCANNER_RECOVER_ORPHAN_SCANS: "false"
+
+jobs:
+  migrate:
+    name: flask db upgrade
+    runs-on: ubuntu-22.04
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install ODBC Driver 18 (for pyodbc)
+        run: |
+          curl -sSL https://packages.microsoft.com/keys/microsoft.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+          curl -sSL https://packages.microsoft.com/config/ubuntu/22.04/prod.list \
+            | sudo tee /etc/apt/sources.list.d/mssql-release.list > /dev/null
+          sudo sed -i 's|^deb |deb [signed-by=/usr/share/keyrings/microsoft-prod.gpg] |' \
+            /etc/apt/sources.list.d/mssql-release.list
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 unixodbc-dev
+          odbcinst -q -d -n "ODBC Driver 18 for SQL Server"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Azure login (OIDC, no stored secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID || '696caaef-a481-47cd-a664-f8050351d9e8' }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID || '9be0bd27-8c02-4993-8d86-2975ccc9ae1e' }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID || '2e4ea030-fd2b-46af-a753-12f96bd10f23' }}
+
+      - name: Read DATABASE_URL from the App Service (masked)
+        run: |
+          conn="$(az webapp config appsettings list \
+            --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" \
+            --query "[?name=='DATABASE_URL'].value | [0]" -o tsv)"
+          if [ -z "$conn" ]; then
+            echo "::error::DATABASE_URL is not configured on $APP_NAME."
+            exit 1
+          fi
+          echo "::add-mask::$conn"
+          echo "::add-mask::$(printf '%s' "$conn" | sed -E 's#.*://[^/]*@##')"
+          {
+            echo "DATABASE_URL<<VULNSCAN_EOF"
+            echo "$conn"
+            echo "VULNSCAN_EOF"
+          } >> "$GITHUB_ENV"
+          echo "Connection string retrieved (not printed)."
+
+      - name: Allow the runner IP through the SQL firewall
+        id: firewall
+        run: |
+          ip="$(curl -sS https://api.ipify.org)"
+          if [ -z "$ip" ]; then
+            echo "::error::Could not determine the runner public IP."
+            exit 1
+          fi
+          echo "Runner IP: $ip"
+          rule="GitHubActionsMigration-${{ github.run_id }}-${{ github.run_attempt }}"
+          az sql server firewall-rule create \
+            --resource-group "$RESOURCE_GROUP" --server "$SQL_SERVER" \
+            --name "$rule" --start-ip-address "$ip" --end-ip-address "$ip" \
+            --only-show-errors -o none
+          echo "rule=$rule" >> "$GITHUB_OUTPUT"
+
+      - name: Report current schema revision
+        working-directory: backend
+        run: python -m flask --app run.py db current
+
+      - name: Apply migrations
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: backend
+        run: python -m flask --app run.py db upgrade
+
+      - name: Report resulting schema revision
+        if: ${{ inputs.mode == 'apply' }}
+        working-directory: backend
+        run: python -m flask --app run.py db current
+
+      - name: Verify the live application
+        if: ${{ inputs.mode == 'apply' }}
+        run: |
+          health="$(curl -s -o /dev/null -w '%{http_code}' "$APP_BASE_URL/api/health")"
+          api="$(curl -s -o /dev/null -w '%{http_code}' "$APP_BASE_URL/api/v1/organisations")"
+          echo "/api/health            -> $health (expect 200)"
+          echo "/api/v1/organisations  -> $api (expect 401 = schema present, auth required)"
+          if [ "$health" != "200" ] || [ "$api" != "401" ]; then
+            echo "::error::The live application is not healthy after the migration."
+            exit 1
+          fi
+
+      - name: Close the temporary firewall rule
+        if: always() && steps.firewall.outputs.rule != ''
+        run: |
+          az sql server firewall-rule delete \
+            --resource-group "$RESOURCE_GROUP" --server "$SQL_SERVER" \
+            --name "${{ steps.firewall.outputs.rule }}" \
+            --only-show-errors -o none || true
+          echo "Firewall rule removed."

@@ -107,13 +107,50 @@ if (-not $conn) {
 }
 Write-Host "Connection string retrieved ($($conn.Length) characters, not printed)."
 
+# The App Service setting usually names ODBC Driver 18; a workstation may only
+# have Driver 17. Substitute the driver this machine actually has.  The space in
+# the driver name may be encoded as '+', '%20' or a literal space.
+$installed = @(Get-OdbcDriver -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like "*SQL Server*" } |
+    Select-Object -ExpandProperty Name -Unique)
+$sep = '(\+|%20| )'
+$driver18Pattern = "Driver${sep}18${sep}for${sep}SQL${sep}Server"
+if ($conn -match $driver18Pattern -and
+        ($installed -notcontains 'ODBC Driver 18 for SQL Server')) {
+    if ($installed -contains 'ODBC Driver 17 for SQL Server') {
+        $conn = $conn -replace $driver18Pattern,
+            'Driver${1}17${2}for${3}SQL${4}Server'
+        Write-Host "  Driver 18 not installed locally; using ODBC Driver 17." -ForegroundColor Yellow
+    } else {
+        Write-Host "ERROR: the connection string needs ODBC Driver 18 and this machine has neither 18 nor 17." -ForegroundColor Red
+        Write-Host "       Install one: winget install Microsoft.msodbcsql.18" -ForegroundColor Red
+        exit 1
+    }
+}
+
+function Invoke-FlaskStep {
+    param([string[]]$Arguments)
+    # Flask writes logs to stderr; capture them instead of letting
+    # $ErrorActionPreference turn them into a terminating error.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & $python @Arguments 2>&1 | ForEach-Object { "$_" }
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    $output | Where-Object { $_ -and $_ -notmatch '^\s*$' } | ForEach-Object { Write-Host "  $_" }
+    return $code
+}
+
 # ---------------------------------------------------------------- 3 & 4
 Step 3 "Current schema revision"
 $env:DATABASE_URL = $conn
 Push-Location $backend
 try {
-    & $python -m flask --app run.py db current
-    if ($LASTEXITCODE -ne 0) {
+    $code = Invoke-FlaskStep @("-m", "flask", "--app", "run.py", "db", "current")
+    if ($code -ne 0) {
         Write-Host "ERROR: cannot connect. Add this machine's IP to the SQL server firewall, then retry." -ForegroundColor Red
         Pop-Location
         exit 1
@@ -121,15 +158,15 @@ try {
 
     Step 4 "Apply the additive Trust Boundary migrations"
     if ($DryRun) {
-        Write-Host "  [dry-run] flask db upgrade  (expect ... -> c4d8f1a2b6e9)"
+        Write-Host "  [dry-run] flask db upgrade  (expect ... -> d9f2a4c8b1e7)"
     } else {
-        & $python -m flask --app run.py db upgrade
-        if ($LASTEXITCODE -ne 0) {
+        $code = Invoke-FlaskStep @("-m", "flask", "--app", "run.py", "db", "upgrade")
+        if ($code -ne 0) {
             Write-Host "ERROR: migration failed. The database copy '$backupName' is the rollback point." -ForegroundColor Red
             Pop-Location
             exit 1
         }
-        & $python -m flask --app run.py db current
+        Invoke-FlaskStep @("-m", "flask", "--app", "run.py", "db", "current") | Out-Null
     }
 } finally {
     Pop-Location

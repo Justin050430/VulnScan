@@ -137,11 +137,31 @@ memberships, assets, attestations, payments, credits, audit events).
 - Enforcement is a **deployment** decision (`TRUST_BOUNDARY_MODE`), not a schema one.
 - A later release may contract unused legacy paths; that is out of scope for this slice.
 
-## 6. Deployment pipeline note
+## 6. Deployment pipeline
 
-`deploy.yml` currently does **not** run `flask db upgrade`. Until that is added (future
-work), production migrations must be applied manually as described above. This is a
-known gap recorded in `docs/TRUST_BOUNDARY.md`.
+`deploy.yml` publishes the application but does **not** run `flask db upgrade`, so a
+release that changes the schema needs the migration applied first (or immediately
+after) the deploy. Two supported ways:
+
+1. **GitHub Actions (recommended, no local tooling):** run the
+   **Database migration (Azure SQL)** workflow (`.github/workflows/migrate.yml`) from
+   the Actions tab. It is manual (`workflow_dispatch`) and has two modes:
+
+   | Input | Effect |
+   | --- | --- |
+   | `dry-run` (default) | prints the current revision; changes nothing |
+   | `apply` | runs `flask db upgrade`, prints the new revision and verifies the live app |
+
+   It authenticates with GitHub OIDC (no Azure secret stored in GitHub), reads
+   `DATABASE_URL` from the App Service settings (masked, never printed), adds a
+   firewall rule for the runner's IP only and removes it again in an `always()` step.
+   See `docs/AZURE_DEPLOYMENT.md` for the one-time identity setup.
+
+2. **Local runbook:** `scripts/azure_trust_migration.ps1` (creates a database copy,
+   migrates, verifies) or the manual procedure in section 3b above.
+
+Either way, `flask db upgrade` only ever applies committed migrations — `flask db
+migrate` is never run against production.
 
 ## 7. Post-migration smoke checklist
 

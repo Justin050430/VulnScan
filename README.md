@@ -82,6 +82,8 @@ testing/
   test_*.py               pytest suite (290 tests, incl. SQL Server integration)
   trust_helpers.py        shared Trust Boundary test fixtures
 .github/workflows/ci.yml  continuous integration (runs the test suite)
+.github/workflows/deploy.yml  tests then deploys main to Azure App Service
+.github/workflows/migrate.yml manual `flask db upgrade` against Azure SQL (OIDC)
 scripts/start-local.ps1   starts/stops the complete local environment
 scripts/local_smoke_test.py  end-to-end Trust Boundary + detection-quality check
 docs/TRUST_BOUNDARY.md    Trust Boundary design, roles and limits
@@ -206,7 +208,7 @@ contacts arbitrary third-party websites. Do not scan public sites you do not own
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| Organisations tab shows **"An internal server error occurred"** (older build) or **503 `TRUST_BOUNDARY_UNAVAILABLE`** | Database is behind the additive Trust schema (the `Trust*` tables are missing) | `cd backend` then `python -m flask --app run.py db upgrade`, restart the server |
+| Organisations tab shows **"An internal server error occurred"** (older build) or **503 `TRUST_BOUNDARY_UNAVAILABLE`** | Database is behind the additive Trust schema (missing `Trust*` tables **or** a column added by a later migration, e.g. after an Azure deploy) | Local: `cd backend` then `python -m flask --app run.py db upgrade`, restart. Azure: run *Actions → Database migration (Azure SQL)* with `apply`, or `scripts/azure_trust_migration.ps1`. The 503 body names the exact missing migration |
 | Verification returns `VERIFICATION_MISMATCH ... Connection error` | `/.well-known` was fetched on port 80/443 but the target listens on 5001/5003 | Start VulnScan with `TRUST_WEBFILE_PORT=5001` (or `5003`) |
 | `HOSTNAME_INVALID` when registering an asset | IP literal, wildcard, scheme/port or path supplied | Register the exact hostname only, e.g. `localhost` |
 | `TARGET_HOST_MISMATCH` on scan start | Target URL host differs from the verified asset | Use the same host, e.g. `http://localhost:5001/` |
@@ -224,8 +226,9 @@ cd backend
 python -m flask --app run.py db current
 ```
 
-The Trust Boundary head revision is `c4d8f1a2b6e9` (temporary scan credentials);
-`aaf9e35de1fe` is the base Trust Boundary migration.
+The Trust Boundary head revision is `d9f2a4c8b1e7` (invitation email binding);
+`aaf9e35de1fe` is the base Trust Boundary migration and `c4d8f1a2b6e9` adds the
+temporary scan credentials.
 
 ## Google Sign-In
 
@@ -263,6 +266,11 @@ audit and scanner/export/retest/progress regression.
 
 `.github/workflows/ci.yml` runs the suite on every push/PR to `main` and
 uploads the JUnit results as a build artifact.
+
+`.github/workflows/deploy.yml` runs the suite and then deploys `main` to the Azure
+Web App. Schema changes are applied separately with the **manual**
+`.github/workflows/migrate.yml` workflow (*Actions → Database migration (Azure SQL)*,
+`dry-run` or `apply`); see [docs/AZURE_DEPLOYMENT.md](docs/AZURE_DEPLOYMENT.md) §8a.
 
 ## Documentation of implementation notes
 
