@@ -12,7 +12,8 @@ VulnScan is **not** a "scan any website" service. Scan creation is gated by an a
 **Trust Boundary Extension** around the frozen eight-entity core ERD:
 
 - **Organisation → Project → Membership** with server-side roles
-  (`ORG_OWNER`, `PROJECT_OWNER`, `SCAN_OPERATOR`, `ANALYST`, `VIEWER`).
+  (`ORG_OWNER`, `PROJECT_OWNER`, `SCAN_OPERATOR`, `ANALYST`, `VIEWER`). Invitations are
+  shareable one-time links bound to the invitee's email address.
 - **Verified assets only**: exact hostnames, proven by a DNS TXT
   (`_vulnscan-challenge.<host>`) or `/.well-known/vulnscan.txt` challenge.
   Wildcards, IP literals and sub-domain scanning are rejected.
@@ -78,7 +79,7 @@ backend/                  Flask application (application factory)
   config.py  run.py  wsgi.py
 testing/
   vuln_test_app/          controlled intentionally-vulnerable local target
-  test_*.py               pytest suite (272 tests, incl. SQL Server integration)
+  test_*.py               pytest suite (290 tests, incl. SQL Server integration)
   trust_helpers.py        shared Trust Boundary test fixtures
 .github/workflows/ci.yml  continuous integration (runs the test suite)
 scripts/start-local.ps1   starts/stops the complete local environment
@@ -239,7 +240,7 @@ clear message (no fake authentication is used).
 ## Running the tests
 
 ```powershell
-python -m pytest testing -q          # 272 tests; SQL Server tests skip if unavailable
+python -m pytest testing -q          # 290 tests; SQL Server tests skip if unavailable
 ```
 
 The suite uses an in-memory SQLite database, a local controlled target and a

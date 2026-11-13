@@ -35,6 +35,7 @@ audit logs, health) are unchanged.
 | PATCH | `/api/v1/projects/{project_id}/members/{membership_id}` | `project.members.manage` |
 | DELETE | `/api/v1/projects/{project_id}/members/{membership_id}` | `project.members.manage` |
 | GET | `/api/v1/projects/{project_id}/permissions` | `project.read` |
+| POST | `/api/v1/invitations/preview` | authenticated invited user |
 | POST | `/api/v1/invitations/accept` | authenticated invited user |
 
 **Create organisation**
@@ -46,18 +47,51 @@ POST /api/v1/organisations
 201 {"Organisation": {...}, "Membership": {...}}
 ```
 
-**Invite project member**
+**Invite member (organisation or project)**
 
 ```http
 POST /api/v1/projects/1/members
 {"email": "analyst@example.com", "role": "ANALYST"}
 
-201 {"Membership": {...}, "InviteToken": "<one-time token>",
-     "InviteExpiresAt": "2026-11-11T09:00:00"}
+201 {"Membership": {...},
+     "InviteToken": "<one-time token>",
+     "InviteURL": "http://127.0.0.1:5000/#/invitations/accept?token=<token>",
+     "InviteEmail": "analyst@example.com",
+     "InviteExpiresAt": "2026-11-16T09:00:00"}
 ```
 
-The invitee must already have a VulnScan account. The raw token is returned once and
-stored only as a SHA-256 hash.
+`InviteURL` is an absolute, directly clickable link the inviter shares with the
+invitee. The token is carried in the URL **fragment**, so it never reaches the
+server in a request line or an access log and is never sent as a `Referer`.
+
+Binding and lifetime rules:
+
+* the invitee must already have a VulnScan account (no self-registration);
+* the invitation is bound to the invitee's **email address** (`InviteEmail`); only
+  a session authenticated as that account can preview or accept it;
+* the raw token is returned once and stored only as a SHA-256 hash;
+* single use — accepting moves the membership to `Active` and the link then fails
+  with `INVITATION_ALREADY_USED`;
+* expiry defaults to 72 hours (`TRUST_INVITATION_TTL_HOURS`);
+* re-inviting an `Invited`/`Revoked` member rotates the token and invalidates the
+  previous link; re-inviting an `Active` member is rejected with `ALREADY_MEMBER`
+  (no silent demotion);
+* `TRUST_INVITE_BASE_URL` overrides the base URL of `InviteURL` when the external
+  deployment URL differs from the request host.
+
+**Preview invitation** (authenticated as the invited account)
+
+```http
+POST /api/v1/invitations/preview
+{"token": "<one-time token>"}
+
+200 {"Invitation": {
+       "Kind": "Project",                 // or "Organisation"
+       "Role": "ANALYST",
+       "Email": "analyst@example.com",
+       "ExpiresAt": "2026-11-16T09:00:00",
+       "Organisation": {...}, "Project": {...}, "Membership": {...}}}
+```
 
 **Accept invitation**
 
@@ -65,8 +99,24 @@ stored only as a SHA-256 hash.
 POST /api/v1/invitations/accept
 {"token": "<one-time token>"}
 
-200 {"Membership": {...}}
+200 {"Membership": {... "Status": "Active"},
+     "Invitation": {...}}
 ```
+
+**Invitation errors** (all enforced server-side)
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | token missing |
+| 401 | `token_missing` / `token_invalid` | not signed in |
+| 403 | `INVITATION_EMAIL_MISMATCH` | signed-in account does not own the invited email |
+| 404 | `NOT_FOUND` | unknown, revoked or superseded token |
+| 409 | `INVITATION_EXPIRED` | expired (or no longer pending) invitation |
+| 409 | `INVITATION_ALREADY_USED` | invitation was already accepted |
+| 409 | `ALREADY_MEMBER` | invitee is already an active member |
+
+Every email-mismatch attempt is recorded as a `Denied` audit event
+(`ORG_MEMBER_INVITE_DENIED` / `PROJECT_MEMBER_INVITE_DENIED`) without the token.
 
 **Permissions**
 
@@ -393,6 +443,7 @@ Legacy (non-trust) scans keep the historical owner/administrator rule.
 | 400 | `USER_NOT_FOUND` | Invitee has no VulnScan account |
 | 401 | `token_*` | Missing/invalid/expired/revoked JWT |
 | 403 | `PERMISSION_DENIED` | Role lacks the permission |
+| 403 | `INVITATION_EMAIL_MISMATCH` | Signed-in account does not own the invited email |
 | 403 | `ASSET_NOT_VERIFIED` | Asset not verified |
 | 403 | `ASSET_VERIFICATION_EXPIRED` | Verification lapsed |
 | 403 | `ASSET_REVOKED` | Asset revoked |
@@ -407,7 +458,9 @@ Legacy (non-trust) scans keep the historical owner/administrator rule.
 | 409 | `IDEMPOTENCY_CONFLICT` | Same key, different payload/project |
 | 409 | `DUPLICATE_ASSET` | Hostname already registered |
 | 409 | `SLUG_CONFLICT` | Organisation/project slug exists |
-| 409 | `INVITATION_EXPIRED` | Invitation expired or already used |
+| 409 | `INVITATION_EXPIRED` | Invitation expired or revoked |
+| 409 | `INVITATION_ALREADY_USED` | Invitation was already accepted |
+| 409 | `ALREADY_MEMBER` | Invitee is already an active member |
 | 409 | `VERIFICATION_MISMATCH` | Published challenge did not match |
 | 409 | `VERIFICATION_TOKEN_EXPIRED` | Challenge expired |
 | 409 | `PAYMENT_AMOUNT_MISMATCH` | Callback amount/currency/product mismatch |

@@ -2,8 +2,10 @@
 import hashlib
 import re
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from flask import current_app
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
@@ -16,6 +18,9 @@ from app.models import (
 )
 from app.services import trust_audit_service as audit
 from app.trust.constants import (
+    ERR_ALREADY_MEMBER,
+    ERR_INVITATION_ALREADY_USED,
+    ERR_INVITATION_EMAIL_MISMATCH,
     ERR_INVITATION_EXPIRED,
     ERR_NOT_FOUND,
     ERR_SLUG_CONFLICT,
@@ -23,15 +28,18 @@ from app.trust.constants import (
     EVENT_ORG_CREATED,
     EVENT_ORG_MEMBER_ACCEPTED,
     EVENT_ORG_MEMBER_INVITED,
+    EVENT_ORG_MEMBER_INVITE_DENIED,
     EVENT_ORG_MEMBER_REVOKED,
     EVENT_PROJECT_CREATED,
     EVENT_PROJECT_MEMBER_ACCEPTED,
     EVENT_PROJECT_MEMBER_INVITED,
+    EVENT_PROJECT_MEMBER_INVITE_DENIED,
     EVENT_PROJECT_MEMBER_REVOKED,
     MEMBERSHIP_ACTIVE,
     MEMBERSHIP_INVITED,
     MEMBERSHIP_REVOKED,
     ORG_ROLE_OWNER,
+    OUTCOME_DENIED,
     PROJECT_ROLE_VIEWER,
     PROJECT_ROLES,
 )
@@ -39,9 +47,53 @@ from app.trust.permissions import TrustError, resolve_project
 
 INVITE_TTL_HOURS = 72
 
+INVITATION_KIND_ORGANISATION = "Organisation"
+INVITATION_KIND_PROJECT = "Project"
+
 
 def _hash_token(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _invite_ttl_hours():
+    try:
+        configured = int(current_app.config.get("TRUST_INVITATION_TTL_HOURS",
+                                                INVITE_TTL_HOURS))
+    except (TypeError, ValueError):
+        configured = INVITE_TTL_HOURS
+    return max(1, configured)
+
+
+@dataclass
+class InvitationContext:
+    """A resolved, validated invitation (organisation or project membership)."""
+
+    membership: object
+    kind: str
+    organisation: TrustOrganisation
+    project: object
+    email: str
+
+    @property
+    def role(self):
+        return self.membership.Role
+
+    @property
+    def expires_at(self):
+        return self.membership.InviteExpiresAt
+
+    def to_dict(self):
+        return {
+            "Kind": self.kind,
+            "Role": self.role,
+            "Email": self.email,
+            "ExpiresAt": (
+                self.expires_at.isoformat() if self.expires_at else None
+            ),
+            "Organisation": self.organisation.to_dict(),
+            "Project": self.project.to_dict() if self.project is not None else None,
+            "Membership": self.membership.to_dict(),
+        }
 
 
 def slugify(value, max_length=60):
@@ -220,8 +272,14 @@ def invite_organisation_member(access_or_org_id, email, role, inviter,
     existing = TrustOrganisationMembership.query.filter_by(
         OrganisationID=int(organisation_id), UserID=invitee.UserID
     ).first()
+    if existing is not None and existing.Status == MEMBERSHIP_ACTIVE:
+        raise TrustError(
+            f"{invitee.Email} is already a member of this organisation.",
+            ERR_ALREADY_MEMBER,
+            409,
+        )
     token = secrets.token_urlsafe(32)
-    expires = datetime.utcnow() + timedelta(hours=INVITE_TTL_HOURS)
+    expires = datetime.utcnow() + timedelta(hours=_invite_ttl_hours())
     if existing is None:
         existing = TrustOrganisationMembership(
             OrganisationID=int(organisation_id),
@@ -237,7 +295,9 @@ def invite_organisation_member(access_or_org_id, email, role, inviter,
         existing.AcceptedAt = None
         existing.InvitedByUserID = inviter.UserID
     existing.InviteTokenHash = _hash_token(token)
+    existing.InviteEmail = invitee.Email
     existing.InviteExpiresAt = expires
+    db.session.flush()
     audit.record(
         EVENT_ORG_MEMBER_INVITED,
         organisation_id=int(organisation_id),
@@ -268,8 +328,14 @@ def invite_project_member(project_id, email, role, inviter, ip_address=None):
     existing = TrustProjectMembership.query.filter_by(
         ProjectID=project.ProjectID, UserID=invitee.UserID
     ).first()
+    if existing is not None and existing.Status == MEMBERSHIP_ACTIVE:
+        raise TrustError(
+            f"{invitee.Email} is already a member of this project.",
+            ERR_ALREADY_MEMBER,
+            409,
+        )
     token = secrets.token_urlsafe(32)
-    expires = datetime.utcnow() + timedelta(hours=INVITE_TTL_HOURS)
+    expires = datetime.utcnow() + timedelta(hours=_invite_ttl_hours())
     if existing is None:
         existing = TrustProjectMembership(
             OrganisationID=project.OrganisationID,
@@ -286,7 +352,9 @@ def invite_project_member(project_id, email, role, inviter, ip_address=None):
         existing.AcceptedAt = None
         existing.InvitedByUserID = inviter.UserID
     existing.InviteTokenHash = _hash_token(token)
+    existing.InviteEmail = invitee.Email
     existing.InviteExpiresAt = expires
+    db.session.flush()
     audit.record(
         EVENT_PROJECT_MEMBER_INVITED,
         organisation_id=project.OrganisationID,
@@ -302,71 +370,200 @@ def invite_project_member(project_id, email, role, inviter, ip_address=None):
     return existing, token
 
 
-def accept_invitation(user, token, ip_address=None):
-    if not token:
-        raise TrustError("An invitation token is required.", ERR_VALIDATION, 400)
+def _find_invitation(token):
+    """Return the pending/used membership row addressed by a raw token."""
     token_hash = _hash_token(token)
     membership = TrustOrganisationMembership.query.filter_by(
         InviteTokenHash=token_hash
     ).first()
     if membership is not None:
-        _validate_invite(membership, user)
-        membership.Status = MEMBERSHIP_ACTIVE
-        membership.AcceptedAt = datetime.utcnow()
-        membership.InviteTokenHash = None
-        membership.InviteExpiresAt = None
-        membership.Version += 1
-        audit.record(
-            EVENT_ORG_MEMBER_ACCEPTED,
-            organisation_id=membership.OrganisationID,
-            actor=user,
-            entity_type="TrustOrganisationMembership",
-            entity_id=membership.OrganisationMembershipID,
-            metadata={"role": membership.Role},
-            ip_address=ip_address,
-            commit=False,
-        )
-        db.session.commit()
-        return membership
-
-    project_membership = TrustProjectMembership.query.filter_by(
+        return membership, INVITATION_KIND_ORGANISATION
+    membership = TrustProjectMembership.query.filter_by(
         InviteTokenHash=token_hash
     ).first()
-    if project_membership is None:
-        raise TrustError("Invitation not found or already used.", ERR_NOT_FOUND, 404)
-    _validate_invite(project_membership, user)
-    project_membership.Status = MEMBERSHIP_ACTIVE
-    project_membership.AcceptedAt = datetime.utcnow()
-    project_membership.InviteTokenHash = None
-    project_membership.InviteExpiresAt = None
-    project_membership.Version += 1
-    audit.record(
-        EVENT_PROJECT_MEMBER_ACCEPTED,
-        organisation_id=project_membership.OrganisationID,
-        project_id=project_membership.ProjectID,
-        actor=user,
-        entity_type="TrustProjectMembership",
-        entity_id=project_membership.ProjectMembershipID,
-        metadata={"role": project_membership.Role},
-        ip_address=ip_address,
-        commit=False,
+    if membership is not None:
+        return membership, INVITATION_KIND_PROJECT
+    return None, None
+
+
+def _invited_email(membership):
+    """Email the invitation is bound to (falls back for pre-migration rows)."""
+    if membership.InviteEmail:
+        return membership.InviteEmail
+    user = db.session.get(User, membership.UserID)
+    return user.Email if user else None
+
+
+def _deny_event(kind):
+    return (
+        EVENT_PROJECT_MEMBER_INVITE_DENIED
+        if kind == INVITATION_KIND_PROJECT
+        else EVENT_ORG_MEMBER_INVITE_DENIED
     )
-    db.session.commit()
-    return project_membership
 
 
-def _validate_invite(membership, user):
-    if membership.UserID != user.UserID:
-        raise TrustError("Invitation not found.", ERR_NOT_FOUND, 404)
+def _record_denial(membership, kind, actor, reason_code, ip_address, message):
+    audit.record(
+        _deny_event(kind),
+        outcome=OUTCOME_DENIED,
+        organisation_id=membership.OrganisationID,
+        project_id=getattr(membership, "ProjectID", None),
+        actor=actor,
+        reason_code=reason_code,
+        entity_type=type(membership).__name__,
+        entity_id=(
+            membership.ProjectMembershipID
+            if kind == INVITATION_KIND_PROJECT
+            else membership.OrganisationMembershipID
+        ),
+        metadata={"reason": message},
+        ip_address=ip_address,
+        commit=True,
+    )
+
+
+def validate_invitation(token, user, ip_address=None):
+    """
+    Resolve and authorise an invitation for the authenticated `user`.
+
+    Raises TrustError for an unknown, expired, revoked, already-accepted or
+    email-mismatched invitation.  The email check is the authoritative control:
+    holding the link is not enough, the signed-in account must own the address
+    the invitation was issued to.
+    """
+    if not token or not str(token).strip():
+        raise TrustError(
+            "An invitation token is required.", ERR_VALIDATION, 400
+        )
+    membership, kind = _find_invitation(str(token).strip())
+    if membership is None:
+        raise TrustError(
+            "This invitation link is not valid. Ask the inviter for a new one.",
+            ERR_NOT_FOUND,
+            404,
+        )
+
+    if membership.Status == MEMBERSHIP_ACTIVE:
+        raise TrustError(
+            "This invitation has already been used.",
+            ERR_INVITATION_ALREADY_USED,
+            409,
+        )
     if membership.Status != MEMBERSHIP_INVITED:
         raise TrustError(
-            "This invitation is no longer valid.", ERR_INVITATION_EXPIRED, 409
+            "This invitation is no longer valid.",
+            ERR_INVITATION_EXPIRED,
+            409,
         )
     if (
         membership.InviteExpiresAt is not None
         and membership.InviteExpiresAt <= datetime.utcnow()
     ):
-        raise TrustError("This invitation has expired.", ERR_INVITATION_EXPIRED, 409)
+        raise TrustError(
+            "This invitation has expired. Ask the inviter to send a new one.",
+            ERR_INVITATION_EXPIRED,
+            409,
+        )
+
+    invited_email = _invited_email(membership)
+    account_email = (user.Email or "").strip().lower()
+    if (
+        membership.UserID != user.UserID
+        or (invited_email or "").strip().lower() != account_email
+    ):
+        message = (
+            "This invitation was issued to a different email address. "
+            "Sign in with the invited account to accept it."
+        )
+        _record_denial(
+            membership, kind, user, ERR_INVITATION_EMAIL_MISMATCH,
+            ip_address, message,
+        )
+        raise TrustError(message, ERR_INVITATION_EMAIL_MISMATCH, 403)
+
+    organisation = db.session.get(
+        TrustOrganisation, membership.OrganisationID
+    )
+    project = (
+        db.session.get(TrustProject, membership.ProjectID)
+        if kind == INVITATION_KIND_PROJECT
+        else None
+    )
+    return InvitationContext(
+        membership=membership,
+        kind=kind,
+        organisation=organisation,
+        project=project,
+        email=invited_email,
+    )
+
+
+def preview_invitation(user, token, ip_address=None):
+    """Return invitation details without accepting (read-only)."""
+    return validate_invitation(token, user, ip_address=ip_address)
+
+
+def accept_invitation(user, token, ip_address=None):
+    """Accept a validated invitation and activate the membership."""
+    context = validate_invitation(token, user, ip_address=ip_address)
+    pending = context.membership
+    if context.kind == INVITATION_KIND_PROJECT:
+        model, pk_attr = TrustProjectMembership, "ProjectMembershipID"
+    else:
+        model, pk_attr = TrustOrganisationMembership, "OrganisationMembershipID"
+    membership_id = getattr(pending, pk_attr)
+
+    # Conditional UPDATE: two concurrent accepts of the same link cannot both
+    # succeed, so the invitation is genuinely single-use.
+    accepted = (
+        db.session.query(model)
+        .filter(
+            getattr(model, pk_attr) == membership_id,
+            model.Status == MEMBERSHIP_INVITED,
+            model.InviteTokenHash == pending.InviteTokenHash,
+        )
+        .update(
+            {
+                model.Status: MEMBERSHIP_ACTIVE,
+                model.AcceptedAt: datetime.utcnow(),
+                model.Version: model.Version + 1,
+            },
+            synchronize_session=False,
+        )
+    )
+    if not accepted:
+        db.session.rollback()
+        raise TrustError(
+            "This invitation has already been used.",
+            ERR_INVITATION_ALREADY_USED,
+            409,
+        )
+    db.session.expire_all()
+    membership = db.session.get(model, membership_id)
+
+    audit.record(
+        (
+            EVENT_PROJECT_MEMBER_ACCEPTED
+            if context.kind == INVITATION_KIND_PROJECT
+            else EVENT_ORG_MEMBER_ACCEPTED
+        ),
+        organisation_id=membership.OrganisationID,
+        project_id=getattr(membership, "ProjectID", None),
+        actor=user,
+        entity_type=type(membership).__name__,
+        entity_id=membership_id,
+        metadata={"role": membership.Role},
+        ip_address=ip_address,
+        commit=False,
+    )
+    db.session.commit()
+    return InvitationContext(
+        membership=membership,
+        kind=context.kind,
+        organisation=context.organisation,
+        project=context.project,
+        email=context.email,
+    )
 
 
 def list_project_members(project_id):
@@ -385,6 +582,28 @@ def list_organisation_members(organisation_id):
         .order_by(TrustOrganisationMembership.OrganisationMembershipID.asc())
         .all()
     )
+
+
+def member_dicts(memberships):
+    """Serialise memberships with the account email/username (one query)."""
+    rows = list(memberships)
+    if not rows:
+        return []
+    users = {
+        user.UserID: user
+        for user in User.query.filter(
+            User.UserID.in_({row.UserID for row in rows})
+        ).all()
+    }
+    output = []
+    for row in rows:
+        data = row.to_dict()
+        user = users.get(row.UserID)
+        data["Email"] = user.Email if user else None
+        data["Username"] = user.Username if user else None
+        data["InvitePending"] = row.Status == MEMBERSHIP_INVITED
+        output.append(data)
+    return output
 
 
 def change_project_member_role(membership, role, actor, ip_address=None):
@@ -412,6 +631,7 @@ def revoke_project_member(membership, actor, ip_address=None):
     if membership.Status == MEMBERSHIP_REVOKED:
         return membership
     membership.Status = MEMBERSHIP_REVOKED
+    membership.InviteTokenHash = None
     membership.Version += 1
     audit.record(
         EVENT_PROJECT_MEMBER_REVOKED,
@@ -446,6 +666,7 @@ def revoke_organisation_member(organisation_id, membership, actor, ip_address=No
                 400,
             )
     membership.Status = MEMBERSHIP_REVOKED
+    membership.InviteTokenHash = None
     membership.Version += 1
     audit.record(
         EVENT_ORG_MEMBER_REVOKED,

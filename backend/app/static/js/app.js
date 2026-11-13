@@ -11,6 +11,12 @@
     return out;
   }
 
+  // Only same-app hash routes may be used as a post-login destination.
+  function safeNext(next) {
+    if (typeof next !== 'string') return '';
+    return /^#\/[^\s]*$/.test(next) ? next : '';
+  }
+
   function isAuthed() { return !!API.token; }
 
   function navItems(role) {
@@ -103,16 +109,21 @@
     const params = parseQuery(query);
     const user = API.user || {};
 
-    // Not authenticated -> show the login page.
+    // Not authenticated -> show the login page.  The destination the user was
+    // trying to reach (e.g. an invitation link) is carried through the login so
+    // it is not lost.
     if (!isAuthed()) {
-      if (segments[0] !== 'login') { location.hash = '#/login'; return; }
+      if (segments[0] !== 'login') {
+        location.hash = '#/login?next=' + encodeURIComponent(raw);
+        return;
+      }
       app.innerHTML = VIEWS.loginHtml(params);
-      VIEWS.bindLogin(app);
+      VIEWS.bindLogin(app, params);
       return;
     }
-    // Authenticated user navigating to login -> dashboard.
+    // Authenticated user navigating to login -> requested page (or dashboard).
     if (segments[0] === 'login' || segments.length === 0) {
-      location.hash = '#/dashboard';
+      location.hash = safeNext(params.next) || '#/dashboard';
       return;
     }
     const role = user.Role;

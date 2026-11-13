@@ -1,4 +1,5 @@
 """Authentication endpoints: login, Google sign-in, logout."""
+import base64
 import logging
 
 from flask import Blueprint, jsonify, request
@@ -43,14 +44,43 @@ def login():
 
 @auth_bp.get("/google/url")
 def google_authorize_url():
-    """Return the Google authorization URL for the 'Sign in with Google' button."""
+    """Return the Google authorization URL for the 'Sign in with Google' button.
+
+    An optional ``next`` SPA hash path (for example an invitation link the user
+    opened) is carried through the OAuth round trip in ``state`` so the user
+    returns to it after signing in.
+    """
     if not google_service.is_configured():
         return jsonify({
             "configured": False,
             "message": "Google Sign-In is not configured.",
         }), 200
-    url = google_service.build_authorize_url()
+    url = google_service.build_authorize_url(
+        state=_encode_next_state(request.args.get("next"))
+    )
     return jsonify({"configured": True, "authorize_url": url}), 200
+
+
+def _encode_next_state(next_hash):
+    """Encode a same-origin SPA hash path into an OAuth state value."""
+    value = (next_hash or "").strip()
+    if not value.startswith("#/") or len(value) > 400:
+        return None
+    return base64.urlsafe_b64encode(value.encode("utf-8")).decode().rstrip("=")
+
+
+def _decode_next_state(state):
+    """Decode a state produced by `_encode_next_state`, or None."""
+    if not state:
+        return None
+    try:
+        padded = state + "=" * (-len(state) % 4)
+        value = base64.urlsafe_b64decode(padded.encode()).decode("utf-8")
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return None
+    if not value.startswith("#/") or len(value) > 400:
+        return None
+    return value
 
 
 @auth_bp.get("/google/callback")
@@ -63,6 +93,7 @@ def google_callback():
     code = request.args.get("code")
     error = request.args.get("error")
     state = request.args.get("state")
+    next_hash = _decode_next_state(state) or "#/dashboard"
     if error:
         html = _redirect_script("/#/login?error=" + error)
         return _html_response(html)
@@ -72,6 +103,7 @@ def google_callback():
 <title>Signing in...</title></head><body>
 <script>
 const code = {json_safe(code)};
+const nextHash = {json_safe(next_hash)};
 fetch('/api/auth/google', {{
   method: 'POST',
   headers: {{'Content-Type': 'application/json'}},
@@ -82,7 +114,7 @@ fetch('/api/auth/google', {{
   if (ok && body.access_token) {{
     localStorage.setItem('vulnscan_token', body.access_token);
     localStorage.setItem('vulnscan_user', JSON.stringify(body.user));
-    window.location.href = '/#/dashboard';
+    window.location.href = '/' + nextHash;
   }} else {{
     window.location.href = '/#/login?error=' + encodeURIComponent(body.message || 'google_failed');
   }}

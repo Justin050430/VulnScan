@@ -1,5 +1,7 @@
 """Organisation, project and membership endpoints (Trust Boundary)."""
-from flask import Blueprint, jsonify, request
+from urllib.parse import quote
+
+from flask import Blueprint, current_app, jsonify, request
 
 from app.services import trust_service
 from app.trust.constants import PERM_PROJECT_READ
@@ -17,6 +19,30 @@ organisations_bp = Blueprint(
 )
 projects_bp = Blueprint("trust_projects", __name__, url_prefix="/projects")
 invitations_bp = Blueprint("trust_invitations", __name__, url_prefix="/invitations")
+
+
+def _invite_payload(membership, token):
+    """
+    Invitation response shared by the organisation and project endpoints.
+
+    `InviteURL` is the absolute, directly clickable link an inviter can share.
+    The token lives in the URL fragment, so it is never sent to the server in a
+    request line, never written to access logs and never leaked as a Referer.
+    """
+    base = (current_app.config.get("TRUST_INVITE_BASE_URL") or "").strip()
+    base = base or request.url_root
+    return {
+        "Membership": membership.to_dict(),
+        "InviteToken": token,
+        "InviteURL": (
+            f"{base.rstrip('/')}/#/invitations/accept?token={quote(token, safe='')}"
+        ),
+        "InviteEmail": membership.InviteEmail,
+        "InviteExpiresAt": (
+            membership.InviteExpiresAt.isoformat()
+            if membership.InviteExpiresAt else None
+        ),
+    }
 
 
 @organisations_bp.get("")
@@ -64,10 +90,8 @@ def list_organisation_members(organisation_id):
     user = get_current_user()
     resolve_project_for_org(user, organisation_id)
     members = trust_service.list_organisation_members(organisation_id)
-    return jsonify({
-        "Members": [m.to_dict() for m in members],
-        "Total": len(members),
-    }), 200
+    rows = trust_service.member_dicts(members)
+    return jsonify({"Members": rows, "Total": len(rows)}), 200
 
 
 @organisations_bp.post("/<int:organisation_id>/members")
@@ -83,14 +107,7 @@ def invite_organisation_member(organisation_id):
         user,
         ip_address=client_ip(),
     )
-    return jsonify({
-        "Membership": membership.to_dict(),
-        "InviteToken": token,
-        "InviteExpiresAt": (
-            membership.InviteExpiresAt.isoformat()
-            if membership.InviteExpiresAt else None
-        ),
-    }), 201
+    return jsonify(_invite_payload(membership, token)), 201
 
 
 @organisations_bp.delete("/<int:organisation_id>/members/<int:membership_id>")
@@ -162,10 +179,8 @@ def get_project(project_id, _access=None):
 @require_permission(PERM_PROJECT_READ)
 def list_project_members(project_id, _access=None):
     members = trust_service.list_project_members(project_id)
-    return jsonify({
-        "Members": [m.to_dict() for m in members],
-        "Total": len(members),
-    }), 200
+    rows = trust_service.member_dicts(members)
+    return jsonify({"Members": rows, "Total": len(rows)}), 200
 
 
 @projects_bp.post("/<int:project_id>/members")
@@ -180,14 +195,7 @@ def invite_project_member(project_id, _access=None):
         user,
         ip_address=client_ip(),
     )
-    return jsonify({
-        "Membership": membership.to_dict(),
-        "InviteToken": token,
-        "InviteExpiresAt": (
-            membership.InviteExpiresAt.isoformat()
-            if membership.InviteExpiresAt else None
-        ),
-    }), 201
+    return jsonify(_invite_payload(membership, token)), 201
 
 
 @projects_bp.patch("/<int:project_id>/members/<int:membership_id>")
@@ -235,11 +243,31 @@ def project_permissions(project_id, _access=None):
     }), 200
 
 
+@invitations_bp.post("/preview")
+@any_authenticated
+def preview_invitation():
+    """
+    Details of a pending invitation for the signed-in account.
+
+    Authentication comes first: the endpoint proves that the caller owns the
+    invited email address before disclosing what the invitation grants.
+    """
+    data = request.get_json(silent=True) or {}
+    context = trust_service.preview_invitation(
+        get_current_user(), data.get("token"), ip_address=client_ip()
+    )
+    return jsonify({"Invitation": context.to_dict()}), 200
+
+
 @invitations_bp.post("/accept")
 @any_authenticated
 def accept_invitation():
     data = request.get_json(silent=True) or {}
-    membership = trust_service.accept_invitation(
+    context = trust_service.accept_invitation(
         get_current_user(), data.get("token"), ip_address=client_ip()
     )
-    return jsonify({"Membership": membership.to_dict()}), 200
+    payload = context.to_dict()
+    return jsonify({
+        "Membership": payload["Membership"],
+        "Invitation": payload,
+    }), 200

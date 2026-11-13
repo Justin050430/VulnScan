@@ -740,3 +740,48 @@ as the GET findings, and no finding on `/feedback_safe`.
 destructive forms skipped, feature flag), `test_scanner_robustness.py` (form parser
 safety and cross-page deduplication), `test_retest.py` (POST finding re-verified),
 `test_scan_observability.py` (coverage note). Full suite: **272 passed**.
+
+---
+
+## Enhancement round 8 - shareable invitation links (2026-11-13)
+
+The invitation flow was unintuitive: the API returned a bare token that the inviter
+had to paste into the invitee's already-authenticated session URL. An invitee who was
+signed out lost the token entirely, because the SPA routed every unauthenticated
+request to `#/login`.
+
+**What changed**
+- `POST .../members` now returns `InviteURL` - an absolute, directly clickable
+  `…/#/invitations/accept?token=…` link - alongside `InviteToken`, `InviteEmail` and
+  `InviteExpiresAt`. The token stays in the URL fragment, so it is never sent to the
+  server in a request line, never logged and never leaked as a `Referer`.
+- The SPA preserves the destination through login (`#/login?next=…`), including the
+  Google OAuth round trip (a same-origin hash path travels in the OAuth `state`) and
+  expired-session redirects, so the invitation is not lost.
+- New `POST /api/v1/invitations/preview` (authenticated) returns what the link grants
+  (organisation, project, role, invited email, expiry) without accepting it; the accept
+  page shows these details and an explicit **Accept invitation** button.
+- Acceptance validates server-side: authentication, `InviteEmail` ownership (compared
+  against the signed-in account, not the client), pending status and expiry.
+- Explicit outcomes: `INVITATION_EMAIL_MISMATCH` (403), `INVITATION_EXPIRED` and
+  `INVITATION_ALREADY_USED` (409), `NOT_FOUND` (404), `ALREADY_MEMBER` (409). A wrong
+  account is told the address does not match without being shown the invited address.
+- Invitations are bound to `InviteEmail` (new additive column on both membership
+  tables, migration `d9f2a4c8b1e7`, plus token-hash indexes). Expiry is configurable
+  (`TRUST_INVITATION_TTL_HOURS`, default 72 h) and the link base can be overridden
+  (`TRUST_INVITE_BASE_URL`).
+- Re-inviting a pending/revoked member rotates the token (old link dies); revoking
+  clears it. Re-inviting an **active** member now returns `ALREADY_MEMBER` instead of
+  silently demoting them to `Invited` - an existing membership rule is preserved.
+- Email-mismatch attempts are audited as `Denied` (`ORG_MEMBER_INVITE_DENIED` /
+  `PROJECT_MEMBER_INVITE_DENIED`) with the reason code and without the token.
+- The organisation member list shows each member's email and, for pending invitations,
+  the expiry, so an owner can see what is outstanding.
+
+**Tests**
+New `test_trust_invitations.py` (18 tests): clickable URL and email binding, token
+rotation, authentication required for preview/accept, preview content, mismatch denial
+(including the audit event and no email disclosure), single use, expiry, unknown and
+missing tokens, project invitations, re-invite after revocation, member listing,
+configurable TTL/base URL and the Google `next` state round trip.
+Full suite: **290 passed**.

@@ -56,6 +56,10 @@ The frozen core tables (`User`, `Scan`, `ScanProfile`, `ProfileModule`,
 `Vulnerability`, `DiscoveredPage`, `Finding`, `SecurityAuditLog`) are unchanged;
 `test_trust_migration.py` asserts their exact column sets.
 
+Invitation columns (additive, migration `d9f2a4c8b1e7`): both membership tables carry
+`InviteTokenHash` (SHA-256 of the one-time token, indexed), `InviteEmail` (the address
+the invitation is bound to) and `InviteExpiresAt`. See §3a.
+
 ---
 
 ## 3. Roles and permissions
@@ -94,6 +98,48 @@ Key rules:
 
 Permission resolution lives in `backend/app/trust/permissions.py`; the effective role
 set is returned per project by `GET /api/v1/projects/{id}`.
+
+---
+
+## 3a. Invitation links and acceptance
+
+An invitation is a **direct, clickable URL** that an owner shares with the invitee.
+There is no copy-and-paste of a bare token into an authenticated session: the link
+carries the token in the URL fragment (`/#/invitations/accept?token=…`), so it never
+reaches the server in a request line or access log and is never sent as a `Referer`.
+
+Flow:
+
+1. The owner enters the invitee's email (the account must already exist) and a role.
+2. The API returns `InviteURL` (absolute), plus `InviteEmail` and `InviteExpiresAt`.
+3. The inviter shares the URL.
+4. The invitee opens it. The SPA always redirects an unauthenticated visitor to the
+   login screen with the invitation preserved as `next` — including through the Google
+   OAuth round trip — so nothing is lost.
+5. After sign-in the invitation page calls `POST /api/v1/invitations/preview`, which
+   validates server-side before showing what the link grants.
+6. Accepting calls `POST /api/v1/invitations/accept`, which re-validates and activates
+   the membership with the assigned role.
+7. Rejection reasons are explicit: `INVITATION_EMAIL_MISMATCH` (403),
+   `INVITATION_EXPIRED` / `INVITATION_ALREADY_USED` (409), `NOT_FOUND` (404).
+
+Security properties:
+
+* tokens come from `secrets.token_urlsafe(32)` (256-bit) and are stored only as a
+  SHA-256 hash (`InviteTokenHash`, indexed);
+* each invitation row records the invited address (`InviteEmail`); acceptance requires
+  the authenticated session to own that address *and* map to the invited user row —
+  holding the link is not sufficient;
+* single use: accepting sets `Status = Active`, after which the same link returns
+  `INVITATION_ALREADY_USED`;
+* expiry defaults to 72 h (`TRUST_INVITATION_TTL_HOURS`);
+* re-inviting rotates the token (the previous link dies), revoking clears it;
+* re-inviting an **active** member returns `ALREADY_MEMBER` instead of silently
+  demoting them, so existing membership/authorisation rules are preserved;
+* a mismatched attempt is audited as a `Denied` event without the token.
+
+`TRUST_INVITE_BASE_URL` overrides the link base when the public URL differs from the
+request host (for example behind Azure's proxy).
 
 ---
 
@@ -242,6 +288,10 @@ asset registration/verification/failure/revocation, attestation create/revoke,
 payment checkout/verified/failed/duplicate, credit issued/reserved/consumed/released/
 expired, scan denied/started/cancelled, and credential created/approved/rejected/
 revoked/tested/used/released/login-failed/secret-purged.
+
+An invitation attempted from an account that does not own the invited email address is
+recorded as `ORG_MEMBER_INVITE_DENIED` / `PROJECT_MEMBER_INVITE_DENIED` with
+`Outcome = Denied` and `ReasonCode = INVITATION_EMAIL_MISMATCH`.
 
 Metadata is filtered: keys containing `token`, `secret`, `password`, `authorization`,
 `cookie`, `signature`, `card`, `cvv`, `pan` or `credential` are replaced with

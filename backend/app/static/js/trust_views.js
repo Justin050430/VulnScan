@@ -18,6 +18,27 @@
 
   function empty(text) { return U.empty(text); }
 
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+    ta.remove();
+    return Promise.resolve();
+  }
+
+  function signOutTo(nextHash) {
+    API.post('/api/auth/logout', {}).catch(() => {})
+      .then(() => {
+        API.clearAuth();
+        location.hash = nextHash || '#/login';
+      });
+  }
+
   /* ======================================================== ORGANISATIONS */
   async function organisations(el) {
     el.innerHTML = U.loading('Loading organisations…');
@@ -89,7 +110,9 @@
             <button class="btn btn-sm btn-secondary" id="invite-org">Invite</button></div>
           <div style="margin-top:10px">${members.length ? members.map(m => `
             <div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
-              <span>User #${m.UserID}</span>
+              <span>${U.esc(m.Email || m.Username || ('User #' + m.UserID))}
+                ${m.Status === 'Invited' && m.InviteExpiresAt
+                  ? `<div style="color:var(--muted);font-size:11.5px">invited ${U.fmtDT(m.InviteExpiresAt)}</div>` : ''}</span>
               <span><span class="chip-mini">${U.esc(m.Role)}</span> ${statusBadge(m.Status)}</span>
             </div>`).join('') : empty('No members.')}</div>
         </div>
@@ -122,35 +145,138 @@
          <input id="inv-email" type="email" placeholder="teammate@example.com"></div>
        <div class="field"><label>Role</label><select id="inv-role">
          ${roles.map(r => `<option value="${r}">${r}</option>`).join('')}</select></div>
-       <p class="hint">Viewers and analysts cannot start scans.</p>`,
+       <p class="hint">The invitation is bound to this email address and can only be accepted
+         by that account. Viewers and analysts cannot start scans.</p>`,
       `<button class="btn btn-secondary" onclick="U.closeModal()">Cancel</button>
        <button class="btn btn-primary" style="width:auto" id="inv-save">Create invitation</button>`);
     m.root.querySelector('#inv-save').addEventListener('click', async () => {
       try {
         const email = m.root.querySelector('#inv-email').value.trim();
         const role = m.root.querySelector('#inv-role').value;
+        if (!email) { err('An email address is required.'); return; }
         const data = await API.post(path, { email, role });
+        const inviteUrl = data.InviteURL ||
+          (location.origin + location.pathname + '#/invitations/accept?token=' + encodeURIComponent(data.InviteToken));
         U.modal('Invitation created',
-          `<p>Share this one-time link with the invitee:</p>
-           <div class="mono" style="word-break:break-all;background:var(--blue-bg);padding:10px;border-radius:8px">
-             #/invitations/accept?token=${U.esc(data.InviteToken)}</div>
-           <p class="hint">The token is shown once and stored only as a hash. Invitations expire in 72 hours.</p>`,
-          `<button class="btn btn-secondary" onclick="U.closeModal();location.reload()">Close</button>`);
+          `<p>Send this link to <b>${U.esc(data.InviteEmail || email)}</b>:</p>
+           <div class="mono" id="inv-url" style="word-break:break-all;background:var(--blue-bg);padding:10px;border-radius:8px">
+             ${U.esc(inviteUrl)}</div>
+           <p class="hint" style="margin-top:10px">Expires ${data.InviteExpiresAt ? U.fmtDT(data.InviteExpiresAt) : 'in 72 hours'}.
+             It is single-use: only the invited email address can accept it, and it stops working once accepted.</p>`,
+          `<button class="btn btn-secondary" onclick="U.closeModal();location.reload()">Close</button>
+           <button class="btn btn-primary" style="width:auto" id="inv-copy">Copy link</button>`);
+        const copyBtn = document.querySelector('#inv-copy');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', () => {
+            copyText(inviteUrl).then(() => U.toast('Invitation link copied.', 'ok'));
+          });
+        }
       } catch (e) { err(e.message); }
     });
   }
 
-  async function acceptInvitation(el, params) {
-    el.innerHTML = U.loading('Accepting invitation…');
-    if (!params || !params.token) { el.innerHTML = empty('Invitation token missing.'); return; }
-    try {
-      await API.post('/api/v1/invitations/accept', { token: params.token });
-      el.innerHTML = `<div class="card card-pad"><h3>Invitation accepted</h3>
-        <p>You now have access to the project.</p>
-        <a class="btn btn-primary" style="width:auto" href="#/organisations">Go to organisations</a></div>`;
-    } catch (e) {
-      el.innerHTML = `<div class="card card-pad">${empty(e.message)}</div>`;
+  function invitationErrorCard(error, token) {
+    const code = error.code || '';
+    const retry = token
+      ? `<button class="btn btn-secondary" style="width:auto" id="inv-retry">Check again</button>` : '';
+    let extra = '';
+    if (code === 'INVITATION_EMAIL_MISMATCH') {
+      const current = (API.user && API.user.Email) || 'another account';
+      extra = `<p style="color:var(--muted);font-size:13px">You are signed in as
+        <b>${U.esc(current)}</b>. Signing out lets the invited account sign in.</p>
+        <button class="btn btn-primary" style="width:auto" id="inv-switch">Sign out and switch account</button>`;
     }
+    return `<div class="card card-pad">
+      <h3>Invitation cannot be accepted</h3>
+      <p>${U.esc(error.message)}</p>
+      ${extra}
+      <div style="display:flex;gap:8px;margin-top:12px">
+        ${retry}
+        <a class="btn btn-secondary" style="width:auto" href="#/organisations">Go to organisations</a>
+      </div>
+    </div>`;
+  }
+
+  function bindInvitationErrorActions(el, token) {
+    const retry = el.querySelector('#inv-retry');
+    if (retry) retry.addEventListener('click', () => acceptInvitation(el, { token: token }));
+    const switcher = el.querySelector('#inv-switch');
+    if (switcher) {
+      switcher.addEventListener('click', () => {
+        signOutTo('#/login?next=' + encodeURIComponent('#/invitations/accept?token=' + token));
+      });
+    }
+  }
+
+  async function acceptInvitation(el, params) {
+    const token = params && params.token ? String(params.token) : '';
+    if (!token) {
+      el.innerHTML = `<div class="card card-pad">
+        <h3>Invitation link incomplete</h3>
+        <p>This link does not contain an invitation token. Ask the inviter to send it again.</p>
+        <a class="btn btn-secondary" style="width:auto" href="#/dashboard">Go to dashboard</a></div>`;
+      return;
+    }
+
+    el.innerHTML = U.loading('Checking your invitation…');
+    let invitation;
+    try {
+      const body = await API.post('/api/v1/invitations/preview', { token });
+      invitation = body.Invitation;
+    } catch (e) {
+      el.innerHTML = invitationErrorCard(e, token);
+      bindInvitationErrorActions(el, token);
+      return;
+    }
+
+    const org = invitation.Organisation || {};
+    const project = invitation.Project;
+    const target = project
+      ? `the project <b>${U.esc(project.Name)}</b> in <b>${U.esc(org.Name)}</b>`
+      : `the organisation <b>${U.esc(org.Name)}</b>`;
+    el.innerHTML = `<div class="card card-pad" style="max-width:620px">
+      <h2>You have been invited</h2>
+      <p>Your account <b>${U.esc(invitation.Email)}</b> has been invited to join ${target}.</p>
+      <table class="tbl" style="margin:14px 0">
+        <tbody>
+          <tr><th>Role</th><td><span class="chip-mini">${U.esc(invitation.Role)}</span></td></tr>
+          <tr><th>Invited email</th><td>${U.esc(invitation.Email)}</td></tr>
+          <tr><th>Expires</th><td>${invitation.ExpiresAt ? U.fmtDT(invitation.ExpiresAt) : '–'}</td></tr>
+        </tbody>
+      </table>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="width:auto" id="inv-accept">Accept invitation</button>
+        <a class="btn btn-secondary" style="width:auto" href="#/dashboard">Not now</a>
+      </div>
+    </div>`;
+
+    el.querySelector('#inv-accept').addEventListener('click', async () => {
+      const btn = el.querySelector('#inv-accept');
+      btn.disabled = true;
+      try {
+        const body = await API.post('/api/v1/invitations/accept', { token });
+        const accepted = body.Invitation || invitation;
+        const destination = accepted.Project
+          ? `#/projects/${accepted.Project.ProjectID}`
+          : `#/organisations/${accepted.Organisation.OrganisationID}`;
+        const destinationLabel = accepted.Project
+          ? `Open ${U.esc(accepted.Project.Name)}`
+          : `Open ${U.esc(accepted.Organisation.Name)}`;
+        el.innerHTML = `<div class="card card-pad" style="max-width:620px">
+          <h2>Invitation accepted</h2>
+          <p>You are now a member of ${accepted.Project
+            ? `<b>${U.esc(accepted.Project.Name)}</b>` : `<b>${U.esc(accepted.Organisation.Name)}</b>`}
+            with the role <span class="chip-mini">${U.esc(accepted.Role)}</span>.</p>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <a class="btn btn-primary" style="width:auto" href="${destination}">${destinationLabel}</a>
+            <a class="btn btn-secondary" style="width:auto" href="#/organisations">Go to organisations</a>
+          </div>
+        </div>`;
+      } catch (e) {
+        el.innerHTML = invitationErrorCard(e, token);
+        bindInvitationErrorActions(el, token);
+      }
+    });
   }
 
   /* ============================================================= PROJECT */

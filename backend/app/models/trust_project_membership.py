@@ -39,6 +39,7 @@ class TrustProjectMembership(db.Model):
     Role = db.Column(db.String(30), nullable=False, default=PROJECT_ROLE_VIEWER)
     Status = db.Column(db.String(20), nullable=False, default=MEMBERSHIP_INVITED)
     InviteTokenHash = db.Column(db.String(64), nullable=True)
+    InviteEmail = db.Column(db.String(100), nullable=True)
     InviteExpiresAt = db.Column(db.DateTime, nullable=True)
     InvitedByUserID = db.Column(
         db.Integer, db.ForeignKey("User.UserID", ondelete="NO ACTION"), nullable=True
@@ -59,6 +60,10 @@ class TrustProjectMembership(db.Model):
             "Role": self.Role,
             "Status": self.Status,
             "InvitedByUserID": self.InvitedByUserID,
+            "InviteEmail": self.InviteEmail,
+            "InviteExpiresAt": (
+                self.InviteExpiresAt.isoformat() if self.InviteExpiresAt else None
+            ),
             "AcceptedAt": self.AcceptedAt.isoformat() if self.AcceptedAt else None,
             "CreatedAt": self.CreatedAt.isoformat() if self.CreatedAt else None,
         }

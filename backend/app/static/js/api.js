@@ -59,10 +59,11 @@
         try { data = await resp.json(); } catch (e) { data = null; }
       }
       if (resp.status === 401) {
-        // expired / revoked / missing token
-        if (location.hash !== '#/login') {
-          API.clearAuth();
-          location.hash = '#/login';
+        // expired / revoked / missing token: remember where the user was.
+        const current = location.hash || '';
+        API.clearAuth();
+        if (current.indexOf('#/login') !== 0) {
+          location.hash = '#/login?next=' + encodeURIComponent(current);
         }
         throw new ApiError((data && data.message) || 'Authentication required.', 401, (data && data.code) || 'unauthorized');
       }

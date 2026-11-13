@@ -117,6 +117,13 @@ class Config:
     TRUST_VERIFICATION_TOKEN_MINUTES = int(
         os.getenv("TRUST_VERIFICATION_TOKEN_MINUTES", "30")
     )
+    # Hours an organisation/project invitation stays acceptable (single use).
+    TRUST_INVITATION_TTL_HOURS = int(
+        os.getenv("TRUST_INVITATION_TTL_HOURS", "72")
+    )
+    # Absolute base URL used to build shareable invitation links.  Blank means
+    # "derive it from the incoming request" (correct for local dev and Azure).
+    TRUST_INVITE_BASE_URL = os.getenv("TRUST_INVITE_BASE_URL", "").strip()
     # Attestation lifetime (days) and the maximum a caller may request.
     TRUST_ATTESTATION_DEFAULT_DAYS = int(
         os.getenv("TRUST_ATTESTATION_DEFAULT_DAYS", "30")

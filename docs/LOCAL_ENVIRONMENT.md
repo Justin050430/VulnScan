@@ -175,6 +175,7 @@ Sign in with the seeded developer account. Read the credentials from
 | --- | --- | --- | --- |
 | 1 | **Organisations** | *Create organisation* → "TAR UMT" | You become `ORG_OWNER` |
 | 2 | Organisation detail | *Create project* → "Student Portal" | You become `PROJECT_OWNER` |
+| 2a | Organisation → **Members** → *Invite* | Enter another seeded account's email (e.g. `admin@vulnscan.local`) | Dialog shows a clickable `http://127.0.0.1:5000/#/invitations/accept?token=…` link, the bound email and the expiry, plus **Copy link** |
 | 3 | Project → **Assets** | Register hostname `localhost`, scheme `http` | Asset `Unverified` |
 | 4 | Asset → **Verify** | Choose **HTTPS well-known file** | Wizard shows a `vulnscan-verify=...` value and the URL `http://localhost:5001/.well-known/vulnscan.txt` |
 | 5 | Test shop tab | Open <http://localhost:5001/__test__/verification>, paste the value, **Publish** | The token is now served at `/.well-known/vulnscan.txt` |
@@ -201,6 +202,10 @@ Sign in with the seeded developer account. Read the credentials from
 | Invite a colleague as `VIEWER`, log in as them | New scan hidden, API `403 PERMISSION_DENIED` |
 | Log in as the seeded **Administrator** (not a project member) | project API returns `404` (tenant isolation) |
 | Call `POST /api/scans` | `410 LEGACY_SCAN_ENDPOINT_DISABLED` |
+| Open an invitation link while signed out | Login screen keeps the invitation and returns to it after sign-in |
+| Sign in as a *different* account and open an invitation link | `403 INVITATION_EMAIL_MISMATCH` with a "Sign out and switch account" action |
+| Open an invitation link twice | Second attempt shows `INVITATION_ALREADY_USED` |
+| Invite an account that is already an active member | `409 ALREADY_MEMBER` (no demotion) |
 
 ---
 

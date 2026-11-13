@@ -4,6 +4,12 @@
 
   const API = window.API, U = window.U;
 
+  // Only same-app hash routes may be used as a post-login destination.
+  function safeNext(next) {
+    if (typeof next !== 'string') return '';
+    return /^#\/[^\s]*$/.test(next) ? next : '';
+  }
+
   const SEV_ORDER = ['None', 'Low', 'Medium', 'High', 'Critical'];
   const _pollTimers = [];
   let _pollTimer = null;
@@ -154,6 +160,13 @@
   function loginHtml(params) {
     const rawError = (params && params.error) ? String(params.error) : '';
     const oauthError = rawError ? (OAUTH_ERRORS[rawError] || rawError) : '';
+    const next = safeNext(params && params.next);
+    const inviteNotice = next.indexOf('#/invitations/accept') === 0
+      ? `<div style="background:var(--blue-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">
+           You have been invited to join a VulnScan team. Sign in with the email address the
+           invitation was sent to, then accept it on the next screen.
+         </div>`
+      : '';
     return `
     <div class="login-wrap">
       <div class="login-left">
@@ -169,6 +182,7 @@
         <div class="login-card">
           <h2>Welcome Back</h2>
           <p class="sub">Sign in to continue to VulnScan</p>
+          ${inviteNotice}
           <form id="login-form" autocomplete="on">
             <div class="field">
               <label for="email">Email Address</label>
@@ -189,9 +203,10 @@
     </div>`;
   }
 
-  function bindLogin(root) {
+  function bindLogin(root, params) {
     const form = root.querySelector('#login-form');
     const errEl = root.querySelector('#login-error');
+    const next = safeNext(params && params.next);
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       errEl.textContent = '';
@@ -202,7 +217,7 @@
       try {
         const data = await API.post('/api/auth/login', { email, password });
         API.setAuth(data.access_token, data.user);
-        location.hash = '#/dashboard';
+        location.hash = next || '#/dashboard';
       } catch (err) {
         errEl.textContent = err.message || 'Sign in failed.';
         btn.disabled = false;
@@ -210,7 +225,7 @@
     });
     root.querySelector('#google-btn').addEventListener('click', async () => {
       try {
-        const data = await API.get('/api/auth/google/url');
+        const data = await API.get('/api/auth/google/url', { next: next || undefined });
         if (!data.configured) {
           U.toast('Google Sign-In is not configured on this server.', 'info');
           return;
