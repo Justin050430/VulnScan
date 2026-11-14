@@ -20,6 +20,19 @@ from testing.trust_helpers import (
     profile_id,
 )
 
+try:  # PyMuPDF provides both module names depending on version
+    import pymupdf as _pdf
+except ImportError:  # pragma: no cover
+    import fitz as _pdf
+
+
+def _pdf_text(response):
+    doc = _pdf.open(stream=response.data, filetype="pdf")
+    try:
+        return "\n".join(page.get_text() for page in doc)
+    finally:
+        doc.close()
+
 
 @pytest.fixture()
 def trust_app(app):
@@ -359,6 +372,83 @@ def test_authenticated_scan_reaches_protected_pages(trust_app, client,
     text = report.get_data(as_text=True)
     assert "Temporary credential" in text
     assert "Temporary!Pass123" not in text
+
+    # The report must describe the authenticated coverage it actually achieved.
+    assert detail["Coverage"]["Authentication"]["Mode"] == "Authenticated"
+    pdf = client.get(
+        f"/api/scans/{scan_id}/report?format=pdf", headers=bearer(dev_token)
+    )
+    assert pdf.status_code == 200
+    pdf_text = _pdf_text(pdf)
+    assert "Authentication:" in pdf_text
+    assert "reachable by the approved temporary test account were included" \
+        in pdf_text
+    assert "Login-protected coverage is limited to pages" in pdf_text
+    assert "Temporary!Pass123" not in pdf_text
+
+
+def test_failed_authentication_note_does_not_duplicate_or_contradict(
+        trust_app, client, auth_scenario, dev_token):
+    """
+    A failed-login scan has zero analysed pages; the coverage note must be
+    grammatical and must not claim forms were submitted.
+    """
+    credential = _create(
+        client, dev_token, auth_scenario, password="Wrong!Pass999"
+    )
+    _approve(client, auth_scenario["approver_token"], auth_scenario,
+             credential["CredentialID"])
+    response = _start(client, dev_token, auth_scenario,
+                      credential_id=credential["CredentialID"])
+    scan_id = response.get_json()["Scan"]["ScanID"]
+    detail = client.get(f"/api/scans/{scan_id}",
+                        headers=bearer(dev_token)).get_json()["Scan"]
+
+    note = detail["CoverageNote"]
+    assert detail["Coverage"]["Authentication"]["Mode"] == "AuthenticationFailed"
+    assert "Authentication was attempted" in note
+    assert "because no page could be analysed, so no detection module ran" \
+        not in note
+    assert "No detection module ran because no page could be analysed." in note
+    # With nothing analysed the note must not claim any parameter was tested.
+    assert "HTML form fields (GET and POST) are tested" not in note
+    assert "No HTML form or parameter was tested" in note
+
+    pdf_text = _pdf_text(client.get(
+        f"/api/scans/{scan_id}/report?format=pdf", headers=bearer(dev_token)))
+    assert "No HTML form was submitted" in pdf_text
+    assert "GET and POST HTML forms are submitted" not in pdf_text
+    assert "because the authentication attempt failed" in pdf_text
+
+
+def test_failed_login_report_does_not_claim_protected_coverage(
+        trust_app, client, auth_scenario, dev_token):
+    """A failed authentication attempt must never be reported as coverage."""
+    credential = _create(
+        client, dev_token, auth_scenario, password="Wrong!Pass999"
+    )
+    _approve(client, auth_scenario["approver_token"], auth_scenario,
+             credential["CredentialID"])
+    response = _start(client, dev_token, auth_scenario,
+                      credential_id=credential["CredentialID"])
+    assert response.status_code == 202, response.get_json()
+    scan_id = response.get_json()["Scan"]["ScanID"]
+
+    detail = client.get(f"/api/scans/{scan_id}",
+                        headers=bearer(dev_token)).get_json()["Scan"]
+    assert detail["Status"] == "Failed"
+    assert detail["Coverage"]["Authentication"]["Mode"] == "AuthenticationFailed"
+    assert detail["Coverage"]["Authentication"]["Reason"]
+
+    pdf = client.get(
+        f"/api/scans/{scan_id}/report?format=pdf", headers=bearer(dev_token)
+    )
+    assert pdf.status_code == 200
+    pdf_text = _pdf_text(pdf)
+    assert "authentication attempt failed" in pdf_text
+    # It must not claim the protected pages were covered.
+    assert "reachable by the approved temporary test account were included" \
+        not in pdf_text
 
 
 def test_credential_is_single_use(trust_app, client, auth_scenario, dev_token):

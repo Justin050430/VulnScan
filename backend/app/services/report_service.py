@@ -63,6 +63,45 @@ def build_csv(scan, findings, pages):
     writer.writerow(["Finished At", scan.FinishedAt.isoformat() if scan.FinishedAt else ""])
     writer.writerow(["Started By", scan.user.Email if scan.user else ""])
     writer.writerow([])
+
+    # Coverage and limitations come from the same structure the PDF renders, so
+    # the two exports can never describe the scan differently.
+    from app.services import coverage_service
+
+    coverage = coverage_service.build_coverage(scan, pages=pages)
+    writer.writerow(["COVERAGE"])
+    writer.writerow(["Analysed Pages", coverage["AnalysedPages"]])
+    writer.writerow(["Discovered Pages", coverage["DiscoveredPages"]])
+    writer.writerow(["Skipped Pages", len(coverage["SkippedPages"])])
+    writer.writerow(["Authentication Mode", coverage["Authentication"]["Mode"]])
+    writer.writerow([
+        "Authentication Detail",
+        coverage_service.authentication_sentence(coverage),
+    ])
+    writer.writerow([
+        "Detection Modules Enabled", ", ".join(coverage["ModulesEnabled"]),
+    ])
+    writer.writerow([
+        "Detection Modules Available", ", ".join(coverage["ModulesSupported"]),
+    ])
+    writer.writerow([
+        "Detection Modules Executed",
+        ", ".join(coverage["ModulesExecuted"]) or "none",
+    ])
+    if coverage["ModulesNotImplemented"]:
+        writer.writerow([
+            "Enabled But Not Tested",
+            ", ".join(coverage["ModulesNotImplemented"]),
+        ])
+    writer.writerow(["TESTED QUERY PARAMETERS"])
+    for name in coverage["TestedQueryParameters"]:
+        writer.writerow([name])
+    writer.writerow([])
+    writer.writerow(["LIMITATIONS"])
+    for limitation in coverage["Limitations"]:
+        writer.writerow([limitation])
+    writer.writerow([])
+
     writer.writerow(["DISCOVERED PAGES"])
     writer.writerow(["Order", "URL", "Title", "HTTP Status", "Depth"])
     for p in sorted(pages, key=lambda x: x.DiscoveryOrder):
@@ -221,21 +260,42 @@ def build_pdf(scan, findings, pages):
             f"{profile.MaxPages} page(s), at least {profile.RequestDelayMs} ms "
             "between requests. Only the target's own host is in scope unless "
             "external links are enabled in the profile.", small))
-    from urllib.parse import parse_qsl, urlparse
 
-    analysed = [p for p in pages if p.HTTPStatus is not None and p.HTTPStatus < 400]
-    skipped = [p for p in pages if p.HTTPStatus is None or p.HTTPStatus >= 400]
-    params = set()
-    for p in analysed:
-        for name, _v in parse_qsl(urlparse(p.URL).query, keep_blank_values=True):
-            params.add(name)
+    from app.services import coverage_service
+
+    coverage = coverage_service.build_coverage(scan, pages=pages)
     story.append(Paragraph(
-        f"<b>Coverage:</b> {len(analysed)} of {len(pages)} discovered page(s) "
-        f"analysed; {len(skipped)} page(s) stored but skipped (non-success "
-        "HTTP status) and not tested.", small))
-    if params:
+        f"<b>Coverage:</b> {coverage['AnalysedPages']} of "
+        f"{coverage['DiscoveredPages']} discovered page(s) analysed; "
+        f"{len(coverage['SkippedPages'])} page(s) stored but skipped "
+        "(non-success HTTP status) and not tested.", small))
+    story.append(Paragraph(
+        f"<b>Authentication:</b> "
+        f"{coverage_service.authentication_sentence(coverage)}", small))
+    story.append(Paragraph(
+        "<b>Detection modules available in this scanner:</b> "
+        + ", ".join(coverage["ModulesSupported"]), small))
+    if coverage["ModulesEnabled"]:
         story.append(Paragraph(
-            f"<b>Tested GET query parameters:</b> {', '.join(sorted(params))}", small))
+            "<b>Detection modules enabled:</b> "
+            + ", ".join(coverage["ModulesEnabled"]), small))
+    if coverage["ModulesExecuted"]:
+        story.append(Paragraph(
+            "<b>Detection modules executed:</b> "
+            + ", ".join(coverage["ModulesExecuted"]), small))
+    elif coverage["ModulesNotExecuted"]:
+        story.append(Paragraph(
+            "<b>Detection modules executed:</b> none - "
+            f"{coverage['NotExecutedReason']}.", small))
+    if coverage["ModulesNotImplemented"]:
+        story.append(Paragraph(
+            "<b>Enabled but not tested:</b> "
+            + ", ".join(coverage["ModulesNotImplemented"])
+            + " (no detection module is implemented for these entries).", small))
+    if coverage["TestedQueryParameters"]:
+        story.append(Paragraph(
+            "<b>Tested GET query parameters:</b> "
+            + ", ".join(coverage["TestedQueryParameters"]), small))
     techniques = sorted({
         f.evidence_technique() for f in findings if f.evidence_technique()
     })
@@ -243,15 +303,7 @@ def build_pdf(scan, findings, pages):
         story.append(Paragraph(
             f"<b>Detection techniques used:</b> {', '.join(techniques)}", small))
     story.append(Paragraph("<b>Limitations:</b>", small))
-    for limitation in (
-        "GET and POST HTML forms are submitted with read-only payloads; "
-        "password, file-upload and destructive forms are skipped.",
-        "PUT/PATCH/DELETE bodies, JSON/XML payloads, headers and cookies are not tested.",
-        "JavaScript is not executed, so script-rendered content is not analysed.",
-        "Authenticated or login-protected pages are not tested.",
-        "Query-string parameters and HTML form fields are fuzzed (no headers, cookies or JSON bodies).",
-        "Time-based blind SQL injection runs only when enabled by the operator.",
-    ):
+    for limitation in coverage["Limitations"]:
         story.append(Paragraph(f"- {limitation}", small))
 
     # --------------------------------------------------------- verification

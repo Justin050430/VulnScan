@@ -366,15 +366,18 @@ def get_scan_detail(scan_id):
     ]
     data["TestedParameters"] = sorted(tested_parameters)
 
-    from app.services import credential_service
+    from app.services import coverage_service, credential_service
 
     credential = credential_service.credential_for_scan(scan.ScanID)
     if credential is None:
-        data["Authentication"] = {"Mode": "Anonymous"}
-        auth_note = "Authenticated pages were not reached."
+        data["Authentication"] = {"Mode": coverage_service.AUTH_ANONYMOUS}
     else:
         data["Authentication"] = {
-            "Mode": "Authenticated",
+            "Mode": (
+                coverage_service.AUTH_FAILED
+                if credential.FailureReason
+                else coverage_service.AUTH_AUTHENTICATED
+            ),
             "CredentialID": credential.CredentialID,
             "CredentialName": credential.Name,
             "ApprovedByUserID": credential.ApprovedByUserID,
@@ -383,32 +386,13 @@ def get_scan_detail(scan_id):
             ),
             "AvailableForRetest": credential.is_available_for_retest(),
         }
-        auth_note = (
-            "Pages reachable by the approved temporary test account were "
-            "included; pages that account cannot access were not."
-        )
-    data["CoverageNote"] = (
-        f"{len(analysed_pages)} of {len(scan.pages)} discovered page(s) were "
-        f"analysed. {auth_note} {_testing_scope_note()} "
-        "Pages skipped due to a non-success HTTP status are listed in "
-        "SkippedPages and were not tested."
-    )
+
+    # One structured description of what this scan actually covered; the
+    # reports render the same structure so they cannot contradict it.
+    coverage = coverage_service.build_coverage(scan, pages=scan.pages)
+    data["Coverage"] = coverage
+    data["CoverageNote"] = coverage_service.coverage_note(coverage)
     return data
-
-
-def _testing_scope_note():
-    """Explain which injection points the detection modules actually tested."""
-    if current_app.config.get("SCANNER_ENABLE_FORM_TESTING", True):
-        return (
-            "Query-string parameters and HTML form fields (GET and POST) are "
-            "tested; forms containing password or file inputs, and forms with "
-            "destructive actions, are skipped. JavaScript-rendered content is "
-            "not executed."
-        )
-    return (
-        "Only GET query-string parameters are tested (form-field testing is "
-        "disabled on this server). JavaScript-rendered content is not executed."
-    )
 
 
 def _overall_risk(findings):

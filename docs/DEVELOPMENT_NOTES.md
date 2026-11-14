@@ -785,3 +785,62 @@ rotation, authentication required for preview/accept, preview content, mismatch 
 missing tokens, project invitations, re-invite after revocation, member listing,
 configurable TTL/base URL and the Google `next` state round trip.
 Full suite: **290 passed**.
+
+---
+
+## Enhancement round 9 - report and coverage accuracy (P0, 2026-11-14)
+
+The PDF limitations paragraph was a hard-coded list that had drifted from the
+product: it claimed authenticated pages were never tested (false since temporary
+scan credentials shipped) and contradicted itself about headers, cookies and
+parameters. The scan-detail API maintained a *second* prose summary, so the two
+could disagree.
+
+**What changed**
+- New `app/services/coverage_service.py` is the single source of truth. It
+  separates four tiers that must not be conflated:
+  * **supported** - implemented detection modules (`ModulesSupported`);
+  * **enabled** - profile modules that are enabled and implemented
+    (`ModulesEnabled`);
+  * **executed** - modules that ran, i.e. at least one analysed page
+    (`ModulesExecuted`, with `NotExecutedReason` when nothing ran);
+  * **completed** - the scan reached `Completed`, so executed modules were not
+    cut short.
+  Knowledge-base entries without a detection module are reported separately as
+  `ModulesNotImplemented` and are never presented as tested.
+- Authentication is derived from durable records only: no credential binding ->
+  `Anonymous`; binding with a recorded login failure -> `AuthenticationFailed`
+  (with the reason, never a secret); otherwise `Authenticated`. The sentence
+  also distinguishes a completed authenticated scan from one that failed
+  mid-way, so protected coverage is never overclaimed.
+- `scan_service.get_scan_detail` now renders `CoverageNote` from the shared
+  structure and exposes the structured `Coverage` object (additive API field).
+- `report_service` renders the same structure in the PDF ("Detection modules
+  available / enabled / executed", authentication sentence, limitations) and
+  adds `COVERAGE`, `TESTED QUERY PARAMETERS` and `LIMITATIONS` sections to the
+  CSV. The PDF and CSV therefore cannot contradict the API or each other.
+- Limitations are generated per scan: forms statement depends on
+  `SCANNER_ENABLE_FORM_TESTING` **and** on whether any page was analysed;
+  time-based statement depends on `SCANNER_ENABLE_TIME_BASED`; the auth
+  statement depends on the authentication mode.
+
+**Defects found during verification (and fixed)**
+- The first wording produced "No detection module ran because no page could be
+  analysed, so no detection module ran" - a duplicated clause.
+- With zero analysed pages the note still claimed form fields were tested;
+  it now states that no form or parameter was tested.
+
+**Verification**
+Real PDFs were generated from a controlled target and read back with PyMuPDF:
+anonymous (11/11 pages), authenticated (3/3 pages via the credential flow) and
+failed authentication (0 pages). The failed-auth report states that
+authentication was attempted and failed and that no form or parameter was
+tested; the authenticated report states that pages reachable by the test
+account were included.
+
+**Tests**
+`test_reports_content.py` (+8): anonymous/authenticated wording, no
+contradictory statements, enabled vs executed modules, disabled module,
+unimplemented KB entry, zero-analysed-page, forms-disabled, and CSV/PDF/API
+agreement. `test_trust_credentials.py` (+2): authenticated PDF content and
+failed-auth note/report accuracy. Full suite: **303 passed**.

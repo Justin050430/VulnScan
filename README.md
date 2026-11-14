@@ -60,7 +60,7 @@ To exercise the whole flow locally against targets that ship with the repository
 | Authentication | Flask-JWT-Extended (JWT bearer), Google OAuth 2.0 single sign-on |
 | Database | Microsoft SQL Server (Azure SQL / SQL Server LocalDB) |
 | Scanner | Built-in Web Crawler + modular detection engine (`requests`); tests query-string parameters and HTML form fields (GET/POST) |
-| Reports | PDF (ReportLab) and CSV export |
+| Reports | PDF (ReportLab) and CSV export; both render the same scan-specific coverage and limitation statements |
 
 ## Repository layout
 
@@ -79,7 +79,7 @@ backend/                  Flask application (application factory)
   config.py  run.py  wsgi.py
 testing/
   vuln_test_app/          controlled intentionally-vulnerable local target
-  test_*.py               pytest suite (290 tests, incl. SQL Server integration)
+  test_*.py               pytest suite (303 tests, incl. SQL Server integration)
   trust_helpers.py        shared Trust Boundary test fixtures
 .github/workflows/ci.yml  continuous integration (runs the test suite)
 .github/workflows/deploy.yml  tests then deploys main to Azure App Service
@@ -243,7 +243,7 @@ clear message (no fake authentication is used).
 ## Running the tests
 
 ```powershell
-python -m pytest testing -q          # 290 tests; SQL Server tests skip if unavailable
+python -m pytest testing -q          # 303 tests; SQL Server tests skip if unavailable
 ```
 
 The suite uses an in-memory SQLite database, a local controlled target and a
