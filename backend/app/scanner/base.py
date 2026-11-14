@@ -48,6 +48,8 @@ class PageInfo:
     error: Optional[str] = None
     #: HTML forms found on the page (app.scanner.forms.Form instances).
     forms: tuple = ()
+    #: State shared by all modules for one scan (used for cross-page de-duplication).
+    scan_state: dict = field(default_factory=dict)
 
     @property
     def parameters(self):

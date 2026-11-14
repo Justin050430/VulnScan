@@ -267,6 +267,9 @@ def run_scan(scan_id):
         pages_done = 0
         findings_total = 0
         cancelled = False
+        # Shared across every page and module of this scan; used by modules
+        # that must report a site-wide condition only once (e.g. a cookie).
+        scan_state = {}
         test_form_fields = bool(
             current_app.config.get("SCANNER_ENABLE_FORM_TESTING", True)
         )
@@ -290,7 +293,10 @@ def run_scan(scan_id):
             for module_class, vuln in module_specs:
                 try:
                     module = module_class(
-                        http=http, page=PageInfo(url=page_row.URL, forms=forms)
+                        http=http,
+                        page=PageInfo(
+                            url=page_row.URL, forms=forms, scan_state=scan_state
+                        ),
                     )
                     results = module.detect()
                 except Exception:

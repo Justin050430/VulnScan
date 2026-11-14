@@ -47,6 +47,8 @@ HOME = """
   <li><a href="/safe_search?q=laptop">Search (safe)</a></li>
   <li><a href="/feedback">Send feedback</a></li>
   <li><a href="/feedback_safe">Send feedback (safe)</a></li>
+  <li><a href="/cookies_weak">Cookie demo (weak)</a></li>
+  <li><a href="/cookies_ok">Cookie demo (safe)</a></li>
   <li><a href="/product?id=1">Product 1</a></li>
   <li><a href="/product?id=2">Product 2</a></li>
   <li><a href="/blind?id=1">Product lookup</a></li>
@@ -708,10 +710,91 @@ def binary():
     return Response(b"\x00\x01\x02\x03\xff\xfe", mimetype="application/octet-stream")
 
 
+#: Marker values that must never appear in a finding, evidence or export.
+COOKIE_SECRET_MARKER = "vulnscan_cookie_secret_7d1f"
+
+COOKIE_WEAK_HTML = """<!doctype html><html><head><title>Cookie demo</title></head><body>
+<h1>Cookie demo</h1>
+<p>This page sets several cookies with weak attributes.</p>
+<p><a href="/cookies_weak_more">More cookies</a></p>
+</body></html>"""
+
+COOKIE_WEAK_MORE_HTML = """<!doctype html><html><head><title>Cookie demo 2</title></head><body>
+<h1>Cookie demo (second page)</h1>
+<p>Sets the same session cookie again.</p>
+</body></html>"""
+
+COOKIE_OK_HTML = """<!doctype html><html><head><title>Cookie demo (safe)</title></head><body>
+<h1>Cookie demo (safe)</h1>
+<p>Every cookie on this page is configured correctly.</p>
+</body></html>"""
+
+
+def _weak_cookie_headers(response):
+    """
+    Add intentionally weak cookies.
+
+    Several `Set-Cookie` headers are used on purpose, and one carries an
+    `Expires` value - which contains a comma - to prove that a scanner must not
+    split combined headers on commas.
+    """
+    response.headers.add(
+        "Set-Cookie",
+        f"session={COOKIE_SECRET_MARKER}; Path=/; "
+        "Expires=Wed, 21 Oct 2026 07:28:00 GMT",
+    )
+    response.headers.add(
+        "Set-Cookie", f"pref={COOKIE_SECRET_MARKER}; Path=/"
+    )
+    # Prefix contract broken: __Host- requires Secure and Path=/.
+    response.headers.add(
+        "Set-Cookie",
+        f"__Host-insecure={COOKIE_SECRET_MARKER}; Path=/account; "
+        "HttpOnly; SameSite=Lax",
+    )
+    # SameSite=None without Secure.
+    response.headers.add(
+        "Set-Cookie", f"tracking={COOKIE_SECRET_MARKER}; Path=/; SameSite=None"
+    )
+    return response
+
+
+@app.route("/cookies_weak")
+def cookies_weak():
+    """Weak cookie configuration: every rule fires at least once."""
+    return _weak_cookie_headers(Response(COOKIE_WEAK_HTML, mimetype="text/html"))
+
+
+@app.route("/cookies_weak_more")
+def cookies_weak_more():
+    """Sets the same weak session cookie on a second page (dedupe check)."""
+    response = Response(COOKIE_WEAK_MORE_HTML, mimetype="text/html")
+    response.headers.add(
+        "Set-Cookie",
+        f"session={COOKIE_SECRET_MARKER}; Path=/; "
+        "Expires=Wed, 21 Oct 2026 07:28:00 GMT",
+    )
+    return response
+
+
+@app.route("/cookies_ok")
+def cookies_ok():
+    """Every cookie fully configured - the scanner must report nothing."""
+    response = Response(COOKIE_OK_HTML, mimetype="text/html")
+    for header in (
+        f"session={COOKIE_SECRET_MARKER}; Path=/; Secure; HttpOnly; "
+        "SameSite=Lax; Expires=Wed, 21 Oct 2026 07:28:00 GMT",
+        f"pref={COOKIE_SECRET_MARKER}; Path=/; Secure; HttpOnly; SameSite=Strict",
+        f"__Host-good={COOKIE_SECRET_MARKER}; Path=/; Secure; HttpOnly; "
+        "SameSite=Lax",
+    ):
+        response.headers.add("Set-Cookie", header)
+    return response
+
+
 @app.after_request
 def add_csp_on_home(response):
     return response
-
 
 if __name__ == "__main__":
     # Local only - for validating the VulnScan scanner.

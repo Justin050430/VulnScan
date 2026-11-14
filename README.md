@@ -43,6 +43,20 @@ logout, …) are never submitted, and hidden fields keep the values the page ser
 CSRF tokens stay valid. `SCANNER_ENABLE_FORM_TESTING=false` restores query-string-only
 behaviour.
 
+### Detection modules
+
+| Module | Key | What it evaluates |
+| --- | --- | --- |
+| SQL Injection | `sqli` | error-based, conditional-error, boolean differential and opt-in time-based |
+| Cross-Site Scripting (XSS) | `xss` | executable-context reflection analysis |
+| Missing HTTP Security Headers | `http_headers` | CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HSTS, Permissions-Policy |
+| Insecure Cookie Attributes | `cookies` | `Set-Cookie` attributes: Secure, HttpOnly, SameSite, prefix contracts |
+
+The cookie module reads every `Set-Cookie` header separately (never splitting on
+commas, because `Expires` contains one), classifies each cookie as a
+session/authentication or ordinary cookie, and reports one finding per cookie and
+rule per scan. Cookie **values** are never parsed, stored or exported.
+
 See [docs/TRUST_BOUNDARY.md](docs/TRUST_BOUNDARY.md), [docs/API_TRUST.md](docs/API_TRUST.md)
 and [docs/MIGRATION_TRUST.md](docs/MIGRATION_TRUST.md).
 
@@ -79,7 +93,7 @@ backend/                  Flask application (application factory)
   config.py  run.py  wsgi.py
 testing/
   vuln_test_app/          controlled intentionally-vulnerable local target
-  test_*.py               pytest suite (303 tests, incl. SQL Server integration)
+  test_*.py               pytest suite (333 tests, incl. SQL Server integration)
   trust_helpers.py        shared Trust Boundary test fixtures
 .github/workflows/ci.yml  continuous integration (runs the test suite)
 .github/workflows/deploy.yml  tests then deploys main to Azure App Service
@@ -243,7 +257,7 @@ clear message (no fake authentication is used).
 ## Running the tests
 
 ```powershell
-python -m pytest testing -q          # 303 tests; SQL Server tests skip if unavailable
+python -m pytest testing -q          # 333 tests; SQL Server tests skip if unavailable
 ```
 
 The suite uses an in-memory SQLite database, a local controlled target and a

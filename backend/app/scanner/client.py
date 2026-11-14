@@ -41,10 +41,11 @@ class ScanResponse:
         "ok",
         "error",
         "history",
+        "set_cookies",
     )
 
     def __init__(self, url, final_url=None, status_code=None, headers=None,
-                 text="", ok=False, error=None):
+                 text="", ok=False, error=None, set_cookies=None):
         self.url = url
         self.final_url = final_url or url
         self.status_code = status_code
@@ -53,6 +54,29 @@ class ScanResponse:
         self.ok = ok
         self.error = error
         self.history = []
+        #: Each Set-Cookie header value separately (never comma-joined).
+        self.set_cookies = list(set_cookies or ())
+
+
+def _set_cookie_headers(resp):
+    """
+    Return the response's Set-Cookie header values as separate strings.
+
+    `requests` folds duplicate headers into one comma-joined value, which is
+    ambiguous for Set-Cookie (an Expires date contains a comma), so the raw
+    urllib3 header list is preferred.  If that is unavailable the folded value
+    is returned as a single entry rather than being split on commas.
+    """
+    raw = getattr(resp, "raw", None)
+    raw_headers = getattr(raw, "headers", None)
+    getlist = getattr(raw_headers, "getlist", None)
+    if callable(getlist):
+        try:
+            return list(getlist("Set-Cookie"))
+        except Exception:  # pragma: no cover - defensive
+            pass
+    folded = resp.headers.get("Set-Cookie")
+    return [folded] if folded else []
 
 
 class HttpClient:
@@ -105,6 +129,7 @@ class HttpClient:
         current = url
         redirects = 0
         history = []
+        collected_cookies = []
 
         while True:
             self._throttle()
@@ -128,12 +153,16 @@ class HttpClient:
                 return ScanResponse(url, final_url=current, error=f"Request failed: {exc}")
 
             with resp:
+                # Record every Set-Cookie header of this hop separately; a
+                # redirect can set the session cookie, so all hops count.
+                collected_cookies.extend(_set_cookie_headers(resp))
                 if resp.status_code in REDIRECT_CODES and resp.headers.get("Location"):
                     target = urljoin(current, resp.headers["Location"])
                     if redirects >= self.max_redirects:
                         return ScanResponse(
                             url, final_url=current, status_code=resp.status_code,
                             headers=dict(resp.headers), error="Too many redirects",
+                            set_cookies=collected_cookies,
                         )
                     if self.url_validator is not None:
                         ok, reason = self.url_validator(target)
@@ -142,6 +171,7 @@ class HttpClient:
                                 url, final_url=current, status_code=resp.status_code,
                                 headers=dict(resp.headers),
                                 error=f"Blocked redirect to {target} ({reason})",
+                                set_cookies=collected_cookies,
                             )
                     history.append(current)
                     if resp.status_code == 303 or (
@@ -161,6 +191,7 @@ class HttpClient:
                     headers=dict(resp.headers),
                     text=self._read_body(resp),
                     ok=True,
+                    set_cookies=collected_cookies,
                 )
                 result.history = history
 
@@ -175,6 +206,7 @@ class HttpClient:
                         current = url
                         history = []
                         redirects = 0
+                        collected_cookies = []
                         continue
                     self.auth_failed = True
                     result.error = (

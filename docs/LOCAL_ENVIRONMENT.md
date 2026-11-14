@@ -156,6 +156,8 @@ it through the gate after adding that route.
 | `/feedback` | **POST form field `message`** | reflected XSS (Confirmed 6.1) |
 | `/feedback` | **POST form field `order`** | error-based SQLi (Confirmed 9.8) |
 | `/feedback_safe` | POST form (escaped) | no XSS/SQLi finding (control) |
+| `/cookies_weak` | cookies (also `/cookies_weak_more`) | 7 cookie findings, deduplicated across both pages |
+| `/cookies_ok` | cookies, fully configured | no cookie finding (control) |
 | `/dashboard`, `/dashboard/search` | authenticated pages | reached only with the scan credential |
 | every page except `/headers_ok` | response headers | missing-header findings |
 | `/feedback` also renders | password form, `POST /account/delete` | never submitted (safety screen) |

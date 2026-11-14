@@ -844,3 +844,74 @@ contradictory statements, enabled vs executed modules, disabled module,
 unimplemented KB entry, zero-analysed-page, forms-disabled, and CSV/PDF/API
 agreement. `test_trust_credentials.py` (+2): authenticated PDF content and
 failed-auth note/report accuracy. Full suite: **303 passed**.
+
+---
+
+## Enhancement round 10 - cookie attribute assessment (P1, 2026-11-14)
+
+Cookies protect the session, but the scanner never looked at them. A session
+cookie without `HttpOnly`, `Secure` or `SameSite` is one of the most common
+real-world misconfigurations, so this round adds a dedicated detection module.
+
+**What changed**
+- New `app/scanner/cookie_header.py` parses `Set-Cookie` headers. The cookie
+  value is discarded during parsing, so no later code path can leak it. The
+  attribute list is split on `;` only: `Expires` contains a comma, so splitting
+  a folded header on commas would corrupt the attributes and invent findings.
+- `HttpClient` now records every `Set-Cookie` header of every hop separately in
+  `ScanResponse.set_cookies` (via `raw.headers.getlist`). Redirect responses are
+  included, because a login redirect is a common place to set a session cookie.
+  When only the folded header is available it is kept as one entry rather than
+  being split.
+- New `app/scanner/modules/cookies.py` with five rules: missing `Secure` on an
+  HTTPS response, missing `HttpOnly`, missing `SameSite`, `SameSite=None`
+  without `Secure`, and `__Host-`/`__Secure-` prefix-contract violations.
+- Cookie purpose is classified from the name (whole-token match plus well-known
+  markers such as `session`, `jsessionid`, `auth`, `token`, `csrf`). Severity
+  follows the purpose: a session cookie missing `HttpOnly` is Medium (4.2),
+  an ordinary cookie missing `HttpOnly` is Low (3.1) and its evidence states
+  that exploitation requires a same-origin XSS flaw. Cookies that are fully
+  configured produce nothing.
+- New knowledge-base entry `Insecure Cookie Attributes` (kept separate from
+  `Missing HTTP Security Headers`, same OWASP A05 category) and registration in
+  the module registry/technique list.
+- `PageInfo.scan_state` lets a module share state across the pages of one scan.
+  The cookie module reports each (cookie name, rule) pair once per scan; the
+  evidence names the page where it was first observed and states the scope.
+- `_reconcile_default_profiles()` in `seeds.py` attaches default modules that a
+  pre-existing default profile is missing. It is additive, idempotent, matches
+  profiles by name from `DEFAULT_PROFILES` only, and never touches user-created
+  profiles. `run_seed()` reports what it added.
+- Controlled target gained `/cookies_weak`, `/cookies_weak_more` (same cookie on
+  a second page, for de-duplication) and `/cookies_ok` (fully configured).
+  Cookies carry a marker value that tests assert never appears anywhere.
+
+**Verified against the real local database**
+`localhost\flask seed` against a database seeded before this round reported:
+`default profile modules added: Quick Scan += Insecure Cookie Attributes,
+OWASP Top 10 Full Scan += Insecure Cookie Attributes` - and nothing else.
+A full scan of the test shop then produced exactly 7 cookie findings (4 cookies,
+deduplicated across two pages), with the expected severities, and the marker
+value was absent from the findings JSON, the CSV and the PDF.
+
+**Known limitations**
+- `Secure` is only assessed on HTTPS responses; on plain HTTP it is not a
+  weakness of the cookie and nothing is reported or listed as missing.
+- Purpose classification is name-based; a session cookie with an opaque name
+  (e.g. `c1`) is treated as ordinary and gets the Low severity.
+- De-duplication keeps the first observing URL, so later pages that set the same
+  cookie are described by the SCOPE statement rather than listed individually.
+  A full multi-URL representation is part of the deferred P3 design.
+- A cookie with several violated rules is re-tested per finding, but the retest
+  matches on the cookie name, so the verdict covers all rules on that cookie.
+- The prefix rules are evaluated from the header only; a `__Host-` cookie served
+  over a non-HTTPS origin cannot be honoured by a browser regardless.
+
+**Tests**
+New `test_cookie_module.py` (30): header parsing incl. the `Expires` comma,
+value never retained, multiple headers parsed independently, malformed headers
+skipped, purpose classification, the five rules, session vs ordinary severity,
+secure cookies producing nothing, cross-page de-duplication, retest lifecycle,
+value absence from findings/evidence/CSV/PDF/logs, existing modules still firing,
+KB separation, default-profile membership, seed reconciliation and repeated-seed
+idempotency. Full suite: **333 passed**.
