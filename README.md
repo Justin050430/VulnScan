@@ -57,6 +57,84 @@ commas, because `Expires` contains one), classifies each cookie as a
 session/authentication or ordinary cookie, and reports one finding per cookie and
 rule per scan. Cookie **values** are never parsed, stored or exported.
 
+### Discovery coverage
+
+Pages are discovered from four sources, all of which pass the same gate
+(normalise → static/binary filter → target scope → SSRF guard → duplicate check →
+robots.txt policy):
+
+1. the start URL,
+2. links found in analysed pages,
+3. **GET form actions** found in analysed pages — forms are never submitted and
+   POST actions are never requested,
+4. **sitemaps**: `Sitemap:` locations declared by robots.txt (or the conventional
+   `/sitemap.xml` when none is declared), including one level of sitemap-index
+   nesting.
+
+`robots.txt` is honoured **as a crawl policy, not as authorisation**: a disallowed
+path is never requested, but a permissive policy cannot widen the scope, and every
+URL (and every redirect hop) still passes the scope and SSRF checks. The start URL
+is always requested because target ownership is established separately. Discovery
+is bounded: 1 MB per sitemap, 500 URLs per sitemap file, 10 child sitemaps per
+index, 10 sitemap files per crawl, and the profile's page/depth budget still
+applies. DTD/entity documents, malformed XML and unknown roots are rejected with a
+recorded reason.
+
+Each scan stores how its pages were found (sources, robots.txt rules and
+exclusions, sitemap diagnostics, crawl limits) and the API, PDF, CSV and UI report
+it under `Coverage.Discovery`, so a report never claims coverage it did not achieve.
+`SCANNER_RESPECT_ROBOTS_TXT=false` and `SCANNER_ENABLE_SITEMAP_DISCOVERY=false`
+switch the two discovery policies off.
+
+### Finding consolidation
+
+A scan of 16 pages can record 90 findings for what a developer experiences as a
+dozen problems: a missing security header is one finding per page, and
+`/product?id=1` and `/product?id=2` are the same injectable parameter. The scan
+detail API therefore also returns a **consolidated issue view** derived from the
+stored findings:
+
+* `FindingGroups` — one entry per logical issue, with `RecordCount`,
+  `AffectedURLCount`, `AffectedURLs`, `ConditionCounts` (for headers: how many
+  pages are missing vs misconfigured), derived `Status`/`StatusCounts`,
+  worst-member `Severity`/`RiskScore`, and `Locations` holding every underlying
+  finding with its own evidence and retest history.
+* `IssueCount` / `IssueSeverityCounts` — issue-level counts. `FindingCount` and
+  `SeverityCounts` keep their original record-level meaning.
+* `GroupKey` / `GroupSize` on every entry of the unchanged flat `Findings` list.
+
+Identity is versioned and deterministic (`v1:`), computed from stored data so
+historical scans group identically: one issue per header rule; one per
+`(cookie rule, cookie name)`; and one per `(module, HTTP method, endpoint,
+parameter)` with the query string excluded from the endpoint. Findings whose
+identity cannot be determined get a unique key and are never merged. Nothing is
+merged, rewritten or deleted in the database — the records remain the single
+source of truth, so triage and retesting stay per finding and a group can never
+be reported resolved while one of its locations is still open.
+
+**Issue actions** (`PUT /api/scans/{id}/finding-groups/{key}` and
+`POST .../finding-groups/{key}/retest`):
+
+* group triage sets one status on **all** underlying records after the UI states
+  how many records will change, and records one audit event with the affected
+  finding IDs and their old → new statuses. The group status itself is never
+  stored: `Open` wins, then `Resolved`, then `False Positive`, with `Mixed` and
+  `StatusCounts` exposing partial triage;
+* group retest re-runs the existing per-finding verification for at most **25
+  records per request**, committing each result before the next network call so
+  no database transaction stays open across retesting. A failure is reported per
+  location and never discards earlier results; records beyond the cap are
+  returned as `Not Run`, and the aggregate verdict is downgraded from `Resolved`
+  to `Inconclusive` whenever part of the issue was not verified.
+
+**Reports.** The PDF lists one entry per issue with its affected URLs, a
+per-location table and every record's own evidence and retest history. The CSV
+keeps the original record-level `FINDINGS` section unchanged and adds
+`FINDING GROUPS` (one row per issue with record IDs and the affected URL list)
+and `FINDING LOCATIONS` (one row per record linking it to its issue key). Cookie
+values never appear in any of these surfaces — only cookie names, rules and the
+observed page URLs.
+
 See [docs/TRUST_BOUNDARY.md](docs/TRUST_BOUNDARY.md), [docs/API_TRUST.md](docs/API_TRUST.md)
 and [docs/MIGRATION_TRUST.md](docs/MIGRATION_TRUST.md).
 
@@ -73,7 +151,7 @@ To exercise the whole flow locally against targets that ship with the repository
 | ORM / Migrations | SQLAlchemy, Flask-SQLAlchemy, Flask-Migrate (Alembic) |
 | Authentication | Flask-JWT-Extended (JWT bearer), Google OAuth 2.0 single sign-on |
 | Database | Microsoft SQL Server (Azure SQL / SQL Server LocalDB) |
-| Scanner | Built-in Web Crawler + modular detection engine (`requests`); tests query-string parameters and HTML form fields (GET/POST) |
+| Scanner | Built-in Web Crawler + modular detection engine (`requests`); discovers links, GET form actions and sitemaps; tests query-string parameters and HTML form fields (GET/POST) |
 | Reports | PDF (ReportLab) and CSV export; both render the same scan-specific coverage and limitation statements |
 
 ## Repository layout
@@ -93,7 +171,7 @@ backend/                  Flask application (application factory)
   config.py  run.py  wsgi.py
 testing/
   vuln_test_app/          controlled intentionally-vulnerable local target
-  test_*.py               pytest suite (333 tests, incl. SQL Server integration)
+  test_*.py               pytest suite (419 tests, incl. SQL Server integration)
   trust_helpers.py        shared Trust Boundary test fixtures
 .github/workflows/ci.yml  continuous integration (runs the test suite)
 .github/workflows/deploy.yml  tests then deploys main to Azure App Service
@@ -257,7 +335,7 @@ clear message (no fake authentication is used).
 ## Running the tests
 
 ```powershell
-python -m pytest testing -q          # 333 tests; SQL Server tests skip if unavailable
+python -m pytest testing -q          # 419 tests; SQL Server tests skip if unavailable
 ```
 
 The suite uses an in-memory SQLite database, a local controlled target and a

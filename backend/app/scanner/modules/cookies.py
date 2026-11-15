@@ -142,10 +142,15 @@ class CookieModule(DetectionModule):
 
         is_https = (response.final_url or self.page.url).lower().startswith("https://")
         seen = self._seen()
+        observations = self._observations()
         results = []
         for cookie in cookies:
             purpose = cookie_purpose(cookie.name)
             for rule, detail in self._violations(cookie, is_https):
+                # Record every page that shows this weakness, whether or not
+                # the finding already exists: one Finding per (cookie, rule)
+                # must still name every affected URL.
+                self._observe(observations, cookie.name, rule)
                 key = (cookie.name, rule)
                 if key in seen:
                     # Same cookie and rule already reported for this scan.
@@ -161,6 +166,18 @@ class CookieModule(DetectionModule):
         if not isinstance(state, dict):
             return set()
         return state.setdefault("cookie_findings", set())
+
+    def _observations(self):
+        """Per-scan map of (cookie name, rule) -> ordered observing URLs."""
+        state = self.page.scan_state
+        if not isinstance(state, dict):
+            return {}
+        return state.setdefault("cookie_observations", {})
+
+    def _observe(self, observations, name, rule):
+        urls = observations.setdefault((name, rule), [])
+        if self.page.url not in urls:
+            urls.append(self.page.url)
 
     # --------------------------------------------------------------- rules
     def _violations(self, cookie, is_https):
@@ -210,12 +227,12 @@ class CookieModule(DetectionModule):
                if purpose == PURPOSE_SESSION else
                " (no session/authentication pattern in the name)"),
             f"RULE VIOLATED: {title}",
+            f"RULE ID: {rule}",
             f"ATTRIBUTES PRESENT: {self._attributes_summary(cookie)}",
             f"ATTRIBUTES MISSING: {self._missing_summary(cookie, rule, is_https)}",
             f"OBSERVED ON: {self.page.url}",
-            "SCOPE: reported once per scan for this cookie and rule; the same "
-            "cookie configuration is served on every page of this scan that "
-            "sets it.",
+            "SCOPE: reported once per scan for this cookie and rule; every "
+            "page where it was observed is listed under OBSERVED URL.",
             f"SECURITY CONCERN: {concern}",
             f"IMPACT / LIMITATIONS: {impact}",
             f"REMEDIATION: {remediation}",

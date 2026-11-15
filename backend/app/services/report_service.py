@@ -7,6 +7,7 @@ and remediation guidance for a completed scan.
 import csv
 import io
 from datetime import datetime
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -96,6 +97,32 @@ def build_csv(scan, findings, pages):
     writer.writerow(["TESTED QUERY PARAMETERS"])
     for name in coverage["TestedQueryParameters"]:
         writer.writerow([name])
+    discovery = coverage.get("Discovery") or {}
+    if discovery.get("Available"):
+        sources = discovery.get("Sources") or {}
+        robots = discovery.get("RobotsTxt") or {}
+        sitemaps = discovery.get("Sitemaps") or {}
+        excluded = discovery.get("Excluded") or {}
+        writer.writerow([])
+        writer.writerow(["PAGE DISCOVERY"])
+        writer.writerow(["Start URL", sources.get("StartURL", 0)])
+        writer.writerow(["Followed Links", sources.get("Links", 0)])
+        writer.writerow(["Sitemap URLs", sources.get("Sitemaps", 0)])
+        writer.writerow(["GET Form Actions", sources.get("FormActions", 0)])
+        writer.writerow(["robots.txt Consulted", robots.get("Respected") is not False])
+        writer.writerow(["robots.txt HTTP Status", robots.get("HTTPStatus") or ""])
+        writer.writerow(["robots.txt Rules Applied", robots.get("RulesApplied", 0)])
+        writer.writerow(["robots.txt URLs Excluded", robots.get("BlockedCount", 0)])
+        writer.writerow(["Sitemaps Parsed", sitemaps.get("Parsed", 0)])
+        writer.writerow(["Sitemap URLs Listed", sitemaps.get("URLsFound", 0)])
+        writer.writerow(["Sitemaps Rejected", sitemaps.get("RejectedCount", 0)])
+        writer.writerow([
+            "URLs Rejected By Scope", excluded.get("ScopeRejectedCount", 0),
+        ])
+        writer.writerow([
+            "Crawl Page Limit Reached",
+            bool((discovery.get("Limits") or {}).get("PageBudgetReached")),
+        ])
     writer.writerow([])
     writer.writerow(["LIMITATIONS"])
     for limitation in coverage["Limitations"]:
@@ -107,6 +134,61 @@ def build_csv(scan, findings, pages):
     for p in sorted(pages, key=lambda x: x.DiscoveryOrder):
         writer.writerow([p.DiscoveryOrder, p.URL, p.PageTitle or "", p.HTTPStatus, p.CrawlDepth])
     writer.writerow([])
+
+    # ------------------------------------------------------- consolidated view
+    # Additive sections: FINDINGS below stays record-based and unchanged, so
+    # existing consumers keep working while the logical issues are explicit.
+    from app.services import grouping_service
+
+    groups, _identities = grouping_service.build_groups(findings)
+    writer.writerow(["FINDING GROUPS"])
+    writer.writerow([
+        "Group Key", "Vulnerability", "OWASP Category", "Severity",
+        "CVSS Score", "Status", "Mixed", "Record Count",
+        "Affected URL Count", "Affected URLs", "Parameters", "Methods",
+        "Condition Summary", "Finding IDs", "Latest Retest Verdict",
+    ])
+    for group in groups:
+        conditions = group["ConditionCounts"] or {}
+        writer.writerow([
+            group["GroupKey"],
+            group["VulnerabilityName"] or "",
+            group["OWASPCategory"] or "",
+            group["Severity"],
+            group["RiskScore"] if group["RiskScore"] is not None else "",
+            group["Status"],
+            group["Mixed"],
+            group["RecordCount"],
+            group["AffectedURLCount"],
+            "; ".join(group["AffectedURLs"]),
+            ", ".join(group["Parameters"]),
+            ", ".join(group["Methods"]),
+            ", ".join(f"{k}={v}" for k, v in sorted(conditions.items())),
+            ", ".join(str(loc["FindingID"]) for loc in group["Locations"]),
+            group["LatestRetestVerdict"] or "",
+        ])
+    writer.writerow([])
+    writer.writerow(["FINDING LOCATIONS"])
+    writer.writerow([
+        "Group Key", "Finding ID", "URL", "Method", "Parameter", "Payload",
+        "Severity", "Status", "Latest Retest Verdict",
+    ])
+    for group in groups:
+        for location in group["Locations"]:
+            retests = location.get("Retests") or []
+            writer.writerow([
+                group["GroupKey"],
+                location["FindingID"],
+                location.get("URL") or "",
+                location.get("RequestMethod") or "",
+                location.get("Parameter") or "",
+                (location.get("Payload") or "").replace("\n", " ")[:200],
+                location.get("Severity") or "",
+                location.get("Status") or "",
+                retests[-1]["Verdict"] if retests else "",
+            ])
+    writer.writerow([])
+
     writer.writerow(["FINDINGS"])
     writer.writerow([
         "Finding ID", "Vulnerability", "OWASP Category", "Severity",
@@ -153,6 +235,20 @@ def build_csv(scan, findings, pages):
                 r["RequestsIssued"] if r["RequestsIssued"] is not None else "",
             ])
     return output.getvalue()
+
+
+def _group_members(findings, group):
+    """The stored findings behind one consolidated group."""
+    ids = {location["FindingID"] for location in group["Locations"]}
+    return [finding for finding in findings if finding.FindingID in ids]
+
+
+def _group_vulnerability(findings, group):
+    """The knowledge-base entry a group refers to (description/impact/remedy)."""
+    for finding in findings:
+        if finding.VulnerabilityID == group["VulnerabilityID"] and finding.vulnerability:
+            return finding.vulnerability
+    return None
 
 
 def build_pdf(scan, findings, pages):
@@ -296,6 +392,52 @@ def build_pdf(scan, findings, pages):
         story.append(Paragraph(
             "<b>Tested GET query parameters:</b> "
             + ", ".join(coverage["TestedQueryParameters"]), small))
+    discovery = coverage.get("Discovery") or {}
+    if discovery.get("Available"):
+        sources = discovery.get("Sources") or {}
+        story.append(Paragraph(
+            "<b>Page discovery:</b> "
+            f"{sources.get('StartURL', 0)} start URL, "
+            f"{sources.get('Links', 0)} followed link(s), "
+            f"{sources.get('Sitemaps', 0)} sitemap URL(s), "
+            f"{sources.get('FormActions', 0)} GET form action(s) queued.",
+            small))
+        robots = discovery.get("RobotsTxt") or {}
+        if robots.get("URL"):
+            status = robots.get("HTTPStatus")
+            state = (
+                "consulted and respected"
+                if robots.get("Respected") is not False
+                else "not consulted (disabled by configuration)"
+            )
+            if robots.get("Fetched") is False and robots.get("Error"):
+                state += f", unusable ({robots['Error']})"
+            story.append(Paragraph(
+                f"<b>robots.txt:</b> {state}; HTTP status "
+                f"{status if status is not None else 'n/a'}, "
+                f"{robots.get('RulesApplied', 0)} rule(s) applied, "
+                f"{robots.get('BlockedCount', 0)} URL(s) excluded.", small))
+        sitemaps = discovery.get("Sitemaps") or {}
+        if sitemaps.get("Parsed") or sitemaps.get("RejectedCount"):
+            story.append(Paragraph(
+                f"<b>Sitemaps:</b> {sitemaps.get('Parsed', 0)} parsed "
+                f"({sitemaps.get('IndexFiles', 0)} index file(s)), "
+                f"{sitemaps.get('URLsFound', 0)} URL(s) listed, "
+                f"{sitemaps.get('RejectedCount', 0)} rejected.", small))
+        excluded = discovery.get("Excluded") or {}
+        samples = excluded.get("Samples") or {}
+        for label, entries in (("robots.txt", samples.get("Robots")),
+                               ("scope or safety validation",
+                                samples.get("Scope"))):
+            for entry in (entries or [])[:5]:
+                story.append(Paragraph(
+                    f"- Not requested ({label}): {escape(str(entry.get('URL', '')))}"
+                    f" - {escape(str(entry.get('Reason', '')))}", small))
+        limits = discovery.get("Limits") or {}
+        if limits.get("PageBudgetReached"):
+            story.append(Paragraph(
+                f"<b>Crawl limits:</b> stopped at the configured page limit "
+                f"({limits.get('MaxPages')} page(s)).", small))
     techniques = sorted({
         f.evidence_technique() for f in findings if f.evidence_technique()
     })
@@ -331,20 +473,28 @@ def build_pdf(scan, findings, pages):
         ]))
         story.append(vt)
 
-    # Findings
-    story.append(Paragraph(f"Findings ({len(findings)})", h2))
+    # Findings - consolidated one row per logical issue (P3); every record's
+    # own evidence and retest history is still printed below its issue.
+    from app.services import grouping_service
+
+    groups, _identities = grouping_service.build_groups(findings)
+    story.append(Paragraph(
+        f"Findings ({len(groups)} issue(s) · {len(findings)} finding record(s))",
+        h2))
     if findings:
-        data = [["#", "Vulnerability", "Severity", "Risk", "Status", "Location"]]
-        for i, f in enumerate(findings, 1):
+        data = [["#", "Vulnerability", "Severity", "Risk", "Status", "Records", "Affected URLs"]]
+        for i, group in enumerate(groups, 1):
             data.append([
                 i,
-                f.vulnerability.Name if f.vulnerability else "-",
-                f.Severity,
-                f"{float(f.RiskScore):.1f}" if f.RiskScore is not None else "-",
-                f.Status,
-                f.page.URL if f.page else "-",
+                group["VulnerabilityName"] or "-",
+                group["Severity"],
+                f"{group['RiskScore']:.1f}" if group["RiskScore"] is not None else "-",
+                group["Status"],
+                group["RecordCount"],
+                group["AffectedURLCount"],
             ])
-        ft = Table(data, colWidths=[10 * mm, 60 * mm, 30 * mm, 15 * mm, 25 * mm, 50 * mm])
+        ft = Table(data, colWidths=[10 * mm, 62 * mm, 26 * mm, 14 * mm, 26 * mm,
+                                    20 * mm, 32 * mm])
         style = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0B2447")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -360,51 +510,131 @@ def build_pdf(scan, findings, pages):
         story.append(ft)
         story.append(PageBreak())
 
-        for i, f in enumerate(findings, 1):
+        for i, group in enumerate(groups, 1):
             story.append(Paragraph(
-                f"{i}. {f.vulnerability.Name if f.vulnerability else 'Finding'} "
-                f"({f.Severity})", h2))
-            detail = []
-            detail.append(f"<b>Location:</b> {f.page.URL if f.page else '-'}")
-            if f.Parameter:
-                detail.append(f"<b>Parameter:</b> {f.Parameter}")
-            if f.Payload:
-                detail.append(f"<b>Payload:</b> <font face='Courier' size='8'>{f.Payload}</font>")
-            detail.append(f"<b>Status:</b> {f.Status}")
-            risk = f"{float(f.RiskScore):.1f}" if f.RiskScore is not None else "-"
-            conf = f"{float(f.Confidence) * 100:.0f}%" if f.Confidence is not None else "-"
-            detail.append(
-                f"<b>Evidence class:</b> {f.classification} "
-                f"(CVSS {risk}, confidence {conf})"
-            )
-            if f.evidence_vector():
-                detail.append(f"<b>CVSS Vector:</b> {f.evidence_vector()}")
-            if f.evidence_technique():
-                detail.append(f"<b>Detection technique:</b> {f.evidence_technique()}")
-            for r in f.retest_entries():
-                conf_str = (
-                    f", confidence {r['Confidence'] * 100:.0f}%"
-                    if r["Confidence"] is not None else ""
+                f"{i}. {group['VulnerabilityName'] or 'Issue'} "
+                f"({group['Severity']})", h2))
+            facts = [
+                f"<b>Status:</b> {group['Status']}"
+                + (
+                    " (" + ", ".join(
+                        f"{name}: {count}"
+                        for name, count in group["StatusCounts"].items() if count
+                    ) + ")"
+                    if group["Mixed"] else ""
+                ),
+                f"<b>Finding records:</b> {group['RecordCount']} · "
+                f"<b>Affected URLs:</b> {group['AffectedURLCount']}",
+            ]
+            if group["Parameters"]:
+                facts.append(
+                    f"<b>Parameter(s):</b> {', '.join(group['Parameters'])}"
                 )
-                req_str = (
-                    f", {r['RequestsIssued']} request(s)"
-                    if r["RequestsIssued"] is not None else ""
+            if group["Methods"]:
+                facts.append(f"<b>Method(s):</b> {', '.join(group['Methods'])}")
+            conditions = group["ConditionCounts"] or {}
+            if conditions:
+                facts.append(
+                    "<b>Header state:</b> " + ", ".join(
+                        f"{count} location(s) {name}"
+                        for name, count in sorted(conditions.items())
+                    )
+                )
+            facts.append(f"<b>Issue key:</b> {group['GroupKey']}")
+            for line in facts:
+                story.append(Paragraph(line, small))
+
+            location_rows = [["Record", "Location", "Method", "Parameter",
+                              "Condition / payload", "Status", "Retest"]]
+            for location in group["Locations"]:
+                retests = location.get("Retests") or []
+                location_rows.append([
+                    location["FindingID"],
+                    location.get("URL") or "-",
+                    location.get("RequestMethod") or "-",
+                    location.get("Parameter") or "-",
+                    (location.get("Payload") or "-")[:80],
+                    location.get("Status") or "-",
+                    retests[-1]["Verdict"] if retests else "-",
+                ])
+            lt = Table(location_rows,
+                       colWidths=[14 * mm, 62 * mm, 14 * mm, 22 * mm,
+                                  46 * mm, 18 * mm, 24 * mm])
+            lt.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E5E7EB")),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                ("FONTSIZE", (0, 0), (-1, -1), 7),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]))
+            story.append(lt)
+            story.append(Spacer(1, 6))
+            if group["AffectedURLs"]:
+                story.append(Paragraph(
+                    "<b>Affected URLs:</b> "
+                    + "; ".join(escape(url) for url in group["AffectedURLs"]),
+                    small))
+                story.append(Spacer(1, 6))
+
+            for f in [location_source for location_source in _group_members(
+                    findings, group)]:
+                story.append(Paragraph(
+                    f"Record {f.FindingID} - "
+                    f"{f.page.URL if f.page else '-'}", small))
+                detail = []
+                if f.Parameter:
+                    detail.append(f"<b>Parameter:</b> {f.Parameter}")
+                if f.Payload:
+                    detail.append(
+                        f"<b>Payload:</b> <font face='Courier' size='8'>"
+                        f"{escape(str(f.Payload))}</font>")
+                detail.append(f"<b>Status:</b> {f.Status}")
+                risk = f"{float(f.RiskScore):.1f}" if f.RiskScore is not None else "-"
+                conf = (
+                    f"{float(f.Confidence) * 100:.0f}%"
+                    if f.Confidence is not None else "-"
                 )
                 detail.append(
-                    f"<b>Retest {r['At']}:</b> {r['Verdict']}"
-                    f"{conf_str}{req_str} - {r['Message']}"
+                    f"<b>Evidence class:</b> {f.classification} "
+                    f"(CVSS {risk}, confidence {conf})"
                 )
-            if f.vulnerability:
-                if f.vulnerability.Description:
-                    detail.append(f"<b>Description:</b> {f.vulnerability.Description}")
-                if f.vulnerability.Impact:
-                    detail.append(f"<b>Impact:</b> {f.vulnerability.Impact}")
-                if f.vulnerability.Recommendation:
-                    detail.append(f"<b>Remediation:</b> {f.vulnerability.Recommendation}")
-            if f.Evidence:
-                detail.append(f"<b>Evidence:</b> {f.Evidence}")
-            for d in detail:
-                story.append(Paragraph(d, small))
+                if f.evidence_vector():
+                    detail.append(f"<b>CVSS Vector:</b> {f.evidence_vector()}")
+                if f.evidence_technique():
+                    detail.append(
+                        f"<b>Detection technique:</b> {f.evidence_technique()}")
+                for r in f.retest_entries():
+                    conf_str = (
+                        f", confidence {r['Confidence'] * 100:.0f}%"
+                        if r["Confidence"] is not None else ""
+                    )
+                    req_str = (
+                        f", {r['RequestsIssued']} request(s)"
+                        if r["RequestsIssued"] is not None else ""
+                    )
+                    detail.append(
+                        f"<b>Retest {r['At']}:</b> {r['Verdict']}"
+                        f"{conf_str}{req_str} - {r['Message']}"
+                    )
+                if f.Evidence:
+                    detail.append(
+                        f"<b>Evidence:</b> {escape(f.Evidence)}")
+                for d in detail:
+                    story.append(Paragraph(d, small))
+                story.append(Spacer(1, 6))
+
+            vulnerability = _group_vulnerability(findings, group)
+            knowledge = []
+            if vulnerability is not None:
+                if vulnerability.Description:
+                    knowledge.append(
+                        f"<b>Description:</b> {vulnerability.Description}")
+                if vulnerability.Impact:
+                    knowledge.append(f"<b>Impact:</b> {vulnerability.Impact}")
+                if vulnerability.Recommendation:
+                    knowledge.append(
+                        f"<b>Remediation:</b> {vulnerability.Recommendation}")
+            for line in knowledge:
+                story.append(Paragraph(line, small))
             story.append(Spacer(1, 8))
 
     doc.build(story)

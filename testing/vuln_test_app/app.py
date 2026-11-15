@@ -19,6 +19,7 @@ scanner does not raise false positives:
 The /feedback page also renders a password form and a destructive form
 (POST /account/delete) that the scanner must never submit.
 """
+import collections
 import os
 import secrets
 
@@ -790,6 +791,269 @@ def cookies_ok():
     ):
         response.headers.add("Set-Cookie", header)
     return response
+
+
+# ---------------------------------------------------------------------------
+# Crawler discovery (P2): robots.txt, sitemaps and GET form actions
+#
+# The default robots.txt is permissive and declares no sitemap, so existing
+# scan behaviour is unchanged.  Tests that exercise discovery override
+# ROBOTS["content"] and/or point it at one of the sitemap fixtures below.
+# ---------------------------------------------------------------------------
+ROBOTS = {"content": "User-agent: *\nDisallow: /__test__\nAllow: /\n"}
+
+#: Per-route request counters, so tests can prove an excluded URL was never
+#: requested.
+HITS = collections.Counter()
+
+
+def _sitemap_urlset(locations):
+    entries = "".join(f"<url><loc>{loc}</loc></url>" for loc in locations)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{entries}</urlset>"
+    )
+
+
+def _sitemap_index(locations):
+    entries = "".join(f"<sitemap><loc>{loc}</loc></sitemap>" for loc in locations)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        f"{entries}</sitemapindex>"
+    )
+
+
+def _origin():
+    """Absolute origin of this target, as the crawler sees it."""
+    return request.host_url.rstrip("/")
+
+
+def _discovery_page(title):
+    HITS[title] += 1
+    return (
+        f"<!doctype html><html><head><title>{title}</title></head><body>"
+        f"<h1>{title}</h1></body></html>"
+    )
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    HITS["robots_txt"] += 1
+    return Response(ROBOTS["content"], mimetype="text/plain")
+
+
+@app.route("/__test__/robots", methods=["GET", "POST"])
+def publish_robots_policy():
+    """Local-only helper: publish a robots.txt for a manual discovery demo.
+
+    Lets a reviewer point the target's crawl policy at one of the sitemap
+    fixtures without editing this file or restarting the target.  Loopback
+    only, like the Trust Boundary verification helper.
+    """
+    if request.remote_addr not in ("127.0.0.1", "::1"):
+        return Response("localhost only\n", status=403, mimetype="text/plain")
+    if request.method == "POST":
+        ROBOTS["content"] = (request.form.get("content") or "").strip() + "\n"
+    current = ROBOTS["content"]
+    origin = request.host_url.rstrip("/")
+    return Response(
+        f"""<!doctype html><html><head><meta charset="utf-8">
+<title>Publish robots.txt</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto}}
+textarea{{width:100%;height:160px;font-family:monospace;padding:8px}}
+code{{word-break:break-all}}</style>
+</head><body>
+<h2>Publish robots.txt</h2>
+<p>Point the crawl policy at a sitemap fixture, then run a scan of this shop and
+open the scan's Coverage section.</p>
+<form method="post">
+  <textarea name="content">User-agent: *
+Disallow: /t/private
+Sitemap: {origin}/t/sitemap_private.xml</textarea>
+  <p><button type="submit">Publish</button></p>
+</form>
+<p>Currently served at <code>/robots.txt</code>:</p>
+<pre>{current}</pre>
+<p><a href="/">Back to the shop</a></p>
+</body></html>""",
+        mimetype="text/html",
+    )
+
+
+@app.route("/t/sitemap_ok.xml")
+def t_sitemap_ok():
+    """urlset: two unique pages, one duplicate of a linked page, one external."""
+    external = os.environ.get("VULN_TEST_EXTERNAL_URL", "http://127.0.0.1:5198/")
+    return Response(
+        _sitemap_urlset([
+            f"{_origin()}/t/page1",
+            f"{_origin()}/t/page2",
+            f"{_origin()}/about",
+            f"{external}sitemap-listed",
+        ]),
+        mimetype="application/xml",
+    )
+
+
+@app.route("/t/sitemap_private.xml")
+def t_sitemap_private():
+    """urlset listing a page the default robots policy disallows."""
+    return Response(
+        _sitemap_urlset([
+            f"{_origin()}/t/page1",
+            f"{_origin()}/t/private",
+        ]),
+        mimetype="application/xml",
+    )
+
+
+@app.route("/t/sitemap_index.xml")
+def t_sitemap_index():
+    """sitemapindex whose child is a plain sitemap (one permitted level)."""
+    return Response(
+        _sitemap_index([f"{_origin()}/t/sitemap_child.xml"]),
+        mimetype="application/xml",
+    )
+
+
+@app.route("/t/sitemap_child.xml")
+def t_sitemap_child():
+    return Response(
+        _sitemap_urlset([f"{_origin()}/t/nested"]), mimetype="application/xml"
+    )
+
+
+@app.route("/t/sitemap_deep_index.xml")
+def t_sitemap_deep_index():
+    """Index -> index -> urlset: the second index level must not be used."""
+    return Response(
+        _sitemap_index([f"{_origin()}/t/sitemap_index2.xml"]),
+        mimetype="application/xml",
+    )
+
+
+@app.route("/t/sitemap_index2.xml")
+def t_sitemap_index2():
+    return Response(
+        _sitemap_index([f"{_origin()}/t/sitemap_deep_page.xml"]),
+        mimetype="application/xml",
+    )
+
+
+@app.route("/t/sitemap_deep_page.xml")
+def t_sitemap_deep_page():
+    return Response(
+        _sitemap_urlset([f"{_origin()}/t/deep_page"]), mimetype="application/xml"
+    )
+
+
+@app.route("/t/sitemap_bad.xml")
+def t_sitemap_bad():
+    """Malformed XML (unclosed element)."""
+    return Response(
+        "<urlset><url><loc>http://127.0.0.1:5199/t/broken</loc></url>",
+        mimetype="application/xml",
+    )
+
+
+@app.route("/t/sitemap_entity.xml")
+def t_sitemap_entity():
+    """Entity-expansion ("billion laughs") document - must be rejected."""
+    return Response(
+        '<?xml version="1.0"?>'
+        '<!DOCTYPE urlset [<!ENTITY a "aaaaaaaaaa">]>'
+        "<urlset><url><loc>&a;</loc></url></urlset>",
+        mimetype="application/xml",
+    )
+
+
+@app.route("/t/sitemap_big.xml")
+def t_sitemap_big():
+    """A document larger than the accepted sitemap size."""
+    padding = "<!--" + ("x" * (1200 * 1024)) + "-->"
+    return Response(
+        _sitemap_urlset([f"{_origin()}/t/oversized"]).replace(
+            "</urlset>", f"{padding}</urlset>"
+        ),
+        mimetype="application/xml",
+    )
+
+
+@app.route("/t/sitemap_flood.xml")
+def t_sitemap_flood():
+    """More <url> entries than one sitemap may contribute."""
+    return Response(
+        _sitemap_urlset(
+            [f"{_origin()}/t/flood/{i}" for i in range(5000)]
+        ),
+        mimetype="application/xml",
+    )
+
+
+@app.route("/t/sitemap_redirect.xml")
+def t_sitemap_redirect():
+    """Sitemap location that redirects out of scope."""
+    external = os.environ.get("VULN_TEST_EXTERNAL_URL", "http://127.0.0.1:5198/")
+    return redirect(f"{external}sitemap.xml")
+
+
+@app.route("/t/page1")
+def t_page1():
+    return _discovery_page("t_page1")
+
+
+@app.route("/t/page2")
+def t_page2():
+    return _discovery_page("t_page2")
+
+
+@app.route("/t/nested")
+def t_nested():
+    return _discovery_page("t_nested")
+
+
+@app.route("/t/deep_page")
+def t_deep_page():
+    return _discovery_page("t_deep_page")
+
+
+@app.route("/t/private")
+def t_private():
+    return _discovery_page("t_private")
+
+
+@app.route("/t/form_target")
+def t_form_target():
+    return _discovery_page("t_form_target")
+
+
+@app.route("/t/post_target", methods=["GET", "POST"])
+def t_post_target():
+    HITS["t_post_target"] += 1
+    return _discovery_page("t_post_target")
+
+
+@app.route("/t/form_discover")
+def t_form_discover():
+    """
+    Page whose GET form action is not linked anywhere.
+
+    The POST form points at /t/post_target, which the crawler must never
+    request because it only follows GET form actions and never submits forms.
+    """
+    HITS["t_form_discover"] += 1
+    return (
+        "<!doctype html><html><head><title>Form discovery</title></head><body>"
+        '<form method="get" action="form_target">'
+        '<input type="text" name="q" value="term"><button type="submit">Go</button>'
+        "</form>"
+        '<form method="post" action="post_target">'
+        '<input type="text" name="message" value="hello">'
+        '<button type="submit">Send</button></form>'
+        "</body></html>"
+    )
 
 
 @app.after_request

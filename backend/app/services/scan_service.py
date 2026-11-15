@@ -41,6 +41,12 @@ from app.utils.constants import (
 
 logger = logging.getLogger("vulnscan.scans")
 
+#: Upper bound on the locations one group-retest request may re-verify, so a
+#: single call cannot turn into an unbounded burst of network work.
+MAX_GROUP_RETEST_LOCATIONS = 25
+#: Bound on the finding IDs quoted in one group audit record.
+MAX_AUDIT_FINDING_IDS = 50
+
 
 class ScanServiceError(Exception):
     pass
@@ -48,6 +54,10 @@ class ScanServiceError(Exception):
 
 class ScanNotFoundError(ScanServiceError):
     pass
+
+
+class ScanGroupNotFoundError(ScanNotFoundError):
+    """Raised when a logical finding group does not exist in this scan."""
 
 
 class ScanAccessError(ScanServiceError):
@@ -275,6 +285,15 @@ def _finding_stats(scan_ids):
         bucket = result[scan_id]
         bucket["FindingCount"] += count
         bucket["SeverityCounts"][severity] = bucket["SeverityCounts"].get(severity, 0) + count
+
+    # Consolidated issue counts for the same page of scans (P3, additive).
+    from app.services import grouping_service
+
+    issues = grouping_service.issue_counts_for_scans(scan_ids)
+    for scan_id, bucket in result.items():
+        extra = issues.get(scan_id) or {}
+        bucket["IssueCount"] = extra.get("IssueCount", 0)
+        bucket["IssueSeverityCounts"] = extra.get("IssueSeverityCounts", {})
     return result
 
 
@@ -336,7 +355,27 @@ def get_scan_detail(scan_id):
     pages = [p.to_dict() for p in sorted(scan.pages, key=lambda p: p.DiscoveryOrder)]
     data = scan.to_dict(include_relations=False)
     data["Pages"] = pages
-    data["Findings"] = [f.to_dict() for f in findings]
+
+    # Logical consolidation (P3): the flat finding list stays the source of
+    # truth, and the group view is derived from it on every request.
+    from app.services import grouping_service
+
+    groups, identities = grouping_service.build_groups(findings)
+    finding_dicts = []
+    for finding in findings:
+        entry = finding.to_dict()
+        key, size = identities.get(finding.FindingID, (None, 1))
+        entry["GroupKey"] = key
+        entry["GroupSize"] = size
+        finding_dicts.append(entry)
+    data["Findings"] = finding_dicts
+    data["FindingGroups"] = groups
+    data["IssueCount"] = len(groups)
+    data["IssueSeverityCounts"] = {s: 0 for s in SEVERITIES}
+    for group in groups:
+        data["IssueSeverityCounts"][group["Severity"]] = (
+            data["IssueSeverityCounts"].get(group["Severity"], 0) + 1
+        )
     data["SeverityCounts"] = {s: 0 for s in SEVERITIES}
     for f in findings:
         data["SeverityCounts"][f.Severity] = data["SeverityCounts"].get(f.Severity, 0) + 1
@@ -603,6 +642,199 @@ def retest_finding(scan, finding_id, user, ip_address=None):
         commit=True,
     )
     return finding, result
+
+
+# ---------------------------------------------------------------- groups (P3)
+def _resolve_group(scan, group_key):
+    """
+    Resolve a logical finding group inside `scan` (never across scans).
+
+    Returns ``(group, members)``; raises `ScanGroupNotFoundError` when the key
+    does not match any finding of this scan.
+    """
+    from app.services import grouping_service
+
+    key = (group_key or "").strip()
+    group = members = None
+    if key:
+        group, members = grouping_service.find_group(scan.findings, key)
+    if group is None:
+        raise ScanGroupNotFoundError(
+            "Finding group not found in this scan."
+        )
+    return group, members
+
+
+def _refresh_group(scan, group_key):
+    """Rebuild the group from committed data (after a write)."""
+    from app.services import grouping_service
+
+    db.session.expire_all()
+    group, _members = grouping_service.find_group(scan.findings, group_key)
+    return group
+
+
+def _audit_id_list(finding_ids):
+    ids = [str(finding_id) for finding_id in finding_ids]
+    if len(ids) > MAX_AUDIT_FINDING_IDS:
+        remaining = len(ids) - MAX_AUDIT_FINDING_IDS
+        ids = ids[:MAX_AUDIT_FINDING_IDS] + [f"+{remaining} more"]
+    return ", ".join(ids)
+
+
+def update_finding_group_status(scan, group_key, status, user, ip_address=None):
+    """
+    Apply one triage status to every record of a logical group (P3).
+
+    The group itself stores nothing: its status stays derived from the member
+    records, so a group can never be reported resolved while a location is
+    still open.  One audit record lists the findings that actually changed.
+    """
+    if status not in FINDING_STATUSES:
+        raise ScanServiceError(
+            f"Status must be one of: {', '.join(FINDING_STATUSES)}."
+        )
+    group, members = _resolve_group(scan, group_key)
+    previous = {member.FindingID: member.Status for member in members}
+    changed = [member for member in members if member.Status != status]
+    for member in changed:
+        member.Status = status
+    db.session.commit()
+
+    refreshed = _refresh_group(scan, group["GroupKey"])
+    write_audit(
+        category=AUDIT_CATEGORY_SCAN,
+        action="FINDING_GROUP_STATUS_UPDATED",
+        description=(
+            f"Finding group '{group['GroupKey']}' "
+            f"({group['VulnerabilityName']}) on scan {scan.ScanID} marked as "
+            f"{status}: {len(changed)} of {len(members)} finding(s) updated. "
+            "Findings: "
+            + (
+                ", ".join(
+                    f"{member.FindingID} ({previous[member.FindingID]} -> "
+                    f"{status})"
+                    for member in changed
+                ) or "none (all already had that status)"
+            )
+        ),
+        user=user,
+        entity_type="Scan",
+        entity_id=scan.ScanID,
+        ip_address=ip_address,
+        commit=True,
+    )
+    return refreshed, changed, previous
+
+
+def retest_finding_group(scan, group_key, user, ip_address=None):
+    """
+    Re-verify a logical group, one record at a time (P3).
+
+    Each location is re-tested with the existing per-finding logic and its
+    result is committed immediately, so no database transaction is held open
+    across network work and an unexpected failure later cannot discard the
+    results already obtained.  Locations beyond
+    `MAX_GROUP_RETEST_LOCATIONS` are reported as ``Not Run`` - never as
+    resolved.
+    """
+    from app.scanner.retest import retest_finding as run_retest
+
+    from app.services import grouping_service
+
+    group, members = _resolve_group(scan, group_key)
+    members = sorted(members, key=lambda finding: finding.FindingID or 0)
+    attempted = members[:MAX_GROUP_RETEST_LOCATIONS]
+    skipped = members[MAX_GROUP_RETEST_LOCATIONS:]
+
+    results = []
+    completed = 0
+    failed = 0
+    for finding in attempted:
+        finding_id = finding.FindingID
+        page_url = finding.page.URL if finding.page else None
+        try:
+            result = run_retest(finding)
+            # Persist this location before touching the network again.
+            db.session.commit()
+            completed += 1
+            results.append({
+                "FindingID": finding_id,
+                "URL": page_url,
+                "Verdict": result["Verdict"],
+                "Message": result["Message"],
+                "Status": result["FindingStatus"],
+                "Failed": False,
+            })
+        except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+            # Discard only this location's partial work; earlier commits stand.
+            db.session.rollback()
+            failed += 1
+            logger.exception(
+                "Group retest of %s failed on finding %s", group_key, finding_id
+            )
+            results.append({
+                "FindingID": finding_id,
+                "URL": page_url,
+                "Verdict": "Inconclusive",
+                "Message": f"Unexpected failure during the retest: {exc}",
+                "Status": None,
+                "Failed": True,
+            })
+
+    for finding in skipped:
+        results.append({
+            "FindingID": finding.FindingID,
+            "URL": finding.page.URL if finding.page else None,
+            "Verdict": "Not Run",
+            "Message": (
+                "Not retested: this request re-verifies at most "
+                f"{MAX_GROUP_RETEST_LOCATIONS} locations; run the retest "
+                "again to continue."
+            ),
+            "Status": None,
+            "Failed": False,
+        })
+
+    verdict = grouping_service.aggregate_verdict(
+        [entry["Verdict"] for entry in results]
+    )
+    partial = bool(failed or skipped)
+    if verdict == "Resolved" and partial:
+        # Never claim a group is resolved when part of it was not verified.
+        verdict = "Inconclusive"
+    refreshed = _refresh_group(scan, group["GroupKey"])
+    write_audit(
+        category=AUDIT_CATEGORY_SCAN,
+        action="FINDING_GROUP_RETESTED",
+        description=(
+            f"Finding group '{group['GroupKey']}' "
+            f"({group['VulnerabilityName']}) on scan {scan.ScanID} re-tested: "
+            f"{completed} completed, {failed} failed, {len(skipped)} not "
+            f"attempted (limit {MAX_GROUP_RETEST_LOCATIONS}); aggregate "
+            f"verdict {verdict}. Completed findings: "
+            + (
+                _audit_id_list([
+                    entry["FindingID"] for entry in results
+                    if not entry["Failed"] and entry["Verdict"] != "Not Run"
+                ]) or "none"
+            )
+        ),
+        user=user,
+        entity_type="Scan",
+        entity_id=scan.ScanID,
+        ip_address=ip_address,
+        commit=True,
+    )
+    return refreshed, {
+        "AggregateVerdict": verdict,
+        "Partial": partial,
+        "Completed": completed,
+        "Failed": failed,
+        "NotAttempted": len(skipped),
+        "Limit": MAX_GROUP_RETEST_LOCATIONS,
+        "Results": results,
+    }
 
 
 def export_report(scan, user, ip_address=None):

@@ -69,6 +69,8 @@ Two deliberate, documented deviations:
 | Setting | Azure | Local | Why |
 | --- | --- | --- | --- |
 | `SCANNER_ALLOW_PRIVATE_TARGETS` | `false` | `true` | the local targets are on loopback; production must never reach loopback/RFC1918/`169.254.169.254` |
+| `SCANNER_RESPECT_ROBOTS_TXT` | `true` | `true` | honours the target's robots.txt as a crawl policy (it can only remove URLs; scope and SSRF checks always apply) |
+| `SCANNER_ENABLE_SITEMAP_DISCOVERY` | `true` | `true` | widens discovery with `Sitemap:` locations and one level of sitemap-index nesting |
 | `TRUST_WEBFILE_PORT` | `0` (default 443/80) | `5001` | assets store a hostname only, so the verifier needs to know the demo target's port |
 
 Both are configuration, not code. The scan gate, permissions, credit rules and audit
@@ -158,6 +160,9 @@ it through the gate after adding that route.
 | `/feedback_safe` | POST form (escaped) | no XSS/SQLi finding (control) |
 | `/cookies_weak` | cookies (also `/cookies_weak_more`) | 7 cookie findings, deduplicated across both pages |
 | `/cookies_ok` | cookies, fully configured | no cookie finding (control) |
+| `/robots.txt` | crawler policy | permissive by default (blocks `/__test__`), no sitemap declared |
+| `/t/form_discover` | GET and POST form actions | the GET action `/t/form_target` is queued for crawling; the POST action `/t/post_target` is never requested |
+| `/t/sitemap_ok.xml`, `/t/sitemap_index.xml`, `/t/sitemap_private.xml` etc. | sitemap fixtures | only used when robots.txt declares them (see the tests) |
 | `/dashboard`, `/dashboard/search` | authenticated pages | reached only with the scan credential |
 | every page except `/headers_ok` | response headers | missing-header findings |
 | `/feedback` also renders | password form, `POST /account/delete` | never submitted (safety screen) |
@@ -165,6 +170,22 @@ it through the gate after adding that route.
 Form-field testing is controlled by `SCANNER_ENABLE_FORM_TESTING` (default `true`).
 Set it to `false` in `backend/.env` to confirm the scan then only tests query
 strings; the scan's `CoverageNote` states which mode was used.
+
+Crawler discovery is controlled by `SCANNER_RESPECT_ROBOTS_TXT` and
+`SCANNER_ENABLE_SITEMAP_DISCOVERY` (both `true`). The controlled shop's default
+`robots.txt` declares no sitemap, so scans behave exactly as before; to see
+sitemap discovery locally, serve a robots.txt that declares one, for example
+
+```
+User-agent: *
+Disallow: /t/private
+Sitemap: http://127.0.0.1:5001/t/sitemap_private.xml
+```
+
+(the fixtures are reachable on whatever origin the shop runs on). The scan's
+`Coverage.Discovery` object, the `CoverageNote`, the PDF and the CSV then report
+which source contributed each URL, what robots.txt excluded, what scope validation
+rejected and whether a crawl limit was reached.
 
 ---
 

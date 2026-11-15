@@ -57,6 +57,10 @@ AUDIT_CATEGORY_ACCESS = "Access Control"
 AUDIT_STATUS_SUCCESS = "Success"
 AUDIT_STATUS_FAILURE = "Failure"
 
+#: Scan audit action recording how the crawler discovered the scan's pages
+#: (JSON description read back by coverage_service).
+AUDIT_ACTION_SCAN_DISCOVERY = "SCAN_DISCOVERY"
+
 # ------------------------------------------------------------- canonical vulnerability names used by modules
 NAME_SQL_INJECTION = "SQL Injection"
 NAME_CROSS_SITE_SCRIPTING = "Cross-Site Scripting (XSS)"

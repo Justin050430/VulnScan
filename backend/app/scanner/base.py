@@ -103,6 +103,11 @@ class DetectionResult:
     #: detection technique label and CVSS v3.1 vector (stored with the evidence)
     technique: Optional[str] = None
     cvss_vector: Optional[str] = None
+    #: request target the signal was observed on.  Recorded in the evidence as
+    #: `REQUEST TARGET: <method> <url>` so a finding's logical identity (P3)
+    #: can name the endpoint even when a form posts somewhere other than the
+    #: page it was served from.
+    target: Optional[str] = None
 
 
 class DetectionModule:

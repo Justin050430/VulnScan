@@ -199,6 +199,7 @@ class SQLInjectionModule(DetectionModule):
                     0.92,
                     method=point.method,
                     parameter=param_name,
+                    target=point.target,
                     payload=payload,
                     technique=TECHNIQUE_ERROR_BASED,
                     evidence=self._error_evidence(
@@ -217,6 +218,7 @@ class SQLInjectionModule(DetectionModule):
                     0.65,
                     method=point.method,
                     parameter=param_name,
+                    target=point.target,
                     payload=payload,
                     technique=TECHNIQUE_ERROR_BASED,
                     evidence=self._error_evidence(
@@ -271,6 +273,7 @@ class SQLInjectionModule(DetectionModule):
                 0.60,
                 method=point.method,
                 parameter=param_name,
+                target=point.target,
                 payload=true_payload,
                 technique=TECHNIQUE_BOOLEAN_DIFFERENTIAL,
                 evidence=self._boolean_evidence(
@@ -329,6 +332,7 @@ class SQLInjectionModule(DetectionModule):
             0.90,
             method=point.method,
             parameter=param_name,
+            target=point.target,
             payload=true_payload,
             technique=TECHNIQUE_CONDITIONAL_ERROR,
             evidence=self._conditional_evidence(
@@ -402,6 +406,7 @@ class SQLInjectionModule(DetectionModule):
                 0.85,
                 method=point.method,
                 parameter=point.name,
+                target=point.target,
                 payload=payload,
                 technique=TECHNIQUE_TIME_BASED,
                 evidence=self._time_evidence(

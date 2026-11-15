@@ -77,7 +77,7 @@
         <div class="live-bar" role="progressbar" aria-label="Pages analysed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="live-bar-fill" data-live="bar-fill"></div></div>
         <div class="live-counters">
           <div><div class="val" data-live="pages">–</div><div class="lbl">Pages analysed / found</div></div>
-          <div><div class="val" data-live="findings">–</div><div class="lbl">Findings so far</div></div>
+          <div><div class="val" data-live="findings">–</div><div class="lbl">Finding records so far</div></div>
           <div><div class="val" data-live="requests">–</div><div class="lbl">HTTP requests issued</div></div>
         </div>
         <div class="live-modules" data-live="by-module"></div>
@@ -248,11 +248,12 @@
     el.innerHTML = U.loading('Loading dashboard...');
     const data = await apiGetJson('/api/scans', { per_page: 100 });
     const scans = data.Scans || [];
-    let findingTotal = 0, highCritical = 0;
+    let findingTotal = 0, issueTotal = 0, highCritical = 0;
     (scans || []).forEach(s => {
       findingTotal += s.FindingCount || 0;
-      const sev = overallRisk(s.SeverityCounts);
-      if (sev === 'High' || sev === 'Critical') highCritical += (s.FindingCount || 0);
+      issueTotal += s.IssueCount || 0;
+      const sev = overallRisk(s.IssueSeverityCounts || s.SeverityCounts);
+      if (sev === 'High' || sev === 'Critical') highCritical += (s.IssueCount || 0);
     });
     const recent = scans.slice(0, 6);
     el.innerHTML = `
@@ -263,9 +264,9 @@
         <div class="card stat-card">${ic('📡','ib-blue')}
           <div><div class="val">${scans.length}</div><div class="lbl">Total Scans</div></div></div>
         <div class="card stat-card">${ic('🪲','ib-red')}
-          <div><div class="val">${highCritical}</div><div class="lbl">High / Critical Findings</div></div></div>
+          <div><div class="val">${highCritical}</div><div class="lbl">High / Critical Issues</div></div></div>
         <div class="card stat-card">${ic('🧾','ib-purple')}
-          <div><div class="val">${findingTotal}</div><div class="lbl">Total Vulnerabilities</div></div></div>
+          <div><div class="val">${issueTotal}</div><div class="lbl">Logical Issues<br/><span style="color:var(--muted)">${findingTotal} finding record(s)</span></div></div></div>
         <div class="card stat-card" style="cursor:pointer" onclick="location.hash='#/scans/new'">
           ${ic('➕','ib-green')}<div><div class="val" style="font-size:16px">New Scan</div><div class="lbl">Start assessment</div></div></div>
       </div>
@@ -298,11 +299,12 @@
     ]);
     const scans = scansR.Scans || [];
     const users = usersR.Users || [];
-    let totalFindings = 0;
+    let totalFindings = 0, totalIssues = 0;
     const counts = { None: 0, Low: 0, Medium: 0, High: 0, Critical: 0 };
     (scans).forEach(s => {
       totalFindings += s.FindingCount || 0;
-      SEV_ORDER.forEach(k => counts[k] += (s.SeverityCounts || {})[k] || 0);
+      totalIssues += s.IssueCount || 0;
+      SEV_ORDER.forEach(k => counts[k] += (s.IssueSeverityCounts || s.SeverityCounts || {})[k] || 0);
     });
     const recentScans = scans.slice(0, 6);
     const recentAudit = (await apiGetJson('/api/audit-logs', { per_page: 8 })).AuditLogs || [];
@@ -312,7 +314,7 @@
       <div class="grid-cards">
         <div class="card stat-card">${ic('👥','ib-blue')}<div><div class="val">${users.length}</div><div class="lbl">Total Users</div></div></div>
         <div class="card stat-card">${ic('📡','ib-purple')}<div><div class="val">${scans.length}</div><div class="lbl">Total Scans</div></div></div>
-        <div class="card stat-card">${ic('🪲','ib-red')}<div><div class="val">${totalFindings}</div><div class="lbl">Total Vulnerabilities</div></div></div>
+        <div class="card stat-card">${ic('🪲','ib-red')}<div><div class="val">${totalIssues}</div><div class="lbl">Logical Issues<br/><span style="color:var(--muted)">${totalFindings} finding record(s)</span></div></div></div>
         <div class="card stat-card">${ic('🛡️','ib-green')}<div><div class="val">${counts.High + counts.Critical}</div><div class="lbl">High / Critical</div></div></div>
       </div>
       <div class="grid-2">
@@ -529,16 +531,16 @@
 
   function scansTable(scans) {
     return `<div class="table-wrap"><table class="tbl">
-      <thead><tr><th>Scan</th><th>Target URL</th><th>Profile</th><th>Status</th><th>Risk</th><th>Findings</th><th>Started</th><th class="actions">Actions</th></tr></thead>
+      <thead><tr><th>Scan</th><th>Target URL</th><th>Profile</th><th>Status</th><th>Risk</th><th>Issues / records</th><th>Started</th><th class="actions">Actions</th></tr></thead>
       <tbody>${scans.map(s => {
-        const risk = overallRisk(s.SeverityCounts);
+        const risk = overallRisk(s.IssueSeverityCounts || s.SeverityCounts);
         return `<tr>
           <td><b>${U.esc(s.ScanName)}</b><div class="mono" style="color:var(--muted)">#${s.ScanID}</div></td>
           <td class="mono">${U.esc(s.TargetURL)}</td>
           <td>${U.esc(s.ScanProfileName || '-')}</td>
           <td>${U.statusBadge(s.Status)}</td>
           <td>${U.sevBadge(risk)}</td>
-          <td>${s.FindingCount || 0} <span style="color:var(--muted)">(on ${s.PageCount || 0} pages)</span></td>
+          <td>${s.IssueCount != null ? s.IssueCount : '-'} <span style="color:var(--muted)">issue(s) · ${s.FindingCount || 0} record(s) on ${s.PageCount || 0} page(s)</span></td>
           <td class="tbl-nowrap">${U.fmtDT(s.StartedAt)}</td>
           <td class="actions"><a class="btn btn-sm btn-secondary" href="#/scans/${s.ScanID}">View</a></td>
         </tr>`;
@@ -595,9 +597,12 @@
     }
     const counts = scan.SeverityCounts || {};
     const findings = scan.Findings || [];
+    const issues = scan.FindingGroups || [];
     const open = findings.filter(f => f.Status === 'Open').length;
     const resolved = findings.filter(f => f.Status === 'Resolved').length;
     const falsePos = findings.filter(f => f.Status === 'False Positive').length;
+    const openIssues = issues.filter(g => g.Status === 'Open').length;
+    const resolvedIssues = issues.filter(g => g.Status === 'Resolved').length;
     const duration = scanDuration(scan.StartedAt, scan.FinishedAt, scan.Status);
     const isRunning = scan.Status === 'Running' || scan.Status === 'Pending';
     const riskColor = (scan.OverallRisk || 'None').toLowerCase();
@@ -621,7 +626,7 @@
         <div class="card stat-card">${ic('🎯', riskColor === 'critical' ? 'ib-red' : riskColor === 'high' ? 'ib-red' : 'ib-amber')}
           <div><div class="val risk-tag">${U.esc(scan.OverallRisk || 'None')}</div><div class="lbl">Overall Risk</div></div></div>
         <div class="card stat-card">${ic('🪲','ib-purple')}
-          <div><div class="val">${findings.length}</div><div class="lbl">Vulnerabilities<br/><span style="color:var(--green)">Open ${open}</span> · Resolved ${resolved} · FP ${falsePos}</div></div></div>
+          <div><div class="val">${issues.length || findings.length}</div><div class="lbl">Logical issues<br/><span style="color:var(--green)">Open ${issues.length ? openIssues : open}</span> · Resolved ${issues.length ? resolvedIssues : resolved}<br/><span style="color:var(--muted)">${findings.length} finding record(s) · Open ${open} · Resolved ${resolved} · FP ${falsePos}</span></div></div></div>
         <div class="card stat-card">${ic('📄','ib-blue')}
           <div><div class="val" style="font-size:17px">${U.statusBadge(scan.Status)}</div><div class="lbl">${scan.Status === 'Completed' ? 'Scan completed successfully' : isRunning ? 'Scanning in progress…' : 'See scan details'}</div></div></div>
         <div class="card stat-card">${ic('⏱️','ib-green')}
@@ -632,6 +637,7 @@
           <div class="row" style="margin-bottom:8px">
             <h3 style="margin:0">Findings</h3>
             ${isRunning ? '<span class="badge running">Live — updates automatically</span>' : ''}
+            <span class="chip-mini">${issues.length} issue(s) · ${findings.length} record(s)</span>
           </div>
           <div class="toolbar">
             <input type="search" class="grow" id="f-search" placeholder="Search vulnerability, URL or technique…"/>
@@ -639,7 +645,7 @@
             <select id="f-class"><option value="">Classification: All</option><option>Confirmed</option><option>Suspected</option><option>Unclassified</option></select>
             <select id="f-tech"><option value="">Technique: All</option></select>
             <select id="f-status"><option value="">Status: All</option><option>Open</option><option>Resolved</option><option>False Positive</option></select>
-            <select id="f-group"><option value="">Group: None</option><option value="vuln">Group: Vulnerability</option><option value="page">Group: Page</option></select>
+            <select id="f-group"><option value="issue">Group: Logical issue (consolidated)</option><option value="">Group: None (records)</option><option value="vuln">Group: Vulnerability</option><option value="page">Group: Page (records)</option></select>
             <button class="btn btn-sm btn-secondary" id="f-reset">Reset</button>
           </div>
           <div id="findings-box">${U.loading()}</div>
@@ -672,6 +678,21 @@
       <div class="card card-pad" style="margin-top:16px">
         <h3>Coverage &amp; Limitations</h3>
         <p style="color:var(--muted);margin:6px 0 0">${U.esc(scan.CoverageNote || 'Coverage details are not available for this scan.')}</p>
+        ${(() => {
+          const d = scan.Coverage && scan.Coverage.Discovery;
+          if (!d || !d.Available) return '';
+          const s = d.Sources || {}, r = d.RobotsTxt || {}, m = d.Sitemaps || {}, x = d.Excluded || {};
+          const samples = [].concat((x.Samples && x.Samples.Robots) || [], (x.Samples && x.Samples.Scope) || []).slice(0, 10);
+          return `<div style="margin-top:10px"><div class="k">Page discovery</div><div class="kv">
+            <span class="k">Links followed</span><span>${s.Links || 0}</span>
+            <span class="k">Sitemap URLs</span><span>${s.Sitemaps || 0}</span>
+            <span class="k">GET form actions</span><span>${s.FormActions || 0}</span>
+            <span class="k">robots.txt</span><span>${r.Respected === false ? 'not consulted' : (r.Fetched ? `consulted (HTTP ${r.HTTPStatus})` : 'not usable')}${(r.RulesApplied || 0) ? ` &middot; ${r.RulesApplied} rule(s)` : ''}</span>
+            <span class="k">Excluded by robots.txt</span><span>${r.BlockedCount || 0}</span>
+            <span class="k">Rejected by scope/safety</span><span>${x.ScopeRejectedCount || 0}</span>
+            <span class="k">Sitemaps parsed</span><span>${m.Parsed || 0}${(m.RejectedCount || 0) ? ` (${m.RejectedCount} rejected)` : ''}</span>
+          </div>${samples.length ? `<div class="k" style="margin-top:8px">Not requested</div><div class="kv">${samples.map(e => `<span class="k mono">${U.esc(e.URL)}</span><span>${U.esc(e.Reason || '')}</span>`).join('')}</div>` : ''}</div>`;
+        })()}
         ${(scan.SkippedPages || []).length ? `<div style="margin-top:10px"><div class="k">Stored but not analysed (${scan.SkippedPages.length})</div><div class="kv">${scan.SkippedPages.map(p => `<span class="k mono">${U.esc(p.URL)}</span><span>HTTP ${p.HTTPStatus == null ? '–' : p.HTTPStatus}</span>`).join('')}</div></div>` : ''}
       </div>
       <div class="card card-pad" style="margin-top:16px">
@@ -698,7 +719,7 @@
       el.querySelector('#f-class').value = '';
       el.querySelector('#f-tech').value = '';
       el.querySelector('#f-status').value = '';
-      el.querySelector('#f-group').value = '';
+      el.querySelector('#f-group').value = 'issue';
       renderFiltered();
     });
     function currentFilters() {
@@ -714,6 +735,11 @@
     function renderFiltered() {
       const box = el.querySelector('#findings-box');
       const f = currentFilters();
+      if (f.group === 'issue') {
+        box.innerHTML = issueTable(issues.filter(g => matchesIssue(g, f)), id);
+        wireIssueRows(box);
+        return;
+      }
       const filtered = findings.filter(x =>
         (!f.q || (x.VulnerabilityName || '').toLowerCase().includes(f.q) ||
           (x.URL || '').toLowerCase().includes(f.q) ||
@@ -726,6 +752,19 @@
         ? findingsGrouped(filtered, id, f.group)
         : findingsTable(filtered, id, null);
       wireFindingRows(box);
+    }
+    /* Issue-level filters use the group's worst-member severity and its
+       derived status, so filtering never disagrees with what is displayed. */
+    function matchesIssue(g, f) {
+      const hay = [g.VulnerabilityName, g.GroupKey,
+        (g.Parameters || []).join(' '), (g.AffectedURLs || []).join(' ')]
+        .join(' ').toLowerCase();
+      const techniques = (g.Locations || []).map(l => l.Technique).filter(Boolean);
+      return (!f.q || hay.includes(f.q)) &&
+        (!f.sev || g.Severity === f.sev) &&
+        (!f.cls || g.Classification === f.cls) &&
+        (!f.tech || techniques.includes(f.tech)) &&
+        (!f.status || g.Status === f.status);
     }
     renderFiltered();
     el.querySelector('#dl-pdf').addEventListener('click', () => {
@@ -769,9 +808,11 @@
     // delegate click toggles handled by wireFindingRows
   }
 
-  function findingsTable(findings, scanId, info) {
+  function findingsTable(findings, scanId) {
     if (!findings.length) return U.empty('No findings match your filters.');
-    return `<div class="table-wrap"><table class="tbl">
+    // A minimum width keeps the columns readable instead of letting `.mono`
+    // URLs wrap character-by-character; `.table-wrap` scrolls horizontally.
+    return `<div class="table-wrap"><table class="tbl" style="min-width:900px">
       <thead><tr><th>Vulnerability</th><th>Severity</th><th>Evidence</th><th>Risk</th><th>Status</th><th>Location</th><th>Actions</th></tr></thead>
       <tbody>${findings.map(f => `
         <tr class="finding-row" data-id="${f.FindingID}">
@@ -780,18 +821,24 @@
           <td><span class="badge ${(f.Classification || '').toLowerCase()}">${U.esc(f.Classification || '-')}</span><div style="color:var(--muted);font-size:11px">${f.Confidence != null ? Math.round(Number(f.Confidence) * 100) + '% confidence' : ''}</div></td>
           <td>${f.RiskScore != null ? Number(f.RiskScore).toFixed(1) : '-'}</td>
           <td>${U.statusBadge(f.Status)}</td>
-          <td class="mono">${U.esc(f.URL || '')}${f.Parameter ? ' <span class="chip-mini">param: ' + U.esc(f.Parameter) + '</span>' : ''}</td>
-          <td class="actions">
-            <button class="btn btn-xs btn-secondary" data-detail="1" title="Details">👁 Detail</button>
-            <button class="btn btn-xs btn-secondary" data-retest="1" title="Re-run the original detection against this page to verify the finding">🔁 Retest</button>
-            <select class="status-select" data-status="1">
-              <option value="Open" ${f.Status === 'Open' ? 'selected' : ''}>Open</option>
-              <option value="Resolved" ${f.Status === 'Resolved' ? 'selected' : ''}>Resolved</option>
-              <option value="False Positive" ${f.Status === 'False Positive' ? 'selected' : ''}>False Positive</option>
-            </select>
-          </td>
+          <td class="mono">${U.esc(f.URL || '')}${f.Parameter ? ' <span class="chip-mini">param: ' + U.esc(f.Parameter) + '</span>' : ''}${f.GroupKey ? ` <span class="chip-mini" data-goto-group="${U.esc(f.GroupKey)}" title="Logical issue: ${U.esc(f.GroupKey)}">issue: ${U.esc(shortKey(f.GroupKey))}</span>` : ''}</td>
+          <td class="actions">${findingActions(f)}</td>
         </tr>
-        <tr class="detail-row" id="detail-${f.FindingID}" style="display:none">
+        ${findingDetailRow(f)}`).join('')}</tbody></table></div>`;
+  }
+
+  function findingActions(f) {
+    return `<button class="btn btn-xs btn-secondary" data-detail="1" title="Details">👁 Detail</button>
+      <button class="btn btn-xs btn-secondary" data-retest="1" title="Re-run the original detection against this page to verify the finding">🔁 Retest</button>
+      <select class="status-select" data-status="1">
+        <option value="Open" ${f.Status === 'Open' ? 'selected' : ''}>Open</option>
+        <option value="Resolved" ${f.Status === 'Resolved' ? 'selected' : ''}>Resolved</option>
+        <option value="False Positive" ${f.Status === 'False Positive' ? 'selected' : ''}>False Positive</option>
+      </select>`;
+  }
+
+  function findingDetailRow(f) {
+    return `<tr class="detail-row" id="detail-${f.FindingID}" style="display:none">
           <td colspan="7">
             <div class="card" style="padding:12px;box-shadow:none;border-color:var(--border)">
               <div style="font-weight:700">${U.esc(f.VulnerabilityName)} · ${U.esc(f.Severity)} · ${U.esc(f.Classification || '')} (CVSS ${f.RiskScore != null ? Number(f.RiskScore).toFixed(1) : '-'})</div>
@@ -810,11 +857,130 @@
               ${f.Recommendation ? `<p style="margin-top:6px"><b>Remediation:</b> ${U.esc(f.Recommendation)}</p>` : ''}
             </div>
           </td>
-        </tr>`).join('')}</tbody></table></div>`;
+        </tr>`;
   }
 
-  /* Groups findings into collapsible sections (C2).  Each group keeps the
-     regular findings table, so detail toggles and status updates are unchanged. */
+  /* Location table used inside an expanded issue: the vulnerability heading and
+     group key are already shown, so it focuses on the per-record facts. */
+  function locationTable(locations, scanId) {
+    if (!locations.length) return U.empty('No records in this issue.');
+    return `<div class="table-wrap"><table class="tbl" style="min-width:820px">
+      <thead><tr><th>Location</th><th>Method</th><th>Severity</th><th>Evidence</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>${locations.map(f => `
+        <tr class="finding-row" data-id="${f.FindingID}">
+          <td class="mono">${U.esc(f.URL || '')}${f.Parameter ? ' <span class="chip-mini">param: ' + U.esc(f.Parameter) + '</span>' : ''}</td>
+          <td>${U.esc(f.RequestMethod || 'GET')}</td>
+          <td>${U.sevBadge(f.Severity)}</td>
+          <td><span class="badge ${(f.Classification || '').toLowerCase()}">${U.esc(f.Classification || '-')}</span><div style="color:var(--muted);font-size:11px">${f.Confidence != null ? Math.round(Number(f.Confidence) * 100) + '% confidence' : ''}</div></td>
+          <td>${U.statusBadge(f.Status)}</td>
+          <td class="actions">${findingActions(f)}</td>
+        </tr>
+        ${findingDetailRow(f)}`).join('')}</tbody></table></div>`;
+  }
+
+  /* One collapsible row per logical issue (P3).  Expanding it shows the
+     underlying finding records with their own evidence, status and per-record
+     Retest / Detail / Status controls, so page-level investigation is intact. */
+  function issueTable(issues, scanId) {
+    if (!issues.length) return U.empty('No issues match your filters.');
+    return issues.map(g => {
+      const counts = g.StatusCounts || {};
+      const conditions = g.ConditionCounts || {};
+      const observedOnly = (g.AffectedURLs || []).length > (g.PageCount || 0);
+      return `<details class="f-group" data-group="${U.esc(g.GroupKey)}" data-records="${g.RecordCount}">
+        <summary>
+          <span class="g-title">${U.esc(g.VulnerabilityName || 'Issue')}${(g.Parameters || []).length ? ' · ' + U.esc(g.Parameters.join(', ')) : ''}</span>
+          <span class="g-meta">${g.AffectedURLCount} affected URL(s) · ${g.RecordCount} record(s)</span>
+          ${U.sevBadge(g.Severity)}
+          ${U.statusBadge(g.Status)}
+          ${g.Mixed ? `<span class="badge suspected">Mixed</span>` : ''}
+        </summary>
+        <div style="padding:8px 0 4px">
+          <div class="toolbar" style="gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            <button class="btn btn-sm btn-secondary" data-group-retest="1">🔁 Retest all ${g.RecordCount} record(s)</button>
+            <select class="status-select" data-group-status="1">
+              <option value="">Set status for all ${g.RecordCount} record(s)…</option>
+              <option value="Open">Open</option>
+              <option value="Resolved">Resolved</option>
+              <option value="False Positive">False Positive</option>
+            </select>
+            ${Object.entries(counts).filter(([, n]) => n).map(([k, n]) => `<span class="chip-mini">${U.esc(k)}: ${n}</span>`).join(' ')}
+            ${Object.entries(conditions).filter(([, n]) => n).map(([k, n]) => `<span class="chip-mini">${U.esc(k)}: ${n}</span>`).join(' ')}
+          </div>
+          <div class="mono" style="font-size:11.5px;color:var(--muted)">${U.esc(g.GroupKey)}</div>
+          ${observedOnly ? `<div style="margin:6px 0"><b>Observed URLs (${g.AffectedURLs.length}):</b><div class="mono" style="font-size:11.5px">${g.AffectedURLs.map(u => U.esc(u)).join('<br/>')}</div></div>` : ''}
+          ${locationTable(g.Locations || [], scanId)}
+        </div>
+      </details>`;
+    }).join('');
+  }
+
+  /* Group-level actions: retest the whole issue (bounded server-side) or apply
+     one status to every underlying record after an explicit confirmation. */
+  function wireIssueRows(box) {
+    const scanId = parseInt(location.hash.split('/')[2], 10);
+    box.querySelectorAll('button[data-group-retest]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const details = btn.closest('details.f-group');
+        const key = details.dataset.group;
+        const label = btn.textContent;
+        btn.disabled = true; btn.textContent = '⏳ Re-verifying…';
+        try {
+          const data = await API.post(
+            `/api/scans/${scanId}/finding-groups/${encodeURIComponent(key)}/retest`, {});
+          const r = data.Retest || {};
+          U.toast(
+            `Group retest: ${r.AggregateVerdict} — ${r.Completed} verified, ` +
+            `${r.Failed} failed, ${r.NotAttempted} not attempted` +
+            (r.Partial ? ' (partial coverage)' : ''),
+            r.AggregateVerdict === 'Resolved' ? 'ok'
+              : r.AggregateVerdict === 'Still Detected' ? 'err' : 'info');
+        } catch (err) {
+          U.toast(err.message, 'err');
+        } finally {
+          btn.disabled = false; btn.textContent = label;
+          location.hash = '#/scans/' + scanId + '?r=' + Date.now();
+        }
+      });
+    });
+    box.querySelectorAll('select[data-group-status]').forEach(sel => {
+      sel.addEventListener('click', e => e.stopPropagation());
+      sel.addEventListener('change', async () => {
+        const details = sel.closest('details.f-group');
+        const key = details.dataset.group;
+        const status = sel.value;
+        const count = details.dataset.records;
+        if (!status) return;
+        const ok = window.confirm(
+          `Apply "${status}" to ALL ${count} finding record(s) of this issue?\n\n` +
+          'This updates every underlying finding. Individual records keep their ' +
+          'own controls and can be changed afterwards.');
+        if (!ok) { sel.value = ''; return; }
+        try {
+          const data = await API.put(
+            `/api/scans/${scanId}/finding-groups/${encodeURIComponent(key)}`,
+            { status });
+          U.toast(`${data.Updated} record(s) updated — issue now reports ${data.Group.Status}.`,
+            'ok');
+        } catch (err) {
+          U.toast(err.message, 'err');
+        } finally {
+          location.hash = '#/scans/' + scanId + '?r=' + Date.now();
+        }
+      });
+    });
+    wireFindingRows(box);
+  }
+
+  function shortKey(key) {
+    const text = String(key || '').replace(/^v1:/, '');
+    return text.length > 40 ? text.slice(0, 37) + '…' : text;
+  }
+
+  /* Groups records into collapsible sections by vulnerability or page (C2).
+     Each group keeps the regular findings table, so detail toggles and status
+     updates are unchanged; this remains the record-based views. */
   function findingsGrouped(findings, scanId, mode) {
     if (!findings.length) return U.empty('No findings match your filters.');
     const groups = new Map();
@@ -878,6 +1044,23 @@
   }
 
   function wireFindingRows(box) {
+    box.querySelectorAll('[data-goto-group]').forEach(chip => {
+      chip.style.cursor = 'pointer';
+      chip.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const select = document.getElementById('f-group');
+        if (select) {
+          select.value = 'issue';
+          select.dispatchEvent(new Event('change'));
+        }
+        const target = box.querySelector(
+          `details.f-group[data-group="${CSS.escape(chip.dataset.gotoGroup)}"]`);
+        if (target) {
+          target.open = true;
+          target.scrollIntoView({ block: 'nearest' });
+        }
+      });
+    });
     box.querySelectorAll('button[data-detail]').forEach(b => {
       b.addEventListener('click', () => {
         const row = b.closest('tr.finding-row');
