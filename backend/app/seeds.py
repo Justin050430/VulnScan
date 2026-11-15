@@ -129,6 +129,46 @@ VULNERABILITIES = [
         "IsEnabled": True,
     },
     {
+        "Name": "Insecure Cookie Attributes",
+        "OWASPCategory": "Security Misconfiguration",
+        "Description": (
+            "Cookies are set without the attributes that restrict how the browser "
+            "stores and sends them. A cookie missing Secure can be sent over "
+            "cleartext, a cookie missing HttpOnly is readable by page script, and a "
+            "cookie missing SameSite is attached to cross-site requests."
+        ),
+        "Impact": (
+            "Session cookies become reachable through a network attacker or an XSS "
+            "flaw, and cookies lacking SameSite widen the exposure to cross-site "
+            "request forgery. Ordinary preference cookies have a much smaller impact."
+        ),
+        "Recommendation": (
+            "Set session cookies with HttpOnly, Secure and SameSite=Lax (or Strict); "
+            "use SameSite=None only together with Secure; and honour the __Host- and "
+            "__Secure- prefix rules when those names are used."
+        ),
+        "SecurityCodingPractice": (
+            "Configure cookie attributes centrally in the framework's session "
+            "configuration and assert them in automated tests.\n"
+            "\n"
+            "Unsafe:\n"
+            "response.set_cookie('session', token)   # no attributes\n"
+            "response.set_cookie('pref', value, samesite='None')  # rejected by browsers\n"
+            "\n"
+            "Safe:\n"
+            "response.set_cookie(\n"
+            "    'session', token, httponly=True, secure=True,\n"
+            "    samesite='Lax', path='/',\n"
+            ")"
+        ),
+        "OWASPReference": "A05:2021 - Security Misconfiguration",
+        "ReferenceURL": (
+            "https://cheatsheetseries.owasp.org/cheatsheets/"
+            "Session_Management_Cheat_Sheet.html"
+        ),
+        "IsEnabled": True,
+    },
+    {
         "Name": "Broken Access Control (IDOR)",
         "OWASPCategory": "Access Control",
         "Description": (
@@ -237,7 +277,11 @@ DEFAULT_PROFILES = [
         "FollowExternalLinks": False,
         "RequestDelayMs": 150,
         "MaxPages": 10,
-        "Modules": ["Cross-Site Scripting (XSS)", "Missing HTTP Security Headers"],
+        "Modules": [
+            "Cross-Site Scripting (XSS)",
+            "Missing HTTP Security Headers",
+            "Insecure Cookie Attributes",
+        ],
     },
     {
         "Name": "OWASP Top 10 Full Scan",
@@ -249,6 +293,7 @@ DEFAULT_PROFILES = [
             "SQL Injection",
             "Cross-Site Scripting (XSS)",
             "Missing HTTP Security Headers",
+            "Insecure Cookie Attributes",
         ],
     },
     {
@@ -304,6 +349,37 @@ def _seed_profiles():
     return created
 
 
+def _reconcile_default_profiles():
+    """
+    Attach default modules that a pre-existing default profile is missing.
+
+    `_seed_profiles` skips profiles that already exist, so a database seeded by
+    an older release never receives a module added to a default profile later.
+    This pass is additive and idempotent: it only adds modules listed in
+    `DEFAULT_PROFILES`, never removes anything, and only touches profiles whose
+    name matches a default profile.  User-created profiles are never modified.
+    """
+    changes = []
+    for item in DEFAULT_PROFILES:
+        profile = ScanProfile.query.filter_by(Name=item["Name"]).first()
+        if profile is None:
+            continue
+        present = {module.VulnerabilityID for module in profile.modules}
+        for vuln_name in item["Modules"]:
+            vuln = Vulnerability.query.filter_by(Name=vuln_name).first()
+            if vuln is None or vuln.VulnerabilityID in present:
+                continue
+            db.session.add(
+                ProfileModule(
+                    ScanProfileID=profile.ScanProfileID,
+                    VulnerabilityID=vuln.VulnerabilityID,
+                )
+            )
+            present.add(vuln.VulnerabilityID)
+            changes.append(f"{profile.Name} += {vuln.Name}")
+    return changes
+
+
 def _seed_users():
     """Create the default Administrator and Developer accounts if absent."""
     created = []
@@ -347,6 +423,7 @@ def run_seed():
     vulns = _seed_vulnerabilities()
     profiles = _seed_profiles()
     users = _seed_users()
+    reconciled = _reconcile_default_profiles()
     db.session.commit()
 
     lines = []
@@ -356,6 +433,8 @@ def run_seed():
         lines.append(f"  scan profiles: {', '.join(profiles)}")
     if users:
         lines.append(f"  users: {', '.join(users)}")
+    if reconciled:
+        lines.append(f"  default profile modules added: {', '.join(reconciled)}")
     if not lines:
         lines.append("  nothing to do (already seeded)")
     print("Seed complete:")

@@ -93,6 +93,17 @@ class Config:
     SCANNER_ENABLE_FORM_TESTING = _as_bool(
         os.getenv("SCANNER_ENABLE_FORM_TESTING", "true")
     )
+    # Honour the target's robots.txt crawl policy.  This can only remove URLs
+    # from a crawl (scope and SSRF rules always apply); the start URL is always
+    # requested because target ownership is established separately.
+    SCANNER_RESPECT_ROBOTS_TXT = _as_bool(
+        os.getenv("SCANNER_RESPECT_ROBOTS_TXT", "true")
+    )
+    # Widen discovery with the target's sitemaps (robots.txt Sitemap
+    # declarations, one level of sitemap-index nesting) in addition to links.
+    SCANNER_ENABLE_SITEMAP_DISCOVERY = _as_bool(
+        os.getenv("SCANNER_ENABLE_SITEMAP_DISCOVERY", "true")
+    )
     # Run scans in a background worker thread (async). Set false for tests.
     SCAN_ASYNC = _as_bool(os.getenv("SCAN_ASYNC", "true"))
     # Startup recovery: fail scans orphaned by a previous process (F1).

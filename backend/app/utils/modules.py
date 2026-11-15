@@ -11,6 +11,7 @@ added simply by registering a new name here and shipping an implementation.
 """
 from app.utils.constants import (
     NAME_CROSS_SITE_SCRIPTING,
+    NAME_INSECURE_COOKIES,
     NAME_MISSING_SECURITY_HEADERS,
     NAME_SQL_INJECTION,
 )
@@ -18,12 +19,14 @@ from app.utils.constants import (
 MODULE_SQLI = "sqli"
 MODULE_XSS = "xss"
 MODULE_HTTP_HEADERS = "http_headers"
+MODULE_COOKIES = "cookies"
 
 # module key -> canonical vulnerability name
 MODULE_NAMES = {
     MODULE_SQLI: NAME_SQL_INJECTION,
     MODULE_XSS: NAME_CROSS_SITE_SCRIPTING,
     MODULE_HTTP_HEADERS: NAME_MISSING_SECURITY_HEADERS,
+    MODULE_COOKIES: NAME_INSECURE_COOKIES,
 }
 
 # canonical vulnerability name -> module key
@@ -62,6 +65,10 @@ MODULE_TECHNIQUES = {
     ],
     MODULE_HTTP_HEADERS: [
         "HTTP security header policy evaluation (per rule)",
+    ],
+    MODULE_COOKIES: [
+        "Set-Cookie attribute policy evaluation (per cookie and rule)",
+        "session/authentication cookies distinguished from ordinary cookies",
     ],
 }
 

@@ -785,3 +785,405 @@ rotation, authentication required for preview/accept, preview content, mismatch 
 missing tokens, project invitations, re-invite after revocation, member listing,
 configurable TTL/base URL and the Google `next` state round trip.
 Full suite: **290 passed**.
+
+---
+
+## Enhancement round 9 - report and coverage accuracy (P0, 2026-11-14)
+
+The PDF limitations paragraph was a hard-coded list that had drifted from the
+product: it claimed authenticated pages were never tested (false since temporary
+scan credentials shipped) and contradicted itself about headers, cookies and
+parameters. The scan-detail API maintained a *second* prose summary, so the two
+could disagree.
+
+**What changed**
+- New `app/services/coverage_service.py` is the single source of truth. It
+  separates four tiers that must not be conflated:
+  * **supported** - implemented detection modules (`ModulesSupported`);
+  * **enabled** - profile modules that are enabled and implemented
+    (`ModulesEnabled`);
+  * **executed** - modules that ran, i.e. at least one analysed page
+    (`ModulesExecuted`, with `NotExecutedReason` when nothing ran);
+  * **completed** - the scan reached `Completed`, so executed modules were not
+    cut short.
+  Knowledge-base entries without a detection module are reported separately as
+  `ModulesNotImplemented` and are never presented as tested.
+- Authentication is derived from durable records only: no credential binding ->
+  `Anonymous`; binding with a recorded login failure -> `AuthenticationFailed`
+  (with the reason, never a secret); otherwise `Authenticated`. The sentence
+  also distinguishes a completed authenticated scan from one that failed
+  mid-way, so protected coverage is never overclaimed.
+- `scan_service.get_scan_detail` now renders `CoverageNote` from the shared
+  structure and exposes the structured `Coverage` object (additive API field).
+- `report_service` renders the same structure in the PDF ("Detection modules
+  available / enabled / executed", authentication sentence, limitations) and
+  adds `COVERAGE`, `TESTED QUERY PARAMETERS` and `LIMITATIONS` sections to the
+  CSV. The PDF and CSV therefore cannot contradict the API or each other.
+- Limitations are generated per scan: forms statement depends on
+  `SCANNER_ENABLE_FORM_TESTING` **and** on whether any page was analysed;
+  time-based statement depends on `SCANNER_ENABLE_TIME_BASED`; the auth
+  statement depends on the authentication mode.
+
+**Defects found during verification (and fixed)**
+- The first wording produced "No detection module ran because no page could be
+  analysed, so no detection module ran" - a duplicated clause.
+- With zero analysed pages the note still claimed form fields were tested;
+  it now states that no form or parameter was tested.
+
+**Verification**
+Real PDFs were generated from a controlled target and read back with PyMuPDF:
+anonymous (11/11 pages), authenticated (3/3 pages via the credential flow) and
+failed authentication (0 pages). The failed-auth report states that
+authentication was attempted and failed and that no form or parameter was
+tested; the authenticated report states that pages reachable by the test
+account were included.
+
+**Tests**
+`test_reports_content.py` (+8): anonymous/authenticated wording, no
+contradictory statements, enabled vs executed modules, disabled module,
+unimplemented KB entry, zero-analysed-page, forms-disabled, and CSV/PDF/API
+agreement. `test_trust_credentials.py` (+2): authenticated PDF content and
+failed-auth note/report accuracy. Full suite: **303 passed**.
+
+---
+
+## Enhancement round 10 - cookie attribute assessment (P1, 2026-11-14)
+
+Cookies protect the session, but the scanner never looked at them. A session
+cookie without `HttpOnly`, `Secure` or `SameSite` is one of the most common
+real-world misconfigurations, so this round adds a dedicated detection module.
+
+**What changed**
+- New `app/scanner/cookie_header.py` parses `Set-Cookie` headers. The cookie
+  value is discarded during parsing, so no later code path can leak it. The
+  attribute list is split on `;` only: `Expires` contains a comma, so splitting
+  a folded header on commas would corrupt the attributes and invent findings.
+- `HttpClient` now records every `Set-Cookie` header of every hop separately in
+  `ScanResponse.set_cookies` (via `raw.headers.getlist`). Redirect responses are
+  included, because a login redirect is a common place to set a session cookie.
+  When only the folded header is available it is kept as one entry rather than
+  being split.
+- New `app/scanner/modules/cookies.py` with five rules: missing `Secure` on an
+  HTTPS response, missing `HttpOnly`, missing `SameSite`, `SameSite=None`
+  without `Secure`, and `__Host-`/`__Secure-` prefix-contract violations.
+- Cookie purpose is classified from the name (whole-token match plus well-known
+  markers such as `session`, `jsessionid`, `auth`, `token`, `csrf`). Severity
+  follows the purpose: a session cookie missing `HttpOnly` is Medium (4.2),
+  an ordinary cookie missing `HttpOnly` is Low (3.1) and its evidence states
+  that exploitation requires a same-origin XSS flaw. Cookies that are fully
+  configured produce nothing.
+- New knowledge-base entry `Insecure Cookie Attributes` (kept separate from
+  `Missing HTTP Security Headers`, same OWASP A05 category) and registration in
+  the module registry/technique list.
+- `PageInfo.scan_state` lets a module share state across the pages of one scan.
+  The cookie module reports each (cookie name, rule) pair once per scan; the
+  evidence names the page where it was first observed and states the scope.
+- `_reconcile_default_profiles()` in `seeds.py` attaches default modules that a
+  pre-existing default profile is missing. It is additive, idempotent, matches
+  profiles by name from `DEFAULT_PROFILES` only, and never touches user-created
+  profiles. `run_seed()` reports what it added.
+- Controlled target gained `/cookies_weak`, `/cookies_weak_more` (same cookie on
+  a second page, for de-duplication) and `/cookies_ok` (fully configured).
+  Cookies carry a marker value that tests assert never appears anywhere.
+
+**Verified against the real local database**
+`localhost\flask seed` against a database seeded before this round reported:
+`default profile modules added: Quick Scan += Insecure Cookie Attributes,
+OWASP Top 10 Full Scan += Insecure Cookie Attributes` - and nothing else.
+A full scan of the test shop then produced exactly 7 cookie findings (4 cookies,
+deduplicated across two pages), with the expected severities, and the marker
+value was absent from the findings JSON, the CSV and the PDF.
+
+**Known limitations**
+- `Secure` is only assessed on HTTPS responses; on plain HTTP it is not a
+  weakness of the cookie and nothing is reported or listed as missing.
+- Purpose classification is name-based; a session cookie with an opaque name
+  (e.g. `c1`) is treated as ordinary and gets the Low severity.
+- De-duplication keeps the first observing URL, so later pages that set the same
+  cookie are described by the SCOPE statement rather than listed individually.
+  A full multi-URL representation is part of the deferred P3 design.
+- A cookie with several violated rules is re-tested per finding, but the retest
+  matches on the cookie name, so the verdict covers all rules on that cookie.
+- The prefix rules are evaluated from the header only; a `__Host-` cookie served
+  over a non-HTTPS origin cannot be honoured by a browser regardless.
+
+**Tests**
+New `test_cookie_module.py` (30): header parsing incl. the `Expires` comma,
+value never retained, multiple headers parsed independently, malformed headers
+skipped, purpose classification, the five rules, session vs ordinary severity,
+secure cookies producing nothing, cross-page de-duplication, retest lifecycle,
+value absence from findings/evidence/CSV/PDF/logs, existing modules still firing,
+KB separation, default-profile membership, seed reconciliation and repeated-seed
+idempotency. Full suite: **333 passed**.
+
+## Enhancement round 11 - wider crawler discovery (P2, 2026-11-14)
+
+Until now the crawl followed links only. Real applications expose pages that are
+never linked (search results, deep product pages) but are listed in `sitemap.xml`
+or in the `Sitemap:` lines of `robots.txt`, and a GET search form's action is the
+entry point to many of them. This round widens discovery without loosening a
+single existing safety control.
+
+**What changed**
+- New `app/scanner/robots.py`: bounded robots.txt parser (RFC 9309 matching -
+  longest path wins, `Allow` wins ties, `*` and `$` supported) that keeps only
+  the groups applying to this crawler, plus `fetch_policy()` which requests
+  `<origin>/robots.txt` through the scan's own HTTP client. An HTML soft-404, a
+  size over 512 KB or an unreachable file yields an empty policy (RFC: no policy
+  = no restrictions) with the reason recorded.
+- New `app/scanner/sitemap.py`: `parse_sitemap()` understands `urlset` and
+  `sitemapindex` only, rejects DTD/entity documents (so XML bombs are
+  impossible), malformed XML and unknown roots with a reason, reads only direct
+  children of the root (no deep recursion) and caps size (1 MB), URLs per file
+  (500) and index children (10). `MAX_SITEMAPS_PER_CRAWL` bounds files per scan.
+- `Crawler` gained `respect_robots`, `discover_sitemaps` and
+  `discover_form_actions` (all default on, config-backed) and one acceptance gate,
+  `_accept()`, that every candidate URL passes whatever discovered it:
+  normalise → static/binary filter → sign-out skip → target scope → SSRF
+  validator → robots.txt → duplicate check. `_validate_scope()` deliberately
+  calls `HttpClient.url_validator`, i.e. exactly the function used for redirect
+  hops, so a sitemap cannot reach anything a redirect could not.
+- Queue order preserves existing behaviour: the start URL, then the start page's
+  links, then sitemap URLs, then GET form actions as pages are analysed. Sitemap
+  URLs are never queued when `MaxDepth` is 0, so discovery cannot bypass the
+  depth budget.
+- Form actions are taken from the already-parsed forms (no extra HTML parsing):
+  only `GET` actions are fetched, and only from the same safe subset the modules
+  use (no password/file forms, no destructive actions). Forms are never
+  submitted; POST actions are never requested.
+- Discovery provenance is stored as a `SCAN_DISCOVERY` audit event with a JSON
+  description (bounded to 20 KB, per-category samples capped at 25), so no
+  approved entity or column changed and no migration was needed.
+  `coverage_service` reads it back into `Coverage.Discovery` and derives
+  scan-specific limitation statements from it (page limit reached, robots.txt
+  exclusions, scope rejections, unusable sitemaps, sitemap truncation) plus one
+  discovery sentence in `CoverageNote`. The PDF, CSV and the scan-detail UI
+  render the same structure.
+- `config.py` adds `SCANNER_RESPECT_ROBOTS_TXT` and
+  `SCANNER_ENABLE_SITEMAP_DISCOVERY` (both true).
+- Controlled target gained `/robots.txt` (permissive by default, overridable in
+  tests), sitemap fixtures (`/t/sitemap_ok.xml`, `_index`, `_child`,
+  `_deep_index`, `_private`, `_bad`, `_entity`, `_big`, `_flood`, `_redirect`)
+  and pages with per-route request counters so "was this URL fetched?" is
+  answered by evidence.
+
+**robots.txt is a policy, not authorisation**
+A `Disallow` is honoured by default, but it can only remove URLs. The start URL is
+always requested (ownership is established by the Trust Boundary, not by the
+target's crawl preferences), a permissive policy never widens the scope, and the
+SSRF/scope checks apply to robots.txt, sitemaps, sitemap index children and every
+redirect hop alike. `SCANNER_RESPECT_ROBOTS_TXT=false` disables only the policy
+filter - verified by a test that still blocks out-of-scope hosts with robots.txt
+ignored.
+
+**Verified end-to-end against the local stack**
+A real scan of the controlled target (robots.txt declaring a sitemap that mixed
+new pages, an already-linked page, a robots-disallowed page and an out-of-scope
+URL) reported `URLsFound: 5, URLsQueued: 2`, the disallowed page and the external
+URL recorded with their reasons, the external host never contacted, and the
+target's own counters showing the disallowed page was never requested. The same
+scan still produced SQL Injection (4), XSS (4), HTTP header (75) and cookie (7)
+findings, i.e. discovery did not disturb detection. The generated PDF contains
+`Page discovery: 1 start URL, 13 followed link(s), 2 sitemap URL(s), 0 GET form
+action(s) queued.` plus the robots.txt/sitemap lines and both exclusions; the CSV
+has a `PAGE DISCOVERY` section with the same numbers.
+
+**Known limitations**
+- Discovery provenance is per scan, not per page: `DiscoveredPage` has no source
+  column (and adding one would change a frozen entity), so the report says how
+  many URLs each source contributed, not which source found a given page.
+- `Set-Cookie`-style ambiguity does not exist here, but robots.txt is parsed leniently:
+  `Crawl-delay` and non-standard directives are ignored, and only groups naming
+  `*` or `vulnscan` apply.
+- Sitemaps listed in a *sitemap* (rather than robots.txt) are followed one level
+  deep; a second index level is rejected by design.
+- Form-action discovery inherits the form screen: a GET form containing a
+  password field or a destructive action is not used as a discovery source.
+- The default `/sitemap.xml` probe costs one request on sites that have none; the
+  404 is recorded as a rejected sitemap and is not reported as a limitation.
+- URLs discovered but not queued because the page budget was exhausted are
+  counted as "page limit reached", not enumerated individually.
+
+**Tests**
+New `test_crawler_discovery.py` (33): parser units for robots.txt (groups,
+wildcards, `$` anchor, empty `Disallow`, soft-404 rejection) and sitemaps
+(urlset, index, caps, malformed, DTD/entities, oversized), the acceptance gate
+(scope, SSRF, static, duplicate, skip route, robots), robots `Sitemap:` extraction,
+`Disallow` enforcement with request counters, index nesting and the rejected second
+level, out-of-scope sitemap URLs, external sitemap declarations, blocked redirects,
+malformed/oversized/flooding sitemaps, duplicate URLs across links and sitemaps,
+GET form-action discovery, POST exclusion, relative action resolution, page-budget
+and depth-0 enforcement, robots disabled by configuration, SQLi/XSS/header/cookie
+regression under wider discovery, and CSV/PDF discovery content. Full suite:
+**366 passed**.
+
+## Enhancement round 12 - finding consolidation (P3, checkpoint 1, 2026-11-15)
+
+A 16-page scan stored 90 findings for 19 distinct problems. This round adds the
+logical identity that lets the platform present one issue per problem **without
+touching a single stored finding** (design approved as "Option B+").
+
+**What changed (checkpoint 1: identity and API only)**
+- New `app/services/grouping_service.py`: a pure, deterministic identity and
+  aggregation layer.
+  - `normalise_endpoint()` - lower-case scheme/host, default ports dropped,
+    non-default ports kept, path case preserved, duplicate slashes collapsed,
+    query/fragment stripped, percent-encoding normalised (unreserved characters
+    decoded, remaining hex upper-cased).
+  - `identity_key()` - `v1:http_headers:<rule>`,
+    `v1:cookies:<rule>:<name>`, `v1:sqli|xss:<method>:<origin><path>:<parameter>`,
+    and `v1:unidentified:<vuln>:<finding>` whenever a mandatory component is
+    missing, so unknown data never merges.
+  - `build_groups()` - per-issue view with worst-member severity/risk/confidence,
+    `ConditionCounts` (header missing vs weak), `RecordCount`,
+    `AffectedURLCount`/`AffectedURLs`, `PageCount`, derived
+    `Status`/`StatusCounts`/`Mixed`, `LatestRetestVerdict` (worst wins) and
+    `Locations` carrying every record with its own evidence and retest history.
+  - `issue_counts_for_scans()` - list-view counts reading only the columns the
+    identity needs.
+- Evidence identity lines (new findings only; older evidence keeps working
+  through fallbacks):
+  - `RULE ID: <rule>` in cookie evidence,
+  - `REQUEST TARGET: <METHOD> <url>` in SQLi/XSS evidence, written centrally in
+    `engine._store_finding()` from a new `DetectionResult.target` so every
+    detection technique records it.
+- Cookie findings now preserve **every** observing URL. The module records each
+  `(cookie name, rule) -> [urls]` observation in the scan's shared state;
+  `engine._finalise_cookie_observations()` writes one block into the existing
+  finding's evidence after the crawl (`OBSERVATION COUNT:`, one `OBSERVED URL:`
+  line per page). No extra Finding rows and no cookie values.
+- `GET /api/scans/{id}` gains `FindingGroups`, `IssueCount`,
+  `IssueSeverityCounts` and per-finding `GroupKey`/`GroupSize`;
+  `GET /api/scans` gains `IssueCount`/`IssueSeverityCounts`. `FindingCount`,
+  `SeverityCounts`, `Findings`, `Pages` and every existing endpoint are
+  unchanged. No schema change and no migration.
+
+**Verified against the real local database**
+- The pre-P3 reference scan (16 pages, legacy evidence with no new lines) groups
+  to **90 records -> 19 issues**, confirming the legacy fallbacks
+  (`INJECTION POINT:` and the cookie rule-title map) work.
+- A fresh scan with the new evidence lines produced 80 records -> 19 issues on
+  13 pages, `session`/HttpOnly and `session`/SameSite each naming both
+  `/cookies_weak` and `/cookies_weak_more`, `REQUEST TARGET:` present in SQLi
+  evidence, and the cookie marker value absent from the whole scan-detail JSON.
+- Scan-list overhead measured on the real database: 22 ms for 20 scans
+  (`_finding_stats` itself: 95 ms), so `IssueCount` is safe to expose there.
+
+**Known limitations / deviations**
+- `AffectedURLCount` can exceed `RecordCount` for cookies, by design: one record
+  covers several pages. `RecordCount` is what triage and retesting act on.
+- Endpoint identity ignores the query string, so `/product?id=1` and
+  `/product?id=2` are one issue (approved). Different parameters, methods and
+  paths never merge.
+- For scans recorded before this round, an unparsable cookie rule or endpoint
+  falls back to a unique key instead of guessing; two same-named form fields on
+  one page that post to different actions can therefore stay separate (never
+  wrongly merged) in legacy data.
+- `REQUEST TARGET:` identifies the request target, not the action attribute; a
+  form whose action is rewritten by JavaScript is not represented (JS is not
+  executed - documented limitation carried from earlier rounds).
+- Group triage, group retest, the consolidated UI and the PDF/CSV consolidation
+  are **not** implemented yet; they are checkpoint 2 of the approved P3 plan.
+
+**Tests**
+New `test_finding_groups.py` (38): endpoint normalisation (default/non-default
+ports, case, duplicate slashes, percent-encoding, IPv6, fail-closed cases),
+identity per module (header rule, cookie name + rule, legacy title mapping,
+unknown-rule and unparsable fallbacks, endpoint/method/parameter separation,
+legacy `INJECTION POINT:` == new `REQUEST TARGET:`, `REQUEST TARGET:` beating the
+page URL), aggregation (status precedence and `Mixed`, worst retest verdict,
+worst severity/classification, cookie multi-URL), and integration consistency
+(record sum == `FindingCount`, issue counts, per-finding `GroupKey`/`GroupSize`,
+one header issue per rule, cookie groups without values, merged `/product`
+instances, distinct XSS reflection points, unchanged findings-by-page data,
+list-view counts, scan ownership). Full suite: **404 passed**.
+
+## Enhancement round 13 - finding consolidation actions, UI and reports (P3, checkpoint 2, 2026-11-15)
+
+Checkpoint 2 makes the consolidated view usable end to end: issue-level triage
+and retesting, the consolidated findings interface, and issue-based reports.
+
+**What changed**
+- `scan_service.update_finding_group_status()` + `PUT /api/scans/{id}/finding-groups/{key}`:
+  applies one status to every record of the issue (validated with the same rules
+  as per-finding triage), keeps the per-finding endpoint untouched, and writes a
+  single `FINDING_GROUP_STATUS_UPDATED` audit event naming each changed finding
+  with its old -> new status (ID list capped at 50 with a remainder count). The
+  group itself still stores nothing: the response is rebuilt from committed
+  records after `expire_all()`, so a concurrent individual change can never be
+  hidden behind a stale group status. Per-record last write wins; the response
+  always reflects the committed state.
+- `scan_service.retest_finding_group()` + `POST .../finding-groups/{key}/retest`:
+  re-runs the existing retest for each record, **committing after every record**
+  so no transaction is held across network work. Unexpected failures are caught
+  per record, rolled back individually (earlier commits survive) and reported as
+  `Inconclusive` with `Failed: true`; the loop continues, so one bad location
+  does not abandon the rest. Records beyond `MAX_GROUP_RETEST_LOCATIONS` (25) are
+  returned as `Not Run` with `Status: null` - never resolved. The aggregate
+  verdict follows `Still Detected > Inconclusive > Unable to Verify > Resolved >
+  Not Run` and is downgraded to `Inconclusive` when any record failed or was not
+  attempted (`Partial: true`). One `FINDING_GROUP_RETESTED` audit event records
+  completed, failed and not-attempted counts.
+- UI (`views.js`): the findings list now renders **one collapsible row per logical
+  issue** by default (`Group: Logical issue (consolidated)`), showing worst-member
+  severity, derived status, `Mixed`, affected-URL and record counts, header
+  condition counts, the issue key and an action bar (retest all N records; set
+  status for all N records with an explicit confirmation naming the count). The
+  expansion shows a compact location table (location, method, severity, evidence
+  class, status) with the original per-record Detail/Retest/Status controls.
+  `Group: Page (records)` and `Group: None (records)` keep the record-based views,
+  every record row carries an `issue:` chip that jumps to and expands its issue,
+  and cookie issues list all `OBSERVED URL:` pages without inventing extra records.
+  Scan header, dashboard and scan list show logical issues first with finding
+  records secondary; the live progress panel is labelled "Finding records".
+- PDF: consolidated summary table (`#, Vulnerability, Severity, Risk, Status,
+  Records, Affected URLs`) plus one section per issue with its key, parameter(s),
+  method(s), header state counts, the full affected-URL list, a location table and
+  each record's own evidence/retest history. Coverage and limitation statements
+  from P0 are unchanged.
+- CSV: two additive sections before the untouched record-level `FINDINGS` section:
+  `FINDING GROUPS` (key, vulnerability, severity, status, mixed, record count,
+  affected URL count and list, parameters, methods, condition summary, finding
+  IDs, latest retest verdict) and `FINDING LOCATIONS` (key, finding ID, URL,
+  method, parameter, payload, severity, status, latest retest verdict).
+
+**Verified end to end (local stack, real database)**
+On a fresh 13-page scan (80 records / 19 issues): closing 1 record of a 13-record
+header issue left the issue `Open` with `StatusCounts {Open: 12, Resolved: 1}` and
+`Mixed: true`; group triage updated the remaining 12 and the issue reported
+`Resolved`; a group retest of the two-record SQL Injection issue returned
+`Still Detected` with both locations re-detected and each record's evidence
+carrying its own RETEST stanza. In the browser: 19 issue rows, default filter
+"Logical issue", the confirmation dialog stated "Apply "Resolved" to ALL 13
+finding record(s) of this issue?", the card showed `19 Logical issues · 80 finding
+record(s)` and updated after the action, clicking a record's `issue:` chip switched
+to the consolidated view and expanded that issue, and the cookie issue showed
+`2 affected URL(s) · 1 record(s)`. The generated PDF (42 pages) printed every one
+of the 80 records and both counting lines; the CSV contained `FINDING GROUPS`
+(19 rows), `FINDING LOCATIONS` (80 rows) and the unchanged `FINDINGS` (80 rows);
+the cookie marker value appeared in neither.
+
+**Known limitations / deviations**
+- A group-retest failure does not abort the remaining locations (each record is
+  independent), so "not attempted" only ever means "beyond the 25-record cap".
+- The aggregate group verdict describes the *retest batch*; the derived issue
+  status still comes from member statuses, so an issue whose remaining records
+  keep an older verdict can read `Open` after a `Resolved` aggregate for the
+  retested subset (both facts are returned separately).
+- Group triage is a per-record write loop in one transaction - correct for the
+  sizes involved (tens of records) but not designed for thousands.
+- Legacy scans (no `RULE ID:` / `REQUEST TARGET:` lines) group via fallbacks and
+  may keep same-named form fields on one page separate rather than wrongly merged.
+- The location table scrolls horizontally on narrow screens rather than hiding
+  columns.
+
+**Tests**
+New `test_finding_group_actions.py` (15): group triage across all records, derived
+status with mixed states, no stored group status (reopening one record reopens the
+issue), single audit record with finding IDs and old -> new statuses, invalid
+status and unknown group, cross-scan key handling, scan-access enforcement (403
+for both endpoints), group retest covering every location, the 25-record cap with
+`Not Run` reporting and no false `Resolved`, partial-failure persistence (first
+record's RETEST stanza survives a later crash), CSV structure and record-level
+compatibility, PDF issue/record completeness, cookie URLs present with values
+absent, and report/group count agreement. Full suite: **419 passed**.

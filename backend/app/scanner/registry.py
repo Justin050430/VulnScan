@@ -1,13 +1,20 @@
 """Registry mapping module keys to detection module classes."""
+from app.scanner.modules.cookies import CookieModule
 from app.scanner.modules.http_headers import HTTPHeaderModule
 from app.scanner.modules.sqli import SQLInjectionModule
 from app.scanner.modules.xss import XSSModule
-from app.utils.modules import MODULE_HTTP_HEADERS, MODULE_SQLI, MODULE_XSS
+from app.utils.modules import (
+    MODULE_COOKIES,
+    MODULE_HTTP_HEADERS,
+    MODULE_SQLI,
+    MODULE_XSS,
+)
 
 MODULE_CLASSES = {
     MODULE_SQLI: SQLInjectionModule,
     MODULE_XSS: XSSModule,
     MODULE_HTTP_HEADERS: HTTPHeaderModule,
+    MODULE_COOKIES: CookieModule,
 }
 
 

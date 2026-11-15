@@ -178,6 +178,75 @@ def retest_finding(scan_id, finding_id):
     }), 200
 
 
+@scans_bp.put("/<int:scan_id>/finding-groups/<path:group_key>")
+@any_authenticated
+def update_finding_group_status(scan_id, group_key):
+    """
+    Apply one triage status to every finding of a logical group (P3).
+
+    The group stores no status of its own; the response is rebuilt from the
+    committed member records, so a group can never claim to be resolved while
+    one of its locations is still open.
+    """
+    user = get_current_user()
+    data = request.get_json(silent=True) or {}
+    status = data.get("status")
+    ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr
+    try:
+        scan = scan_service.get_scan(scan_id)
+        scan_service.ensure_scan_permission(user, scan, "scan.retest")
+        group, changed, previous = scan_service.update_finding_group_status(
+            scan, group_key, status, user, ip_address=ip
+        )
+    except scan_service.ScanNotFoundError as exc:
+        return jsonify({"message": str(exc)}), 404
+    except scan_service.ScanAccessError as exc:
+        return jsonify({"message": str(exc)}), 403
+    except scan_service.ScanServiceError as exc:
+        return jsonify({"message": str(exc)}), 400
+    return jsonify({
+        "message": (
+            f"{len(changed)} finding record(s) updated; the group now reports "
+            f"{group['Status']}."
+        ),
+        "Group": group,
+        "Updated": len(changed),
+        "PreviousStatuses": {str(k): v for k, v in previous.items()},
+    }), 200
+
+
+@scans_bp.post("/<int:scan_id>/finding-groups/<path:group_key>/retest")
+@any_authenticated
+def retest_finding_group(scan_id, group_key):
+    """
+    Re-verify a logical group, one finding record at a time (P3).
+
+    Bounded to `MAX_GROUP_RETEST_LOCATIONS` records per call; each result is
+    committed before the next network request starts, so no database
+    transaction is held open across retesting.
+    """
+    user = get_current_user()
+    ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr
+    try:
+        scan = scan_service.get_scan(scan_id)
+        scan_service.ensure_scan_permission(user, scan, "scan.retest")
+        group, summary = scan_service.retest_finding_group(
+            scan, group_key, user, ip_address=ip
+        )
+    except scan_service.ScanNotFoundError as exc:
+        return jsonify({"message": str(exc)}), 404
+    except scan_service.ScanAccessError as exc:
+        return jsonify({"message": str(exc)}), 403
+    except scan_service.ScanServiceError as exc:
+        return jsonify({"message": str(exc)}), 400
+    return jsonify({
+        "message": f"Group retest finished: {summary['AggregateVerdict']}.",
+        "GroupKey": group["GroupKey"],
+        "Group": group,
+        "Retest": summary,
+    }), 200
+
+
 @scans_bp.get("/<int:scan_id>/report")
 @any_authenticated
 def scan_report(scan_id):

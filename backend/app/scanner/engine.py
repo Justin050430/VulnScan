@@ -9,10 +9,10 @@ Flow (matches Fig 4.8 Vulnerability Scanning Activity Diagram):
 All URL requests (including HTTP redirects) are validated against the target's
 scan scope and the SSRF guard before they are issued.
 """
+import json
 import logging
 from datetime import datetime
 from urllib.parse import urlparse
-
 from flask import current_app
 
 from app.extensions import db
@@ -25,6 +25,7 @@ from app.scanner.registry import get_module_class
 from app.scanner.safety import check_target_allowed
 from app.services.audit_service import write_audit
 from app.utils.constants import (
+    AUDIT_ACTION_SCAN_DISCOVERY,
     AUDIT_CATEGORY_SCAN,
     AUDIT_STATUS_FAILURE,
     FINDING_STATUS_OPEN,
@@ -36,6 +37,9 @@ from app.utils.constants import (
 from app.utils.urls import normalize_url
 
 logger = logging.getLogger("vulnscan.engine")
+
+#: Upper bound on the stored discovery record (JSON in the audit description).
+MAX_DISCOVERY_RECORD_BYTES = 20_000
 
 
 def _is_cancelled(scan_id):
@@ -215,8 +219,15 @@ def run_scan(scan_id):
             max_depth=profile.MaxDepth,
             follow_external=profile.FollowExternalLinks,
             skip_url_contains=skip_paths,
+            respect_robots=bool(
+                current_app.config.get("SCANNER_RESPECT_ROBOTS_TXT", True)
+            ),
+            discover_sitemaps=bool(
+                current_app.config.get("SCANNER_ENABLE_SITEMAP_DISCOVERY", True)
+            ),
         )
         pages = crawler.crawl(scan.TargetURL)
+        _record_discovery(scan, crawler.discovery)
         progress.update(scan_id, pages_found=len(pages), stage="analysing")
         if http.auth_failed:
             _finish_failed(
@@ -267,6 +278,13 @@ def run_scan(scan_id):
         pages_done = 0
         findings_total = 0
         cancelled = False
+        # Shared across every page and module of this scan; used by modules
+        # that must report a site-wide condition only once (e.g. a cookie).
+        scan_state = {}
+        # Cookie findings are reported once per (cookie, rule) but must name
+        # every page where the weakness was observed; they are collected here
+        # and completed after the crawl (see _finalise_cookie_observations).
+        cookie_findings = []
         test_form_fields = bool(
             current_app.config.get("SCANNER_ENABLE_FORM_TESTING", True)
         )
@@ -290,7 +308,10 @@ def run_scan(scan_id):
             for module_class, vuln in module_specs:
                 try:
                     module = module_class(
-                        http=http, page=PageInfo(url=page_row.URL, forms=forms)
+                        http=http,
+                        page=PageInfo(
+                            url=page_row.URL, forms=forms, scan_state=scan_state
+                        ),
                     )
                     results = module.detect()
                 except Exception:
@@ -303,7 +324,9 @@ def run_scan(scan_id):
                     )
                     continue
                 for result in results:
-                    _store_finding(page_row, vuln, result)
+                    finding = _store_finding(page_row, vuln, result)
+                    if module_class.key == "cookies":
+                        cookie_findings.append(finding)
                     findings_total += 1
             db.session.commit()
             progress.update(
@@ -312,6 +335,12 @@ def run_scan(scan_id):
                 findings=findings_total,
                 requests=http.request_count,
             )
+
+        # One Finding per (cookie, rule) must still name every affected URL.
+        _finalise_cookie_observations(
+            cookie_findings, scan_state.get("cookie_observations") or {}
+        )
+        db.session.commit()
 
         if cancelled:
             scan.Status = SCAN_STATUS_CANCELLED
@@ -360,11 +389,57 @@ def run_scan(scan_id):
         http.close()
 
 
+def _record_discovery(scan, discovery):
+    """
+    Persist how the crawler found this scan's pages.
+
+    Stored as a scan audit event rather than a new column so the approved core
+    entities stay unchanged: the description is JSON, bounded by the crawler's
+    own sampling limits, and coverage_service reads it back for the API and the
+    reports.  Discovery provenance is a property of the scan event, not of an
+    individual page.
+    """
+    if not discovery:
+        return
+    try:
+        payload = json.dumps(discovery, separators=(",", ":"), sort_keys=True)
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        logger.debug("Discovery record for scan %s is not serialisable", scan.ScanID)
+        return
+    if len(payload) > MAX_DISCOVERY_RECORD_BYTES:
+        # Keep the record valid JSON: drop the per-URL samples first.
+        trimmed = dict(discovery)
+        excluded = dict(trimmed.get("Excluded") or {})
+        excluded["Samples"] = {"Robots": [], "Scope": []}
+        trimmed["Excluded"] = excluded
+        sitemaps = dict(trimmed.get("Sitemaps") or {})
+        sitemaps["Rejected"] = []
+        trimmed["Sitemaps"] = sitemaps
+        payload = json.dumps(trimmed, separators=(",", ":"), sort_keys=True)
+        payload = payload[:MAX_DISCOVERY_RECORD_BYTES]
+        payload = payload[: payload.rfind("}") + 1]
+    write_audit(
+        category=AUDIT_CATEGORY_SCAN,
+        action=AUDIT_ACTION_SCAN_DISCOVERY,
+        description=payload,
+        user_id=scan.UserID,
+        entity_type="Scan",
+        entity_id=scan.ScanID,
+        commit=True,
+    )
+
+
 def _store_finding(page_row, vuln, result):
     evidence = result.evidence
     if result.detail:
         evidence = f"{evidence}\n\n{result.detail}".strip()
     footer = []
+    if result.target:
+        # Machine-readable endpoint so the finding's logical identity (P3)
+        # can name the endpoint even when a form posts elsewhere.
+        footer.append(
+            f"REQUEST TARGET: {(result.method or 'GET').upper()} {result.target}"
+        )
     if result.technique:
         footer.append(f"DETECTION TECHNIQUE: {result.technique}")
     if result.cvss_vector:
@@ -385,6 +460,40 @@ def _store_finding(page_row, vuln, result):
         VulnerabilityID=vuln.VulnerabilityID,
     )
     db.session.add(finding)
+    return finding
+
+
+def _finalise_cookie_observations(cookie_findings, observations):
+    """
+    Append every URL a cookie finding was observed on to its evidence.
+
+    The cookie module reports one finding per (cookie, rule) and records the
+    observing page URLs in the scan's shared state.  Because pages are analysed
+    after the finding is created, the complete list is written once here, in a
+    single evidence block:
+
+        OBSERVATION COUNT: 2
+        OBSERVED URL: http://host/cookies_weak
+        OBSERVED URL: http://host/cookies_weak_more
+
+    No cookie value is involved - only page URLs already known to the scan.
+    """
+    if not cookie_findings or not observations:
+        return
+    from app.services.grouping_service import cookie_rule
+
+    for finding in cookie_findings:
+        rule = cookie_rule(finding.Evidence)
+        urls = observations.get((finding.Parameter, rule))
+        if not urls:
+            continue
+        evidence = finding.Evidence or ""
+        if "OBSERVED URL:" in evidence:
+            # Already written (defensive: the finaliser runs once per scan).
+            continue
+        lines = [f"OBSERVATION COUNT: {len(urls)}"]
+        lines.extend(f"OBSERVED URL: {url}" for url in urls)
+        finding.Evidence = evidence.rstrip() + "\n" + "\n".join(lines)
 
 
 def _finish_failed(scan, reason):
