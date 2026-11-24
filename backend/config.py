@@ -215,6 +215,10 @@ class TestingConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
     TESTING = False
+    # Default to blocking private targets in production.
+    SCANNER_ALLOW_PRIVATE_TARGETS = _as_bool(
+        os.getenv("SCANNER_ALLOW_PRIVATE_TARGETS", "false")
+    )
     # Require explicit secrets in production (enforced in create_app).
     REQUIRE_SECRET = True
     SECRET_KEY = os.environ.get("SECRET_KEY", "")
