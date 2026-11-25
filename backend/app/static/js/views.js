@@ -196,7 +196,10 @@
             <button class="btn btn-primary" type="submit">Sign In →</button>
           </form>
           <div class="divider">OR</div>
-          <button id="google-btn" class="btn btn-google" type="button">Sign in with Google</button>
+          <button id="google-btn" class="btn btn-google" type="button">
+            <img src="/static/img/google-g.png" alt="" width="18" height="18" />
+            <span>Sign in with Google</span>
+          </button>
           <div class="form-footer">Don't have an account? Contact your administrator.</div>
         </div>
       </div>
