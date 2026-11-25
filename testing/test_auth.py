@@ -1,4 +1,11 @@
 """Authentication, JWT and RBAC tests."""
+import pytest
+from flask_sqlalchemy.query import Query
+from sqlalchemy import event
+from sqlalchemy.exc import OperationalError
+
+from app.extensions import db
+from app.models import SecurityAuditLog, User
 from conftest import auth
 
 
@@ -20,8 +27,6 @@ def test_health_reports_degraded_when_database_unavailable(app, client, monkeypa
     Regression: /api/health must act as a readiness probe.  It used to answer
     `200 ok` even when the database was unreachable.
     """
-    from sqlalchemy.exc import OperationalError
-
     from app.extensions import db as real_db
 
     class _FailingSession:
@@ -58,6 +63,74 @@ def test_login_success(client):
     data = resp.get_json()
     assert data["access_token"]
     assert data["user"]["Role"] == "Developer"
+
+
+@pytest.mark.parametrize("disconnects", [1, 2])
+def test_password_login_handles_disconnected_account_lookup(app, client, monkeypatch, disconnects):
+    first = Query.first
+    lookups = 0
+
+    def first_with_disconnect(query):
+        nonlocal lookups
+        lookups += 1
+        if lookups <= disconnects:
+            raise OperationalError(None, None, OSError("connection closed"),
+                                   connection_invalidated=True)
+        return first(query)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Query, "first", first_with_disconnect)
+        response = client.post("/api/auth/login", json={
+            "email": "developer@vulnscan.local",
+            "password": "Developer@VulnScan2025",
+        })
+
+    assert lookups == 2
+    with app.app_context():
+        user = User.query.filter_by(Email="developer@vulnscan.local").one()
+        audits = SecurityAuditLog.query.filter_by(UserID=user.UserID, Action="LOGIN_SUCCESS")
+        if disconnects == 1:
+            assert response.status_code == 200
+            assert response.json["access_token"]
+            assert response.json["user"]["LastLogin"] == user.LastLogin.isoformat()
+            assert audits.count() == 1
+        else:
+            assert response.status_code == 503
+            assert response.json["code"] == "auth_temporarily_unavailable"
+            assert "access_token" not in response.json
+            assert user.LastLogin is None
+            assert audits.count() == 0
+
+
+def test_password_login_rolls_back_last_login_when_audit_write_fails(app, client):
+    flush_attempts = 0
+
+    def disconnect_on_audit_flush(session, flush_context, instances):
+        nonlocal flush_attempts
+        if any(isinstance(row, SecurityAuditLog) for row in session.new):
+            flush_attempts += 1
+            raise OperationalError(None, None, OSError("connection closed"),
+                                   connection_invalidated=True)
+
+    with app.app_context():
+        session = db.session()
+        event.listen(session, "before_flush", disconnect_on_audit_flush)
+        try:
+            response = client.post("/api/auth/login", json={
+                "email": "developer@vulnscan.local",
+                "password": "Developer@VulnScan2025",
+            })
+        finally:
+            event.remove(session, "before_flush", disconnect_on_audit_flush)
+            db.session.remove()
+
+        user = User.query.filter_by(Email="developer@vulnscan.local").one()
+        assert user.LastLogin is None
+        assert SecurityAuditLog.query.filter_by(UserID=user.UserID, Action="LOGIN_SUCCESS").count() == 0
+
+    assert flush_attempts == 1
+    assert response.status_code == 503
+    assert "access_token" not in response.json
 
 
 def test_login_wrong_password(client):

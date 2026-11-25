@@ -4,7 +4,9 @@ import logging
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt
+from sqlalchemy.exc import DBAPIError
 
+from app.extensions import db
 from app.models import User
 from app.services import auth_service, google_service
 from app.utils.security import get_current_user, roles_required
@@ -21,24 +23,32 @@ def login():
     password = data.get("password") or ""
     ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr
 
-    user = auth_service.authenticate_user(email, password)
-    if user is None:
-        # Do not reveal whether the account exists or is merely disabled.
-        auth_service.record_login_failure(email, ip_address=ip)
-        return (
-            jsonify({
+    try:
+        user = auth_service.authenticate_user(email, password)
+        if user is None:
+            # Do not reveal whether the account exists or is disabled.
+            auth_service.record_login_failure(email, ip_address=ip)
+            return jsonify({
                 "message": "Invalid email address or password.",
                 "code": "invalid_credentials",
-            }),
-            401,
-        )
+            }), 401
 
-    token = auth_service.issue_token_for_user(user)
-    auth_service.record_login_success(user, ip_address=ip)
+        token = auth_service.issue_token_for_user(user)
+        user_data = auth_service.record_login_success(user, ip_address=ip)
+    except DBAPIError as exc:
+        if not exc.connection_invalidated:
+            raise
+        db.session.rollback()
+        logger.warning("Password sign-in could not complete after a database disconnect.")
+        return jsonify({
+            "message": "Sign-in is temporarily unavailable. Please try again shortly.",
+            "code": "auth_temporarily_unavailable",
+        }), 503
+
     return jsonify({
         "access_token": token,
         "token_type": "Bearer",
-        "user": user.to_dict(),
+        "user": user_data,
     }), 200
 
 
@@ -167,11 +177,11 @@ def google_sign_in():
         return jsonify({"message": "This account has been disabled.", "code": "account_disabled"}), 403
 
     token = auth_service.issue_token_for_user(user)
-    auth_service.record_login_success(user, ip_address=ip)
+    user_data = auth_service.record_login_success(user, ip_address=ip)
     return jsonify({
         "access_token": token,
         "token_type": "Bearer",
-        "user": user.to_dict(),
+        "user": user_data,
     }), 200
 
 

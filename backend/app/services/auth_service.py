@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timezone
 
 from flask_jwt_extended import create_access_token
+from sqlalchemy.exc import DBAPIError
 
 from app.extensions import db
 from app.models import User
@@ -56,7 +57,16 @@ def authenticate_user(email, password):
     """Return the User on success, otherwise None."""
     if not email or not password:
         return None
-    user = User.query.filter_by(Email=email.strip().lower()).first()
+    query = User.query.filter_by(Email=email.strip().lower())
+    try:
+        user = query.first()
+    except DBAPIError as exc:
+        if not exc.connection_invalidated:
+            raise
+        # The lookup is safe to retry once because it has not written anything.
+        db.session.rollback()
+        logger.warning("Retrying sign-in account lookup after a database disconnect.")
+        user = query.first()
     if user is None or not user.IsActive:
         return None
     if not user.check_password(password):
@@ -77,10 +87,10 @@ def issue_token_for_user(user):
 
 
 def record_login_success(user, ip_address=None):
-    user.LastLogin = datetime.now(timezone.utc).replace(tzinfo=None)
-    db.session.commit()
+    """Commit the timestamp and audit entry together, then return the user data."""
     from app.services.audit_service import write_audit
 
+    user.LastLogin = datetime.now(timezone.utc).replace(tzinfo=None)
     write_audit(
         category=AUDIT_CATEGORY_AUTHENTICATION,
         action="LOGIN_SUCCESS",
@@ -90,7 +100,12 @@ def record_login_success(user, ip_address=None):
         entity_id=user.UserID,
         status=AUDIT_STATUS_SUCCESS,
         ip_address=ip_address,
+        commit=False,
     )
+    # Capture user data before commit expires the ORM attributes.
+    user_data = user.to_dict()
+    db.session.commit()
+    return user_data
 
 
 def record_login_failure(email, ip_address=None, reason="invalid credentials"):
