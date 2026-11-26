@@ -20,72 +20,103 @@
   function isAuthed() { return !!API.token; }
 
   function navItems(role) {
+    const overview = [
+      { label: 'Dashboard', href: '#/dashboard', icon: 'dashboard' },
+      { label: 'Organisations', href: '#/organisations', icon: 'building' }
+    ];
+    const knowledge = { label: 'Knowledge base', href: '#/knowledge-base', icon: 'book' };
     if (role === 'Administrator') {
       return [
-        { label: 'Dashboard', href: '#/dashboard', icon: '🏠', active: h => h === 'dashboard' },
-        { label: 'Organisations', href: '#/organisations', icon: '🏢', active: h => h === 'organisations' },
-        { label: 'Users', href: '#/admin/users', icon: '👥', active: h => h === 'admin/users' },
-        { label: 'Scan Profiles', href: '#/admin/profiles', icon: '📄', active: h => h === 'admin/profiles' },
-        { label: 'Vulnerabilities', href: '#/admin/vulnerabilities', icon: '🪲', active: h => h === 'admin/vulnerabilities' },
-        { label: 'Scans', href: '#/scans', icon: '📡', active: h => h === 'scans' },
-        { label: 'Audit Logs', href: '#/admin/audit-logs', icon: '📋', active: h => h === 'admin/audit-logs' },
-        { label: 'Knowledge Base', href: '#/knowledge-base', icon: '📚', active: h => h === 'knowledge-base' }
+        ...overview,
+        { label: 'Users', href: '#/admin/users', icon: 'users' },
+        { label: 'Scan profiles', href: '#/admin/profiles', icon: 'file' },
+        { label: 'Vulnerabilities', href: '#/admin/vulnerabilities', icon: 'bug' },
+        { label: 'Scans', href: '#/scans', icon: 'radar' },
+        { label: 'Audit logs', href: '#/admin/audit-logs', icon: 'clipboard' },
+        knowledge
       ];
     }
     return [
-      { label: 'Dashboard', href: '#/dashboard', icon: '🏠', active: h => h === 'dashboard' },
-      { label: 'Organisations', href: '#/organisations', icon: '🏢', active: h => h === 'organisations' },
-      { label: 'New Scan', href: '#/scans/new', icon: '➕', active: h => h === 'scans/new' },
-      { label: 'My Scans', href: '#/scans', icon: '🕵️', active: h => h === 'scans' },
-      { label: 'Knowledge Base', href: '#/knowledge-base', icon: '📚', active: h => h === 'knowledge-base' }
+      ...overview,
+      { label: 'My scans', href: '#/scans', icon: 'radar' },
+      knowledge
     ];
   }
 
-  function shellHtml(hashKey, role) {
+  function navLink(item, selectedKey, currentRoute) {
+    const selected = item.href === selectedKey;
+    const current = item.href === currentRoute ? 'page' : 'location';
+    return `<a class="side-link${selected ? ' active' : ''}" href="${item.href}"${selected ? ` aria-current="${current}"` : ''}>
+      <span class="ic">${U.icon(item.icon)}</span>${item.label}
+    </a>`;
+  }
+
+  function shellHtml(segments, role) {
     const user = API.user || {};
-    const items = navItems(role);
+    const selectedKey = hashKeyOf(segments);
+    const currentRoute = '#/' + segments.join('/');
     const initials = (user.Username || '?').slice(0, 1).toUpperCase();
     return `
       <div class="shell">
-        <aside class="sidebar">
-          <div class="brand"><span class="logo">🛡️</span> VulnScan</div>
-          <nav class="side-group">
-            ${items.map(n => `
-              <a class="side-link ${hashKey === n.activeKey ? '' : ''}" data-key="${escapeAttr(n.href)}" href="${n.href}" style="${n.active(hashKey) ? 'background:var(--blue-600);color:#fff' : ''}">
-                <span class="ic">${n.icon}</span> ${n.label}</a>`).join('')}
+        <aside class="sidebar" id="app-sidebar">
+          <div class="brand"><span class="logo">${U.icon('shield')}</span> VulnScan</div>
+          <nav class="side-group" aria-label="Main navigation">
+            ${navItems(role).map(item => navLink(item, selectedKey, currentRoute)).join('')}
           </nav>
           <div class="side-spacer"></div>
           <div class="side-group">
-            <a class="side-link ${hashKey === 'profile' ? 'active' : ''}" href="#/profile"><span class="ic">👤</span> Profile</a>
-            <a class="side-link" href="javascript:void(0)" id="logout-link"><span class="ic">🚪</span> Logout</a>
+            ${navLink({ label: 'Profile', href: '#/profile', icon: 'user' }, selectedKey, currentRoute)}
+            <button class="side-link" type="button" id="logout-link"><span class="ic">${U.icon('logout')}</span>Sign out</button>
           </div>
         </aside>
         <div class="main">
           <header class="topbar">
-            <div class="crumb" id="crumb"></div>
+            <div class="topbar-location">
+              <button class="sidebar-toggle" type="button" aria-label="Navigation menu"
+                aria-expanded="false" aria-controls="app-sidebar">${U.icon('menu')}</button>
+              <div class="crumb" id="crumb"></div>
+            </div>
             <div class="user-chip">
-              <div class="meta" style="text-align:right"><div class="name">${U.esc(user.Username || '')}</div>
+              <div class="meta"><div class="name">${U.esc(user.Username || '')}</div>
                 <div class="role">${U.esc(user.Role || '')}</div></div>
-              <div class="avatar">${U.esc(initials)}</div>
+              <div class="avatar" aria-hidden="true">${U.esc(initials)}</div>
             </div>
           </header>
-          <div class="content" id="content"></div>
+          <main class="content" id="content" tabindex="-1"></main>
         </div>
       </div>`;
   }
 
-  function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
+  function bindSidebar(shell) {
+    const sidebar = shell.querySelector('#app-sidebar');
+    const toggle = shell.querySelector('.sidebar-toggle');
+    const isOpen = () => shell.classList.contains('nav-open');
+    function setOpen(open) {
+      shell.classList.toggle('nav-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+    }
+    function closeAndFocusToggle() {
+      setOpen(false);
+      toggle.focus();
+    }
 
-  function setActive(segments) {
-    // highlight nav by constructing a hash key
-    const app = document.getElementById('app');
-    if (!app) return;
-    const key = hashKeyOf(segments);
-    app.querySelectorAll('.side-link').forEach(a => {
-      const href = a.getAttribute('href') || '';
-      const base = href.split('?')[0];
-      a.classList.remove('active');
-      if (key && key === base) a.classList.add('active');
+    toggle.addEventListener('click', () => {
+      if (isOpen()) {
+        closeAndFocusToggle();
+        return;
+      }
+      setOpen(true);
+      (sidebar.querySelector('[aria-current]') || sidebar.querySelector('a')).focus();
+    });
+    shell.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && isOpen() && !event.defaultPrevented) {
+        closeAndFocusToggle();
+        event.preventDefault();
+      }
+    });
+    sidebar.addEventListener('click', event => {
+      const link = event.target.closest('a.side-link');
+      if (isOpen() && link?.hash === location.hash) closeAndFocusToggle();
     });
   }
 
@@ -94,7 +125,7 @@
     if (segments[0] === 'admin') return '#/admin/' + (segments[1] || '');
     if (segments[0] === 'organisations') return '#/organisations';
     if (segments[0] === 'projects') return '#/organisations';
-    if (segments[0] === 'scans') return segments[1] === 'new' ? '#/scans/new' : (segments[1] ? '#/scans' : '#/scans');
+    if (segments[0] === 'scans') return '#/scans';
     return '#/' + segments[0];
   }
 
@@ -104,6 +135,10 @@
     const path = raw.slice(1);
     const qIdx = path.indexOf('?');
     const cleanPath = qIdx >= 0 ? path.slice(0, qIdx) : path;
+    if (cleanPath === '/scans/new') {
+      location.replace('#/organisations');
+      return;
+    }
     const query = qIdx >= 0 ? path.slice(qIdx + 1) : '';
     const segments = cleanPath.split('/').filter(Boolean);
     const params = parseQuery(query);
@@ -134,7 +169,9 @@
       return;
     }
 
+    const navWasOpen = !!app.querySelector('.shell.nav-open');
     app.innerHTML = shellHtml(segments, role);
+    bindSidebar(app.querySelector('.shell'));
     const content = app.querySelector('#content');
     const crumb = app.querySelector('#crumb');
 
@@ -148,10 +185,10 @@
     // breadcrumb
     let crumbParts = ['VulnScan'];
     if (segments[0] === 'admin') {
-      const labels = { users: 'User Management', profiles: 'Scan Profiles', vulnerabilities: 'Vulnerabilities', 'audit-logs': 'Audit Logs' };
+      const labels = { users: 'User management', profiles: 'Scan profiles', vulnerabilities: 'Vulnerabilities', 'audit-logs': 'Audit logs' };
       crumbParts.push('Administration', labels[segments[1]] || '');
     } else if (segments[0] === 'scans') {
-      crumbParts.push(segments[1] === 'new' ? 'New Scan' : (segments[1] ? 'Scan Result' : 'Scans'));
+      crumbParts.push(segments[1] ? 'Scan result' : 'Scans');
     } else if (segments[0] === 'organisations') {
       crumbParts.push('Organisations');
       if (segments[1]) crumbParts.push('Organisation #' + segments[1]);
@@ -162,7 +199,7 @@
     } else if (segments[0] === 'invitations') {
       crumbParts.push('Invitation');
     } else {
-      const labels = { dashboard: 'Dashboard', 'knowledge-base': 'Knowledge Base', profile: 'Profile' };
+      const labels = { dashboard: 'Dashboard', 'knowledge-base': 'Knowledge base', profile: 'Profile' };
       crumbParts.push(labels[segments[0]] || segments[0]);
     }
     crumb.textContent = crumbParts.filter(Boolean).join(' › ');
@@ -170,10 +207,10 @@
     // Dispatch to the view
     if (VIEWS.stopPolling) VIEWS.stopPolling();
     content.innerHTML = U.loading('Loading…');
+    if (navWasOpen) content.focus({ preventScroll: true });
     try {
       const key = cleanPath;
       if (key === '/dashboard') return await VIEWS.dashboard(content, params);
-      if (key === '/scans/new') return await VIEWS.newScan(content, params);
       if (key === '/scans') return await VIEWS.scans(content, params);
       if (segments[0] === 'scans' && segments[1] && /^\d+$/.test(segments[1])) return await VIEWS.scanResult(content, { id: segments[1] });
       if (key === '/knowledge-base') return await VIEWS.knowledgeBase(content, params);
@@ -192,7 +229,6 @@
         content.innerHTML = `<div class="card card-pad">${U.empty('Error: ' + U.esc(err.message))}</div>`;
       }
     }
-    setActive(segments);
   }
 
   function init() {

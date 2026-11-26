@@ -32,10 +32,6 @@
     return 'None';
   }
 
-  function ic(label, cls) {
-    return `<div class="ic-box ${cls || 'ib-blue'}">${label}</div>`;
-  }
-
   function findIn(list, key, val) { return (list || []).find(x => x[key] === val); }
 
   async function apiGetJson(path, params) {
@@ -83,7 +79,7 @@
         <div class="live-modules" data-live="by-module"></div>
         <div class="live-errors" data-live="errors" style="display:none"></div>
         <div class="live-fallback" data-live="fallback" style="display:none">
-          ⚠ Live telemetry is unavailable for this scan (started before the last server restart, or handled by another
+          Live telemetry is unavailable for this scan (started before the last server restart, or handled by another
           worker). Counters shown are read from the database; request counts cannot be measured retroactively.
         </div>
       </div>`;
@@ -114,35 +110,11 @@
     if (errs) {
       const list = p.Errors || [];
       errs.style.display = list.length ? '' : 'none';
-      errs.innerHTML = list.map(e => `<div>⚠ module error: ${U.esc(e)}</div>`).join('');
+      errs.innerHTML = list.map(e => `<div>Module error: ${U.esc(e)}</div>`).join('');
     }
     const fb = panel.querySelector('[data-live="fallback"]');
     if (fb) fb.style.display = (p.LiveAvailable === false) ? '' : 'none';
     panel.setAttribute('aria-busy', TERMINAL_STATUSES.includes(p.Status) ? 'false' : 'true');
-  }
-
-  /* Pre-scan summary (C3): what the selected profile will and will not test. */
-  function scanPlanHtml(p) {
-    if (!p) return U.empty('No scan plan available.');
-    const limits = p.Limits || {};
-    const mods = p.Modules || [];
-    return `
-      <div class="plan">
-        <div class="plan-head">Modules &amp; techniques</div>
-        ${mods.map(m => `<div class="plan-mod"><b>${U.esc(m.Name)}</b>
-          <div class="plan-tech">${(m.Techniques || []).map(t => `<span class="chip-mini">${U.esc(t)}</span>`).join('') || '<span class="chip-mini">policy evaluation</span>'}</div></div>`).join('') || U.empty('No detection modules selected.')}
-        <div class="plan-limits">
-          <span class="chip-mini">depth ≤ ${limits.MaxDepth}</span>
-          <span class="chip-mini">≤ ${limits.MaxPages} pages</span>
-          <span class="chip-mini">≥ ${limits.RequestDelayMs} ms between requests</span>
-          <span class="chip-mini">${limits.FollowExternalLinks ? 'external links: followed' : 'external links: ignored'}</span>
-        </div>
-        <div class="plan-head" style="margin-top:10px">What will be tested</div>
-        <ul class="plan-list plan-yes">${(p.WillTest || []).map(t => `<li>${U.esc(t)}</li>`).join('')}</ul>
-        <div class="plan-head" style="margin-top:10px">What will NOT be tested</div>
-        <ul class="plan-list plan-no">${(p.WillNotTest || []).map(t => `<li>${U.esc(t)}</li>`).join('')}</ul>
-        <div class="plan-note">${U.esc(p.RequestBudgetNote || '')}</div>
-      </div>`;
   }
 
   /* ============================================================ LOGIN */
@@ -169,40 +141,47 @@
       : '';
     return `
     <div class="login-wrap">
-      <div class="login-left">
-        <div class="login-left-inner">
-          <div class="brand"><span class="logo">🛡️</span> VulnScan</div>
-          <div class="brand-sub">Web Application Vulnerability Scanner</div>
-          <h1>Secure. Scan. Strengthen.</h1>
-          <p class="lead">VulnScan helps developers and security professionals identify web application
-            vulnerabilities, assess their risk and apply remediation guidance from an integrated knowledge base.</p>
-        </div>
-      </div>
+      <section class="login-intro">
+        <div class="brand"><span class="logo">${U.icon('shield')}</span> VulnScan</div>
+        <h1>Review web security findings</h1>
+        <p class="lead">Assess authorised web applications, group recurring issues and decide what to fix.</p>
+      </section>
       <div class="login-right">
         <div class="login-card">
-          <h2>Welcome Back</h2>
-          <p class="sub">Sign in to continue to VulnScan</p>
+          <h2>Sign in</h2>
           ${inviteNotice}
           <form id="login-form" autocomplete="on">
             <div class="field">
-              <label for="email">Email Address</label>
+              <label for="email">Email address</label>
               <input id="email" name="email" type="email" placeholder="you@example.com" required autofocus />
             </div>
             <div class="field">
               <label for="password">Password</label>
               <input id="password" name="password" type="password" placeholder="Enter your password" required />
             </div>
-            <div id="login-error" class="error-text">${U.esc(oauthError)}</div>
-            <button class="btn btn-primary" type="submit">Sign In →</button>
+            <div id="login-error" class="error-text" role="status">${U.esc(oauthError)}</div>
+            <button class="btn btn-primary" type="submit">Sign in</button>
           </form>
-          <div class="divider">OR</div>
+          <div class="divider">or</div>
           <button id="google-btn" class="btn btn-google" type="button">
             <img src="/static/img/google-g.png" alt="" width="18" height="18" />
             <span>Sign in with Google</span>
           </button>
-          <div class="form-footer">Don't have an account? Contact your administrator.</div>
+          <p class="form-footer">Contact your administrator if you need an account.</p>
         </div>
       </div>
+      <figure class="assessment-preview" aria-labelledby="assessment-preview-title">
+        <figcaption id="assessment-preview-title"><span>Sample assessment</span><span class="badge completed">Completed</span></figcaption>
+        <div class="preview-totals">
+          <div><strong>6</strong><span>Logical issues</span></div>
+          <div><strong>36</strong><span>Finding records</span></div>
+        </div>
+        <ul class="preview-findings">
+          <li><span class="preview-severity medium"></span><span>Missing Content Security Policy</span><span class="mono">6 URLs</span></li>
+          <li><span class="preview-severity medium"></span><span>Missing frame protection</span><span class="mono">6 URLs</span></li>
+          <li><span class="preview-severity low"></span><span>Missing referrer policy</span><span class="mono">6 URLs</span></li>
+        </ul>
+      </figure>
     </div>`;
   }
 
@@ -260,37 +239,29 @@
     });
     const recent = scans.slice(0, 6);
     el.innerHTML = `
-      <div class="page-head"><h1>Developer Dashboard</h1>
-        <div class="sub">Configure and run vulnerability scans, then review findings and remediation guidance.</div>
+      <div class="page-head">
+        <h1>Developer dashboard</h1><p class="sub">Review assessment activity and grouped findings</p>
       </div>
       <div class="grid-cards">
-        <div class="card stat-card">${ic('📡','ib-blue')}
-          <div><div class="val">${scans.length}</div><div class="lbl">Total Scans</div></div></div>
-        <div class="card stat-card">${ic('🪲','ib-red')}
-          <div><div class="val">${highCritical}</div><div class="lbl">High / Critical Issues</div></div></div>
-        <div class="card stat-card">${ic('🧾','ib-purple')}
-          <div><div class="val">${issueTotal}</div><div class="lbl">Logical Issues<br/><span style="color:var(--muted)">${findingTotal} finding record(s)</span></div></div></div>
-        <div class="card stat-card" style="cursor:pointer" onclick="location.hash='#/scans/new'">
-          ${ic('➕','ib-green')}<div><div class="val" style="font-size:16px">New Scan</div><div class="lbl">Start assessment</div></div></div>
+        <div class="card stat-card"><div class="lbl">Total scans</div><div class="val">${scans.length}</div></div>
+        <div class="card stat-card"><div class="lbl">High / critical issues</div><div class="val">${highCritical}</div></div>
+        <div class="card stat-card"><div class="lbl">Logical issues</div><div class="val">${issueTotal}</div>
+          <div class="metric-note">${findingTotal} finding records</div></div>
       </div>
-      <div class="grid-2">
-        <div class="card card-pad">
-          <div class="page-head" style="margin-bottom:6px"><div class="row">
-            <h3 style="margin:0">Recent Scans</h3><a href="#/scans">View all scans →</a></div></div>
-          ${scans.length ? recentScansTable(recent) : U.empty('No scans yet. Start your first scan.')}
-        </div>
-        <div class="card card-pad">
-          <h3>Quick Start</h3>
-          <p style="color:var(--muted);font-size:13px;margin-bottom:14px">
-            1. Choose a scan profile that defines which vulnerability modules run.<br/>
-            2. Provide the target URL of the web application.<br/>
-            3. VulnScan crawls in-scope pages and runs SQL Injection, XSS and HTTP Security Header checks.</p>
-          <button class="btn btn-primary" onclick="location.hash='#/scans/new'" style="width:auto">Start a Scan</button>
-          <hr style="border:none;border-top:1px solid var(--border);margin:16px 0"/>
-          <h3>Knowledge Base</h3>
-          <p style="color:var(--muted);font-size:13px">Learn about the vulnerabilities VulnScan detects and how to fix them.</p>
-          <a class="btn btn-secondary" href="#/knowledge-base" style="margin-top:10px">Open Knowledge Base</a>
-        </div>
+      <div class="grid-2 dashboard-grid">
+        <section class="card card-pad">
+          <div class="panel-head"><h3>Recent scans</h3><a href="#/scans">View all scans</a></div>
+          ${scans.length ? recentScansTable(recent) : U.empty('No scans yet')}
+        </section>
+        <aside class="card card-pad dashboard-help">
+          <h3>Project assessments</h3>
+          <p>Open an organisation and choose a project to start a scan.</p>
+          <a href="#/organisations">View organisations</a>
+          <hr />
+          <h3>Knowledge base</h3>
+          <p>Understand a finding and review its remediation guidance.</p>
+          <a href="#/knowledge-base">Open knowledge base</a>
+        </aside>
       </div>`;
   }
 
@@ -312,180 +283,54 @@
     const recentScans = scans.slice(0, 6);
     const recentAudit = (await apiGetJson('/api/audit-logs', { per_page: 8 })).AuditLogs || [];
     el.innerHTML = `
-      <div class="page-head"><h1>Administrator Dashboard</h1>
-        <div class="sub">Monitor system activity, users, scans and vulnerabilities.</div></div>
+      <div class="page-head"><h1>Administrator dashboard</h1>
+        <p class="sub">Review system activity, users and assessment results</p></div>
       <div class="grid-cards">
-        <div class="card stat-card">${ic('👥','ib-blue')}<div><div class="val">${users.length}</div><div class="lbl">Total Users</div></div></div>
-        <div class="card stat-card">${ic('📡','ib-purple')}<div><div class="val">${scans.length}</div><div class="lbl">Total Scans</div></div></div>
-        <div class="card stat-card">${ic('🪲','ib-red')}<div><div class="val">${totalIssues}</div><div class="lbl">Logical Issues<br/><span style="color:var(--muted)">${totalFindings} finding record(s)</span></div></div></div>
-        <div class="card stat-card">${ic('🛡️','ib-green')}<div><div class="val">${counts.High + counts.Critical}</div><div class="lbl">High / Critical</div></div></div>
+        <div class="card stat-card"><div class="lbl">Total users</div><div class="val">${users.length}</div></div>
+        <div class="card stat-card"><div class="lbl">Total scans</div><div class="val">${scans.length}</div></div>
+        <div class="card stat-card"><div class="lbl">Logical issues</div><div class="val">${totalIssues}</div>
+          <div class="metric-note">${totalFindings} finding records</div></div>
+        <div class="card stat-card"><div class="lbl">High / critical issues</div><div class="val">${counts.High + counts.Critical}</div></div>
       </div>
-      <div class="grid-2">
-        <div class="card card-pad">
-          <div class="row" style="margin-bottom:8px"><h3 style="margin:0">Recent Scans</h3><a href="#/scans">View all →</a></div>
-          ${scans.length ? recentScansTable(recentScans) : U.empty('No scans yet.')}
-        </div>
-        <div class="card card-pad">
-          <h3>Vulnerabilities by Severity</h3>
-          <div class="donut-box"><canvas id="sev-canvas"></canvas></div>
-          ${donutLegend(counts, totalFindings)}
-        </div>
+      <div class="grid-2 dashboard-grid">
+        <section class="card card-pad">
+          <div class="panel-head"><h3>Recent scans</h3><a href="#/scans">View all scans</a></div>
+          ${scans.length ? recentScansTable(recentScans) : U.empty('No scans yet')}
+        </section>
+        <section class="card card-pad">
+          <h3>Issues by severity</h3>
+          ${severityBreakdown(counts)}
+        </section>
       </div>
-      <div class="grid-2" style="margin-top:16px">
-        <div class="card card-pad">
-          <h3>Recent System Activities</h3>
-          ${recentAudit.length ? auditTable(recentAudit) : U.empty('No recorded activity.')}
-        </div>
-        <div class="card card-pad">
-          <h3>Quick Actions</h3>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <button class="btn btn-secondary" onclick="location.hash='#/admin/users'">👥 Add User</button>
-            <button class="btn btn-secondary" onclick="location.hash='#/admin/profiles'">📄 Create Scan Profile</button>
-            <button class="btn btn-secondary" onclick="location.hash='#/admin/vulnerabilities'">🪲 Manage Vulnerabilities</button>
-            <button class="btn btn-secondary" onclick="location.hash='#/admin/audit-logs'">📋 View Audit Logs</button>
+      <div class="grid-2 dashboard-grid">
+        <section class="card card-pad">
+          <h3>Recent system activity</h3>
+          ${recentAudit.length ? `<div class="table-wrap">${auditTable(recentAudit)}</div>` : U.empty('No recorded activity')}
+        </section>
+        <section class="card card-pad">
+          <h3>Quick actions</h3>
+          <div class="quick-actions">
+            <a class="btn btn-secondary" href="#/admin/users">${U.icon('users')} Add user</a>
+            <a class="btn btn-secondary" href="#/admin/profiles">${U.icon('file')} Create scan profile</a>
+            <a class="btn btn-secondary" href="#/admin/vulnerabilities">${U.icon('bug')} Manage vulnerabilities</a>
+            <a class="btn btn-secondary" href="#/admin/audit-logs">${U.icon('clipboard')} View audit logs</a>
           </div>
-        </div>
+        </section>
       </div>`;
-    drawDonut('sev-canvas', counts);
   }
 
-  function donutLegend(counts, total) {
-    const colors = sevColors();
-    const rows = SEV_ORDER.map(k => {
-      const n = counts[k] || 0;
-      const pct = total ? (100 * n / total).toFixed(1) : '0.0';
-      return `<div class="row"><span><span class="legend-dot" style="background:${colors[k]}"></span>${k}</span>
-        <span>${n} (${pct}%)</span></div>`;
+  function severityBreakdown(counts) {
+    const total = SEV_ORDER.reduce((sum, severity) => sum + (Number(counts[severity]) || 0), 0);
+    const rows = SEV_ORDER.slice().reverse().map(severity => {
+      const count = Number(counts[severity]) || 0;
+      const share = total ? 100 * count / total : 0;
+      return `<li class="severity-row ${severity.toLowerCase()}">
+        <span>${severity}</span>
+        <span class="severity-track" aria-hidden="true"><span style="--share:${share}%"></span></span>
+        <span class="severity-count">${count} <small>${share.toFixed(1)}%</small></span>
+      </li>`;
     }).join('');
-    return `<div class="donut-legend" style="margin-top:8px"><div class="row" style="font-weight:700"><span>Total</span><span>${total}</span></div>${rows}</div>`;
-  }
-
-  function sevColors() {
-    return { 'Critical': '#b91c1c', 'High': '#ea580c', 'Medium': '#d97706', 'Low': '#1d4ed8', 'None': '#94a3b8' };
-  }
-
-  function drawDonut(canvasId, counts) {
-    if (typeof Chart === 'undefined') return;
-    const ctx = document.getElementById(canvasId);
-    if (!ctx) return;
-    const data = SEV_ORDER.map(k => counts[k] || 0);
-    new Chart(ctx, {
-      type: 'doughnut',
-      data: { labels: SEV_ORDER, datasets: [{ data, backgroundColor: SEV_ORDER.map(k => sevColors()[k]) }] },
-      options: { cutout: '62%', plugins: { legend: { display: false } }, maintainAspectRatio: false }
-    });
-  }
-
-  /* ============================================================ NEW SCAN */
-  async function newScan(el) {
-    el.innerHTML = U.loading('Loading scan profiles...');
-    const profilesR = await apiGetJson('/api/scan-profiles');
-    const profiles = profilesR.ScanProfiles || [];
-    el.innerHTML = `
-      <div class="page-head"><div class="row"><div><h1>Create New Scan</h1>
-        <div class="sub">Configure scan settings and start a new vulnerability assessment.</div></div></div></div>
-      <div class="trust-notice">Trust-gated scanning: use
-        <b>Organisations → Project → Start scan</b> to scan a verified asset with an active
-        attestation and a scan credit. This legacy form only works when the server runs in
-        legacy mode.</div>
-      <div class="grid-2">
-        <div class="card card-pad">
-          <h3>Scan Configuration</h3>
-          <div class="field">
-            <label>Target URL *</label>
-            <input id="target_url" type="text" placeholder="https://example.com" />
-            <div class="hint">Base URL of the web application to scan. Only the target's own pages are tested.</div>
-          </div>
-          <div class="field">
-            <label>Scan Name (optional)</label>
-            <input id="scan_name" type="text" placeholder="e.g. E-Commerce Website" maxlength="100" />
-          </div>
-          <div class="field">
-            <label>Scan Profile *</label>
-            <select id="profile_id"></select>
-            <div class="hint" id="profile-info">Select a profile that defines which modules run.</div>
-          </div>
-          <div style="background:var(--blue-bg);border-radius:8px;padding:10px 12px;font-size:12.5px;color:#1e3a8a;margin:12px 0">
-            <b>ℹ About Scan Profiles</b><br/>
-            Scan profiles determine which vulnerability modules will be executed during the scan and how deeply the target is crawled.
-          </div>
-          <div id="scan-plan">${U.loading('Loading scan plan...')}</div>
-          <div style="display:flex;gap:10px;justify-content:flex-end">
-            <button class="btn btn-secondary" id="reset-btn">Reset</button>
-            <button class="btn btn-primary" id="start-btn" style="width:auto">Start Scan</button>
-          </div>
-        </div>
-        <div class="card card-pad">
-          <h3>Available Scan Profiles</h3>
-          <div id="profile-cards"></div>
-        </div>
-      </div>`;
-    const sel = el.querySelector('#profile_id');
-    const cards = el.querySelector('#profile-cards');
-    profiles.forEach(p => {
-      const o = document.createElement('option');
-      o.value = p.ScanProfileID; o.textContent = p.Name;
-      sel.appendChild(o);
-    });
-    cards.innerHTML = profiles.map(p => `
-      <div class="card" style="padding:12px;margin-bottom:10px;border:1px solid var(--border);box-shadow:none">
-        <b>${U.esc(p.Name)}</b>
-        <div style="color:var(--muted);font-size:12px;margin:4px 0">Depth ${p.MaxDepth} · Max ${p.MaxPages} pages · Delay ${p.RequestDelayMs} ms</div>
-        <div class="pill-list">${(p.Modules || []).map(m => `<span class="chip-mini">${U.esc(m.Name)}</span>`).join('') || '<span style="color:var(--muted)">No modules</span>'}</div>
-      </div>`).join('');
-    const info = el.querySelector('#profile-info');
-    function showInfo() {
-      const p = findIn(profiles, 'ScanProfileID', parseInt(sel.value, 10));
-      if (p) info.textContent = `${(p.Modules || []).length} module(s): ${(p.Modules || []).map(m => m.Name).join(', ')} · max depth ${p.MaxDepth}`;
-    }
-    const planBox = el.querySelector('#scan-plan');
-    let planSeq = 0;
-    async function showPlan() {
-      const pid = parseInt(sel.value, 10);
-      const seq = ++planSeq;
-      planBox.innerHTML = U.loading('Loading scan plan...');
-      try {
-        const body = await apiGetJson('/api/scan-profiles/' + pid + '/preview');
-        if (seq !== planSeq) return; // a newer selection superseded this request
-        planBox.innerHTML = scanPlanHtml(body && body.Preview);
-      } catch (err) {
-        if (seq !== planSeq) return;
-        planBox.innerHTML = `<div style="color:var(--muted);font-size:12.5px">Scan plan unavailable: ${U.esc(err.message)}</div>`;
-      }
-    }
-    sel.addEventListener('change', () => { showInfo(); showPlan(); });
-    showInfo();
-    showPlan();
-    el.querySelector('#reset-btn').addEventListener('click', () => {
-      el.querySelector('#target_url').value = '';
-      el.querySelector('#scan_name').value = '';
-    });
-    el.querySelector('#start-btn').addEventListener('click', startScanNow);
-    async function startScanNow() {
-      const target_url = el.querySelector('#target_url').value.trim();
-      const scan_name = el.querySelector('#scan_name').value.trim();
-      const scan_profile_id = parseInt(el.querySelector('#profile_id').value, 10);
-      if (!target_url) { U.toast('Target URL is required.', 'err'); return; }
-      const btn = el.querySelector('#start-btn');
-      btn.disabled = true; btn.textContent = 'Starting…';
-      try {
-        const data = await API.post('/api/scans', { target_url, scan_name, scan_profile_id });
-        U.toast('Scan started - it will run in the background.', 'ok');
-        location.hash = '#/scans/' + data.Scan.ScanID;
-      } catch (err) {
-        btn.disabled = false; btn.textContent = 'Start Scan';
-        if (err.code === 'LEGACY_SCAN_ENDPOINT_DISABLED') {
-          U.modal('Trust-gated scanning is enabled',
-            `<p>This legacy form is disabled. Scans must start from a project with a
-               verified asset, an active attestation and a scan credit.</p>
-             <p style="margin-top:8px"><a class="btn btn-primary" style="width:auto"
-               href="#/organisations" onclick="U.closeModal()">Go to organisations</a></p>`,
-            `<button class="btn btn-secondary" onclick="U.closeModal()">Close</button>`);
-          return;
-        }
-        U.toast(err.message, 'err');
-      }
-    }
+    return `<ul class="severity-list">${rows}</ul><p class="severity-total"><span>Total</span><strong>${total}</strong></p>`;
   }
 
   /* ============================================================ SCANS LIST */
@@ -503,9 +348,8 @@
       const isAdmin = (API.user || {}).Role === 'Administrator';
       const statusOptions = ['', 'Pending', 'Running', 'Completed', 'Failed'];
       el.innerHTML = `
-        <div class="page-head"><div class="row"><div><h1>${isAdmin ? 'All Scans' : 'My Scans'}</h1>
-          <div class="sub">${isAdmin ? 'Vulnerability scanning activity across all users.' : 'Vulnerability scans performed by you.'}</div></div>
-          ${!isAdmin ? '<button class="btn btn-primary" style="width:auto" onclick="location.hash=\'#/scans/new\'">+ New Scan</button>' : ''}</div></div>
+        <div class="page-head"><h1>${isAdmin ? 'All scans' : 'My scans'}</h1>
+          <div class="sub">${isAdmin ? 'Assessment activity across all users' : 'Review your previous and active scans'}</div></div>
         <div class="card">
           <div class="card-pad">
             <div class="toolbar">
@@ -529,7 +373,16 @@
   }
 
   function recentScansTable(scans) {
-    return scansTable(scans);
+    return `<div class="table-wrap" role="region" aria-label="Recent scans table" tabindex="0"><table class="tbl recent-scans">
+      <thead><tr><th scope="col">Scan</th><th scope="col">Status and risk</th><th scope="col">Findings</th><th scope="col">Started</th><th scope="col" class="actions">Actions</th></tr></thead>
+      <tbody>${scans.map(scan => `<tr>
+        <td><span class="scan-name">${U.esc(scan.ScanName)}</span><span class="mono scan-ref">SCAN-${scan.ScanID}</span>
+          <span class="mono scan-host">${U.esc(scan.TargetURL)}</span><span class="metric-note">${U.esc(scan.ScanProfileName || '–')}</span></td>
+        <td><div class="scan-status">${U.statusBadge(scan.Status)}${U.sevBadge(overallRisk(scan.IssueSeverityCounts || scan.SeverityCounts))}</div></td>
+        <td>${scan.IssueCount ?? '–'} issues<div class="metric-note">${scan.FindingCount || 0} records · ${scan.PageCount || 0} pages</div></td>
+        <td>${U.fmtDT(scan.StartedAt)}</td>
+        <td class="actions"><a class="btn btn-sm btn-secondary" href="#/scans/${scan.ScanID}">View</a></td>
+      </tr>`).join('')}</tbody></table></div>`;
   }
 
   function scansTable(scans) {
@@ -538,7 +391,7 @@
       <tbody>${scans.map(s => {
         const risk = overallRisk(s.IssueSeverityCounts || s.SeverityCounts);
         return `<tr>
-          <td><b>${U.esc(s.ScanName)}</b><div class="mono" style="color:var(--muted)">#${s.ScanID}</div></td>
+          <td><b>${U.esc(s.ScanName)}</b><div class="mono scan-ref">SCAN-${s.ScanID}</div></td>
           <td class="mono">${U.esc(s.TargetURL)}</td>
           <td>${U.esc(s.ScanProfileName || '-')}</td>
           <td>${U.statusBadge(s.Status)}</td>
@@ -608,7 +461,6 @@
     const resolvedIssues = issues.filter(g => g.Status === 'Resolved').length;
     const duration = scanDuration(scan.StartedAt, scan.FinishedAt, scan.Status);
     const isRunning = scan.Status === 'Running' || scan.Status === 'Pending';
-    const riskColor = (scan.OverallRisk || 'None').toLowerCase();
     let progress = null;
     if (isRunning) {
       try {
@@ -617,50 +469,51 @@
       } catch (e) { progress = null; }
     }
     el.innerHTML = `
-      <div class="page-head"><div class="row"><div><h1>Scan Result</h1>
-        <div class="sub">${U.esc(scan.ScanName)} &nbsp;|&nbsp; <span class="mono">${U.esc(scan.TargetURL)}</span></div></div>
-        <div style="display:flex;gap:8px">
-          <a class="btn btn-secondary" href="#/scans">← Back</a>
-          <button class="btn btn-secondary" id="dl-csv">⬇ CSV</button>
-          <button class="btn btn-primary" style="width:auto" id="dl-pdf">⬇ Download PDF Report</button>
-        </div></div></div>
-        ${isRunning ? livePanelHtml(progress) : ''}
-        <div class="grid-cards">
-        <div class="card stat-card">${ic('🎯', riskColor === 'critical' ? 'ib-red' : riskColor === 'high' ? 'ib-red' : 'ib-amber')}
-          <div><div class="val risk-tag">${U.esc(scan.OverallRisk || 'None')}</div><div class="lbl">Overall Risk</div></div></div>
-        <div class="card stat-card">${ic('🪲','ib-purple')}
-          <div><div class="val">${issues.length || findings.length}</div><div class="lbl">Logical issues<br/><span style="color:var(--green)">Open ${issues.length ? openIssues : open}</span> · Resolved ${issues.length ? resolvedIssues : resolved}<br/><span style="color:var(--muted)">${findings.length} finding record(s) · Open ${open} · Resolved ${resolved} · FP ${falsePos}</span></div></div></div>
-        <div class="card stat-card">${ic('📄','ib-blue')}
-          <div><div class="val" style="font-size:17px">${U.statusBadge(scan.Status)}</div><div class="lbl">${scan.Status === 'Completed' ? 'Scan completed successfully' : isRunning ? 'Scanning in progress…' : 'See scan details'}</div></div></div>
-        <div class="card stat-card">${ic('⏱️','ib-green')}
-          <div><div class="val" style="font-size:20px">${duration}</div><div class="lbl">Duration<br/>${U.fmtDT(scan.StartedAt)}</div></div></div>
+      <div class="page-head row result-head">
+        <div class="result-context"><h1>Scan results</h1>
+          <p class="sub"><span class="mono scan-ref">SCAN-${scan.ScanID}</span> ${U.esc(scan.ScanName)}</p>
+          <div class="mono result-target">${U.esc(scan.TargetURL)}</div>
+        </div>
+        <div class="result-actions">
+          <a class="btn btn-secondary" href="#/scans">${U.icon('arrow-left')} Back</a>
+          <button class="btn btn-secondary" id="dl-csv">CSV</button>
+          <button class="btn btn-primary btn-action" id="dl-pdf">${U.icon('download')} Download PDF</button>
+        </div>
       </div>
-      <div class="grid-2">
-        <div class="card card-pad">
-          <div class="row" style="margin-bottom:8px">
-            <h3 style="margin:0">Findings</h3>
+        ${isRunning ? livePanelHtml(progress) : ''}
+      <div class="grid-cards result-metrics">
+        <div class="card stat-card"><div class="lbl">Overall risk</div><div>${U.sevBadge(scan.OverallRisk)}</div></div>
+        <div class="card stat-card"><div class="lbl">${issues.length ? 'Logical issues' : 'Finding records'}</div><div class="val">${issues.length || findings.length}</div>
+          <div class="metric-note">${issues.length ? `Issues: ${openIssues} open · ${resolvedIssues} resolved<br/>` : ''}
+            ${findings.length} records · ${open} open · ${resolved} resolved · ${falsePos} false positive</div></div>
+        <div class="card stat-card"><div class="lbl">Scan status</div><div>${U.statusBadge(scan.Status)}</div></div>
+        <div class="card stat-card"><div class="lbl">Duration</div><div class="val">${duration}</div><div class="metric-note">${U.fmtDT(scan.StartedAt)}</div></div>
+      </div>
+      <div class="grid-2 result-grid">
+        <section class="card card-pad">
+          <div class="panel-head">
+            <h3>Findings</h3>
             ${isRunning ? '<span class="badge running">Live — updates automatically</span>' : ''}
-            <span class="chip-mini">${issues.length} issue(s) · ${findings.length} record(s)</span>
+            <span class="metric-note">${issues.length} issues · ${findings.length} records</span>
           </div>
-          <div class="toolbar">
-            <input type="search" class="grow" id="f-search" placeholder="Search vulnerability, URL or technique…"/>
-            <select id="f-sev"><option value="">Severity: All</option>${SEV_ORDER.slice(1).map(s => `<option>${s}</option>`).join('')}</select>
-            <select id="f-class"><option value="">Classification: All</option><option>Confirmed</option><option>Suspected</option><option>Unclassified</option></select>
-            <select id="f-tech"><option value="">Technique: All</option></select>
-            <select id="f-status"><option value="">Status: All</option><option>Open</option><option>Resolved</option><option>False Positive</option></select>
-            <select id="f-group"><option value="issue">Group: Logical issue (consolidated)</option><option value="">Group: None (records)</option><option value="vuln">Group: Vulnerability</option><option value="page">Group: Page (records)</option></select>
+          <div class="toolbar finding-filters">
+            <input type="search" id="f-search" aria-label="Search findings" placeholder="Search findings" />
+            <select id="f-group" aria-label="Group findings"><option value="issue">Group by issue</option><option value="">Show records</option><option value="vuln">Group by vulnerability</option><option value="page">Group by page</option></select>
+            <select id="f-sev" aria-label="Severity"><option value="">All severities</option>${SEV_ORDER.slice(1).map(s => `<option>${s}</option>`).join('')}</select>
+            <select id="f-class" aria-label="Classification"><option value="">All classes</option><option>Confirmed</option><option>Suspected</option><option>Unclassified</option></select>
+            <select id="f-tech" aria-label="Technique"><option value="">All techniques</option></select>
+            <select id="f-status" aria-label="Status"><option value="">All statuses</option><option>Open</option><option>Resolved</option><option>False Positive</option></select>
             <button class="btn btn-sm btn-secondary" id="f-reset">Reset</button>
           </div>
           <div id="findings-box">${U.loading()}</div>
-        </div>
-        <div>
-          <div class="card card-pad" style="margin-bottom:16px">
-            <h3>Severity Overview</h3>
-            <div class="donut-box"><canvas id="sev-canvas"></canvas></div>
-            ${donutLegend(counts, findings.length)}
-          </div>
+        </section>
+        <div class="result-secondary">
+          <section class="card card-pad">
+            <h3>Finding records by severity</h3>
+            ${severityBreakdown(counts)}
+          </section>
           <div class="card card-pad">
-            <h3>Scan Information</h3>
+            <h3>Scan information</h3>
             <div class="kv">
               <span class="k">Scan ID</span><span class="mono">SCAN-${scan.ScanID}</span>
               <span class="k">Target URL</span><span class="mono">${U.esc(scan.TargetURL)}</span>
@@ -679,7 +532,7 @@
         </div>
       </div>
       <div class="card card-pad" style="margin-top:16px">
-        <h3>Coverage &amp; Limitations</h3>
+        <h3>Coverage and limitations</h3>
         <p style="color:var(--muted);margin:6px 0 0">${U.esc(scan.CoverageNote || 'Coverage details are not available for this scan.')}</p>
         ${(() => {
           const d = scan.Coverage && scan.Coverage.Discovery;
@@ -699,10 +552,9 @@
         ${(scan.SkippedPages || []).length ? `<div style="margin-top:10px"><div class="k">Stored but not analysed (${scan.SkippedPages.length})</div><div class="kv">${scan.SkippedPages.map(p => `<span class="k mono">${U.esc(p.URL)}</span><span>HTTP ${p.HTTPStatus == null ? '–' : p.HTTPStatus}</span>`).join('')}</div></div>` : ''}
       </div>
       <div class="card card-pad" style="margin-top:16px">
-        <h3>Discovered Pages (${scan.Pages ? scan.Pages.length : 0})</h3>
+        <h3>Discovered pages (${scan.Pages ? scan.Pages.length : 0})</h3>
         ${renderPages(scan.Pages || [])}
       </div>`;
-    drawDonut('sev-canvas', counts);
     bindFindings(el.querySelector('#findings-box'), findings, id, { open, resolved, falsePos });
     const techSel = el.querySelector('#f-tech');
     [...new Set(findings.map(f => f.Technique).filter(Boolean))].sort().forEach(t => {
@@ -831,8 +683,8 @@
   }
 
   function findingActions(f) {
-    return `<button class="btn btn-xs btn-secondary" data-detail="1" title="Details">👁 Detail</button>
-      <button class="btn btn-xs btn-secondary" data-retest="1" title="Re-run the original detection against this page to verify the finding">🔁 Retest</button>
+    return `<button class="btn btn-xs btn-secondary" data-detail="1" title="Details">Detail</button>
+      <button class="btn btn-xs btn-secondary" data-retest="1" title="Re-run the original detection against this page to verify the finding">Retest</button>
       <select class="status-select" data-status="1">
         <option value="Open" ${f.Status === 'Open' ? 'selected' : ''}>Open</option>
         <option value="Resolved" ${f.Status === 'Resolved' ? 'selected' : ''}>Resolved</option>
@@ -846,7 +698,7 @@
             <div class="card" style="padding:12px;box-shadow:none;border-color:var(--border)">
               <div style="font-weight:700">${U.esc(f.VulnerabilityName)} · ${U.esc(f.Severity)} · ${U.esc(f.Classification || '')} (CVSS ${f.RiskScore != null ? Number(f.RiskScore).toFixed(1) : '-'})</div>
               <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
-                ${f.Technique ? `<span class="badge module">⚙ ${U.esc(f.Technique)}</span>` : ''}
+                ${f.Technique ? `<span class="badge module">${U.esc(f.Technique)}</span>` : ''}
                 ${f.CVSSVector ? `<span class="chip-mini mono">${U.esc(f.CVSSVector)}</span>` : ''}
                 <span class="chip-mini">Confidence ${f.Confidence != null ? Math.round(Number(f.Confidence) * 100) + '%' : '–'}</span>
                 <span class="chip-mini">Detected ${U.fmtDT(f.DetectedAt)}</span>
@@ -893,14 +745,16 @@
       return `<details class="f-group" data-group="${U.esc(g.GroupKey)}" data-records="${g.RecordCount}">
         <summary>
           <span class="g-title">${U.esc(g.VulnerabilityName || 'Issue')}${(g.Parameters || []).length ? ' · ' + U.esc(g.Parameters.join(', ')) : ''}</span>
-          <span class="g-meta">${g.AffectedURLCount} affected URL(s) · ${g.RecordCount} record(s)</span>
-          ${U.sevBadge(g.Severity)}
-          ${U.statusBadge(g.Status)}
-          ${g.Mixed ? `<span class="badge suspected">Mixed</span>` : ''}
+          <span class="g-meta"><span class="mono">${g.AffectedURLCount}</span> affected ${g.AffectedURLCount === 1 ? 'URL' : 'URLs'} · <span class="mono">${g.RecordCount}</span> ${g.RecordCount === 1 ? 'record' : 'records'}</span>
+          <span class="finding-state">
+            ${U.sevBadge(g.Severity)}
+            ${U.statusBadge(g.Status)}
+            ${g.Mixed ? `<span class="badge suspected">Mixed</span>` : ''}
+          </span>
         </summary>
         <div style="padding:8px 0 4px">
           <div class="toolbar" style="gap:8px;flex-wrap:wrap;margin-bottom:6px">
-            <button class="btn btn-sm btn-secondary" data-group-retest="1">🔁 Retest all ${g.RecordCount} record(s)</button>
+            <button class="btn btn-sm btn-secondary" data-group-retest="1">Retest all ${g.RecordCount} record(s)</button>
             <select class="status-select" data-group-status="1">
               <option value="">Set status for all ${g.RecordCount} record(s)…</option>
               <option value="Open">Open</option>
@@ -928,7 +782,7 @@
         const details = btn.closest('details.f-group');
         const key = details.dataset.group;
         const label = btn.textContent;
-        btn.disabled = true; btn.textContent = '⏳ Re-verifying…';
+        btn.disabled = true; btn.textContent = 'Re-verifying…';
         try {
           const data = await API.post(
             `/api/scans/${scanId}/finding-groups/${encodeURIComponent(key)}/retest`, {});
@@ -1043,7 +897,7 @@
           <div class="ba-line" style="color:var(--muted)">${U.esc(r.Message || '')}</div>
         </div>
       </div>
-      ${history.length > 1 ? `<div class="ba-history">${history.map(x => `<span class="chip-mini">🔁 ${U.esc(x.At)} · ${U.esc(x.Verdict)}</span>`).join('')}</div>` : ''}`;
+      ${history.length > 1 ? `<div class="ba-history">${history.map(x => `<span class="chip-mini">${U.esc(x.At)} · ${U.esc(x.Verdict)}</span>`).join('')}</div>` : ''}`;
   }
 
   function wireFindingRows(box) {
@@ -1087,7 +941,7 @@
         const row = b.closest('tr.finding-row');
         const fid = parseInt(row.dataset.id, 10);
         const scanId = parseInt(location.hash.split('/')[2], 10);
-        b.disabled = true; b.textContent = '⏳ Verifying…';
+        b.disabled = true; b.textContent = 'Verifying…';
         try {
           const data = await API.post(`/api/scans/${scanId}/findings/${fid}/retest`, {});
           const verdict = data.Retest.Verdict;
@@ -1096,7 +950,7 @@
         } catch (err) {
           U.toast(err.message, 'err');
         } finally {
-          b.disabled = false; b.textContent = '🔁 Retest';
+          b.disabled = false; b.textContent = 'Retest';
           location.hash = '#/scans/' + scanId + '?r=' + Date.now();
         }
       });
@@ -1124,7 +978,7 @@
       if (m) {
         const cls = m[1].toLowerCase();
         return `<div class="kb-example kb-${cls}">
-          <div class="kb-ex-label">${cls === 'unsafe' ? '⚠ Unsafe pattern' : '✔ Safe pattern'}</div>
+          <div class="kb-ex-label">${cls === 'unsafe' ? 'Unsafe pattern' : 'Safe pattern'}</div>
           <pre class="kb-code">${U.esc((m[2] || '').trim())}</pre></div>`;
       }
       return `<p style="white-space:pre-wrap;margin-top:6px">${U.esc(b)}</p>`;
@@ -1154,7 +1008,7 @@
           <div class="card kb-card card-pad">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
               <h3 style="margin:0">${U.esc(v.Name)}</h3>
-              ${v.ModuleKey ? '<span class="badge module">⚙ detection module</span>' : ''}
+              ${v.ModuleKey ? '<span class="badge module">Detection module</span>' : ''}
             </div>
             <div><span class="chip-mini">${U.esc(v.OWASPCategory || '')}</span>
             ${v.IsEnabled ? '<span class="badge enabled">Enabled</span>' : '<span class="badge disabled">Disabled</span>'}</div>
@@ -1357,7 +1211,7 @@
           <thead><tr><th>Name</th><th>OWASP Category</th><th>Module</th><th>Status</th><th class="actions">Actions</th></tr></thead>
           <tbody>${filtered.map(v => `<tr>
             <td><b>${U.esc(v.Name)}</b></td><td>${U.esc(v.OWASPCategory)}</td>
-            <td>${v.ModuleKey ? '<span class="badge module">⚙</span>' : '<span class="chip-mini">KB only</span>'}</td>
+            <td>${v.ModuleKey ? '<span class="badge module">Detection module</span>' : '<span class="chip-mini">KB only</span>'}</td>
             <td>${v.IsEnabled ? '<span class="badge enabled">Enabled</span>' : '<span class="badge disabled">Disabled</span>'}</td>
             <td class="actions">
               <button class="btn btn-xs btn-secondary" data-edit="${v.VulnerabilityID}">Edit</button>
@@ -1460,7 +1314,7 @@
 
   window.VIEWS = {
     loginHtml, bindLogin, stopPolling,
-    dashboard, newScan, scans, scanResult, knowledgeBase, profile,
+    dashboard, scans, scanResult, knowledgeBase, profile,
     adminUsers, adminProfiles, adminVulns, adminAudit
   };
 })();

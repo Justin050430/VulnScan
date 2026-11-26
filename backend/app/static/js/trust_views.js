@@ -9,7 +9,14 @@
 
   function statusBadge(status) {
     const cls = (status || '').toLowerCase();
-    return `<span class="badge ${cls}">${U.esc(status || '-')}</span>`;
+    const label = status === 'PendingVerification' ? 'Pending verification' : status;
+    return `<span class="badge ${cls}">${U.esc(label || '–')}</span>`;
+  }
+
+  function roleLabel(role) {
+    const words = String(role || '').replace(/^ORG_/, 'ORGANISATION_')
+      .replaceAll('_', ' ').toLowerCase();
+    return words ? words[0].toUpperCase() + words.slice(1) : '–';
   }
 
   function can(perms, permission) {
@@ -45,18 +52,18 @@
     const body = await API.get('/api/v1/organisations');
     const orgs = body.Organisations || [];
     el.innerHTML = `
-      <div class="page-head"><div class="row"><div>
+      <div class="page-head workspace-heading"><div class="row"><div>
         <h1>Organisations</h1>
-        <div class="sub">Each organisation owns projects, verified assets and scan credits.</div>
-      </div><button class="btn btn-primary" style="width:auto" id="new-org">+ New Organisation</button></div></div>
-      <div class="card card-pad">
+        <div class="sub">Manage projects, verified assets and scan credits</div>
+      </div><div class="workspace-actions"><button class="btn btn-primary" id="new-org" type="button">New organisation</button></div></div></div>
+      <div class="card card-pad workspace-panel">
         ${orgs.length ? `<div class="table-wrap"><table class="tbl">
-          <thead><tr><th>Organisation</th><th>Slug</th><th>Status</th><th class="actions">Actions</th></tr></thead>
+          <thead><tr><th scope="col">Organisation</th><th scope="col">Slug</th><th scope="col">Status</th><th scope="col" class="actions">Actions</th></tr></thead>
           <tbody>${orgs.map(o => `<tr>
-            <td><b>${U.esc(o.Name)}</b></td>
-            <td class="mono">${U.esc(o.Slug)}</td>
+            <td><span class="workspace-primary">${U.esc(o.Name)}</span></td>
+            <td class="mono workspace-secondary">${U.esc(o.Slug)}</td>
             <td>${statusBadge(o.Status)}</td>
-            <td class="actions"><a class="btn btn-sm btn-secondary" href="#/organisations/${o.OrganisationID}">Open</a></td>
+            <td class="actions"><a class="btn btn-sm btn-secondary" href="#/organisations/${o.OrganisationID}" aria-label="Open organisation ${U.esc(o.Name)}">Open</a></td>
           </tr>`).join('')}</tbody></table></div>` : empty('No organisations yet. Create one to get started.')}
       </div>`;
     el.querySelector('#new-org').addEventListener('click', () => organisationModal());
@@ -90,32 +97,32 @@
     const members = membersBody.Members || [];
     const projects = projectsBody.Projects || [];
     el.innerHTML = `
-      <div class="page-head"><div class="row"><div>
+      <div class="page-head workspace-heading"><div class="row"><div>
         <h1>${U.esc(org.Name)}</h1>
-        <div class="sub">Organisation <span class="mono">${U.esc(org.Slug)}</span> · ${statusBadge(org.Status)}</div>
-      </div><button class="btn btn-primary" style="width:auto" id="new-project">+ New Project</button></div></div>
+        <div class="sub workspace-context"><span>Organisation <span class="mono">${U.esc(org.Slug)}</span></span>${statusBadge(org.Status)}</div>
+      </div><div class="workspace-actions"><button class="btn btn-primary" id="new-project" type="button">New project</button></div></div></div>
       <div class="grid-2">
-        <div class="card card-pad">
-          <h3>Projects</h3>
+        <section class="card card-pad workspace-panel" aria-labelledby="workspace-org-projects">
+          <div class="workspace-panel-head"><h3 id="workspace-org-projects">Projects</h3></div>
           ${projects.length ? `<div class="table-wrap"><table class="tbl">
-            <thead><tr><th>Project</th><th>Role</th><th class="actions">Actions</th></tr></thead>
+            <thead><tr><th scope="col">Project</th><th scope="col">Role</th><th scope="col" class="actions">Actions</th></tr></thead>
             <tbody>${projects.map(p => `<tr>
-              <td><b>${U.esc(p.Project.Name)}</b><div class="mono" style="color:var(--muted)">${U.esc(p.Project.Slug)}</div></td>
-              <td>${U.esc(p.ProjectRole || p.OrgRole || '-')}</td>
-              <td class="actions"><a class="btn btn-sm btn-secondary" href="#/projects/${p.Project.ProjectID}">Open</a></td>
+              <td><span class="workspace-primary">${U.esc(p.Project.Name)}</span><div class="mono workspace-secondary">${U.esc(p.Project.Slug)}</div></td>
+              <td>${U.esc(roleLabel(p.ProjectRole || p.OrgRole))}</td>
+              <td class="actions"><a class="btn btn-sm btn-secondary" href="#/projects/${p.Project.ProjectID}" aria-label="Open project ${U.esc(p.Project.Name)}">Open</a></td>
             </tr>`).join('')}</tbody></table></div>` : empty('No projects yet.')}
-        </div>
-        <div class="card card-pad">
-          <div class="row" style="justify-content:space-between"><h3 style="margin:0">Members</h3>
-            <button class="btn btn-sm btn-secondary" id="invite-org">Invite</button></div>
-          <div style="margin-top:10px">${members.length ? members.map(m => `
-            <div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
-              <span>${U.esc(m.Email || m.Username || ('User #' + m.UserID))}
+        </section>
+        <section class="card card-pad workspace-panel" aria-labelledby="workspace-org-members">
+          <div class="workspace-panel-head"><h3 id="workspace-org-members">Members</h3>
+            <button class="btn btn-sm btn-secondary" id="invite-org" type="button">Invite</button></div>
+          ${members.length ? `<ul class="workspace-members" role="list">${members.map(m => `
+            <li class="workspace-member">
+              <div><span class="workspace-primary">${U.esc(m.Email || m.Username || ('User #' + m.UserID))}</span>
                 ${m.Status === 'Invited' && m.InviteExpiresAt
-                  ? `<div style="color:var(--muted);font-size:11.5px">invited ${U.fmtDT(m.InviteExpiresAt)}</div>` : ''}</span>
-              <span><span class="chip-mini">${U.esc(m.Role)}</span> ${statusBadge(m.Status)}</span>
-            </div>`).join('') : empty('No members.')}</div>
-        </div>
+                  ? `<div class="workspace-secondary">Invitation expires ${U.fmtDT(m.InviteExpiresAt)}</div>` : ''}</div>
+              <div class="workspace-context"><span class="workspace-secondary">${U.esc(roleLabel(m.Role))}</span>${statusBadge(m.Status)}</div>
+            </li>`).join('')}</ul>` : empty('No members.')}
+        </section>
       </div>`;
     el.querySelector('#new-project').addEventListener('click', () => projectModal(org.OrganisationID));
     el.querySelector('#invite-org').addEventListener('click', () => inviteModal(
@@ -294,15 +301,20 @@
     const credits = creditsBody.Credits || [];
     const scans = scansBody.Scans || [];
     const available = credits.filter(c => c.Status === 'Available').length;
+    const creditCounts = new Map();
+    for (const credit of credits) {
+      const status = credit.Status || 'Unknown';
+      creditCounts.set(status, (creditCounts.get(status) || 0) + 1);
+    }
 
     el.innerHTML = `
-      <div class="page-head"><div class="row"><div>
+      <div class="page-head workspace-heading"><div class="row"><div>
         <h1>${U.esc(project.Name)}</h1>
-        <div class="sub">${U.esc(projectBody.Organisation.Name)} · your role:
-          <span class="chip-mini">${U.esc(projectBody.ProjectRole || projectBody.OrgRole || '-')}</span>
-          ${projectBody.ProjectRole === null ? '<span class="chip-mini">organisation-wide access</span>' : ''}</div>
-      </div><div style="display:flex;gap:8px">
-        ${can(perms, 'credit.purchase') ? '<button class="btn btn-secondary" id="buy-credit">Buy credit</button>' : ''}
+        <div class="sub workspace-context"><span>${U.esc(projectBody.Organisation.Name)}</span>
+          <span>Your role: ${U.esc(roleLabel(projectBody.ProjectRole || projectBody.OrgRole))}</span>
+          ${projectBody.ProjectRole === null ? '<span>Organisation-wide access</span>' : ''}</div>
+      </div><div class="workspace-actions">
+        ${can(perms, 'credit.purchase') ? '<button class="btn btn-secondary" id="buy-credit" type="button">Buy credit</button>' : ''}
         ${can(perms, 'scan.start') ? '<a class="btn btn-primary" href="#/projects/' + projectId + '/scans/new">Start scan</a>' : ''}
       </div></div></div>
       <div class="grid-cards">
@@ -311,40 +323,41 @@
         <div class="card stat-card"><div><div class="val">${available}</div><div class="lbl">Available credits</div></div></div>
         <div class="card stat-card"><div><div class="val">${scans.length}</div><div class="lbl">Project scans</div></div></div>
       </div>
-      <div class="card card-pad" style="margin-bottom:16px">
-        <div class="row" style="justify-content:space-between"><h3 style="margin:0">Assets</h3>
-          ${can(perms, 'asset.register') ? '<button class="btn btn-sm btn-secondary" id="add-asset">+ Register asset</button>' : ''}</div>
-        ${assets.length ? `<div class="table-wrap"><table class="tbl" style="margin-top:10px">
-          <thead><tr><th>Hostname</th><th>Status</th><th>Verified until</th><th class="actions">Actions</th></tr></thead>
+      <section class="card card-pad workspace-panel" aria-labelledby="workspace-assets">
+        <div class="workspace-panel-head"><h3 id="workspace-assets">Assets</h3>
+          ${can(perms, 'asset.register') ? '<button class="btn btn-sm btn-secondary" id="add-asset" type="button">Register asset</button>' : ''}</div>
+        ${assets.length ? `<div class="table-wrap" role="region" aria-label="Registered assets table" tabindex="0"><table class="tbl">
+          <thead><tr><th scope="col">Hostname</th><th scope="col">Verification</th><th scope="col">Verified until</th><th scope="col" class="actions">Actions</th></tr></thead>
           <tbody>${assets.map(a => `<tr>
-            <td><b class="mono">${U.esc(a.Hostname)}</b><div style="color:var(--muted);font-size:11.5px">${U.esc(a.Scheme)}</div></td>
+            <td><span class="mono workspace-primary">${U.esc(a.Hostname)}</span><div class="workspace-secondary">${U.esc(a.Scheme)}</div></td>
             <td>${statusBadge(a.VerificationStatus)}</td>
             <td>${a.VerificationExpiresAt ? U.fmtDT(a.VerificationExpiresAt) : '–'}</td>
-            <td class="actions">
-              ${can(perms, 'asset.verify') ? `<a class="btn btn-xs btn-secondary" href="#/projects/${projectId}/assets/${a.AssetID}/verify">Verify</a>` : ''}
-              ${can(perms, 'attestation.create') && a.VerificationStatus === 'Verified' ? `<a class="btn btn-xs btn-secondary" href="#/projects/${projectId}/assets/${a.AssetID}/attest">Attest</a>` : ''}
-              ${can(perms, 'credential.read') && a.VerificationStatus === 'Verified' ? `<a class="btn btn-xs btn-secondary" href="#/projects/${projectId}/assets/${a.AssetID}/credentials">Credentials</a>` : ''}
-              ${can(perms, 'asset.revoke') && a.VerificationStatus === 'Verified' ? `<button class="btn btn-xs btn-danger" data-revoke="${a.AssetID}">Revoke</button>` : ''}
-            </td></tr>`).join('')}</tbody></table></div>` : empty('No assets registered yet.')}
-      </div>
+            <td class="actions"><div class="asset-actions">
+              ${can(perms, 'asset.verify') ? `<a class="btn btn-sm btn-secondary" href="#/projects/${projectId}/assets/${a.AssetID}/verify" aria-label="Verify ${U.esc(a.Hostname)}">Verify</a>` : ''}
+              ${can(perms, 'attestation.create') && a.VerificationStatus === 'Verified' ? `<a class="btn btn-sm btn-secondary" href="#/projects/${projectId}/assets/${a.AssetID}/attest" aria-label="Attest ${U.esc(a.Hostname)}">Attest</a>` : ''}
+              ${can(perms, 'credential.read') && a.VerificationStatus === 'Verified' ? `<a class="btn btn-sm btn-secondary" href="#/projects/${projectId}/assets/${a.AssetID}/credentials" aria-label="Credentials for ${U.esc(a.Hostname)}">Credentials</a>` : ''}
+              ${can(perms, 'asset.revoke') && a.VerificationStatus === 'Verified' ? `<button class="btn btn-sm btn-danger" data-revoke="${a.AssetID}" type="button" aria-label="Revoke ${U.esc(a.Hostname)}">Revoke</button>` : ''}
+            </div></td></tr>`).join('')}</tbody></table></div>` : empty('No assets registered yet.')}
+      </section>
       <div class="grid-2">
-        <div class="card card-pad">
-          <div class="row" style="justify-content:space-between"><h3 style="margin:0">Credits</h3>
-            <a href="#/projects/${projectId}/credits">History →</a></div>
-          <p style="color:var(--muted);font-size:13px;margin-top:8px">Each new scan consumes one credit. Viewing previous results is free.</p>
-          <div class="pill-list">${credits.length ? credits.slice(0, 6).map(c => `<span class="chip-mini">${U.esc(c.Status)}</span>`).join('') : empty('No credits purchased yet.')}</div>
-        </div>
-        <div class="card card-pad">
-          <div class="row" style="justify-content:space-between"><h3 style="margin:0">Project scans</h3>
-            <a href="#/projects/${projectId}/audit">Audit →</a></div>
-          ${scans.length ? `<div class="table-wrap"><table class="tbl" style="margin-top:8px">
-            <thead><tr><th>Scan</th><th>Status</th><th class="actions"></th></tr></thead>
+        <section class="card card-pad workspace-panel" aria-labelledby="workspace-credits">
+          <div class="workspace-panel-head"><h3 id="workspace-credits">Credits</h3>
+            <a href="#/projects/${projectId}/credits">Credit history</a></div>
+          <p class="workspace-secondary">Each new scan consumes one credit. Viewing previous results is free.</p>
+          ${credits.length ? `<dl class="workspace-credit-summary">${Array.from(creditCounts, ([status, count]) =>
+            `<div><dt>${U.esc(status)}</dt><dd class="mono">${count}</dd></div>`).join('')}</dl>` : empty('No credits purchased yet.')}
+        </section>
+        <section class="card card-pad workspace-panel" aria-labelledby="workspace-scans">
+          <div class="workspace-panel-head"><h3 id="workspace-scans">Project scans</h3>
+            <a href="#/projects/${projectId}/audit">Audit log</a></div>
+          ${scans.length ? `<div class="table-wrap"><table class="tbl">
+            <thead><tr><th scope="col">Scan</th><th scope="col">Status</th><th scope="col" class="actions">Actions</th></tr></thead>
             <tbody>${scans.slice(0, 8).map(s => `<tr>
-              <td><b>${U.esc(s.ScanName)}</b><div class="mono" style="color:var(--muted)">#${s.ScanID}</div></td>
+              <td><span class="workspace-primary">${U.esc(s.ScanName)}</span><div class="mono workspace-secondary">#${s.ScanID}</div></td>
               <td>${U.statusBadge(s.Status)}</td>
-              <td class="actions"><a class="btn btn-xs btn-secondary" href="#/scans/${s.ScanID}">View</a></td>
+              <td class="actions"><a class="btn btn-sm btn-secondary" href="#/scans/${s.ScanID}" aria-label="View scan ${U.esc(s.ScanName)}">View</a></td>
             </tr>`).join('')}</tbody></table></div>` : empty('No scans yet.')}
-        </div>
+        </section>
       </div>`;
 
     if (can(perms, 'asset.register')) {
